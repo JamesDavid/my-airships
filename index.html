@@ -16,6 +16,10 @@
   #panelTL b { font-size:13px; letter-spacing:.12em; opacity:.65; }
   #panelTR { top:14px; right:18px; text-align:right; }
   #timer { font-size:30px; font-variant-numeric:tabular-nums; }
+  #lapline { font-size:15px; letter-spacing:.08em; }
+  #split { font-size:17px; font-variant-numeric:tabular-nums; min-height:20px; }
+  #split.good { color:#2e6b3a; }
+  #split.bad { color:#8c2f1e; }
   #objective { font-size:14px; font-style:italic; opacity:.85; max-width:300px; }
   #best { font-size:12px; opacity:.6; }
 
@@ -125,6 +129,8 @@
 
 <div class="hud" id="panelTR">
   <div id="timer"></div>
+  <div id="lapline"></div>
+  <div id="split"></div>
   <div id="objective"></div>
   <div id="best"></div>
 </div>
@@ -150,7 +156,8 @@
     <tr><td>SPACE</td><td>drop a sack of ballast (rise)</td></tr>
     <tr><td>V (hold)</td><td>vent hydrogen (descend — gas never returns)</td></tr>
     <tr><td>F (tap)</td><td>coax the capricious motor</td></tr>
-    <tr><td>ENTER</td><td>begin the Deutsch Prize trial (near the start ring)</td></tr>
+    <tr><td>ENTER</td><td>begin the timed trial — in a lap circuit, instant restart</td></tr>
+    <tr><td>G / U</td><td>track editor: drop a gate at the ship / undo (start it in the Esc menu)</td></tr>
     <tr><td>C</td><td>camera &nbsp;·&nbsp; P photograph mode &nbsp;·&nbsp; M sound &nbsp;·&nbsp; R reset &nbsp;·&nbsp; H help</td></tr>
   </table>
   <table style="margin-top:8px">
@@ -170,7 +177,8 @@
   <h2>My Airships</h2>
   <div id="menuBody">
     <div class="menu-col"><h3>The Fleet</h3><div id="menuShips"></div></div>
-    <div class="menu-col"><h3>Scenarios</h3><div id="menuScens"></div></div>
+    <div class="menu-col"><h3>Scenarios</h3><div id="menuScens"></div>
+      <h3 style="margin-top:12px">Time Trials</h3><div id="menuTracks"></div></div>
     <div class="menu-col"><h3>Options</h3><div id="menuOpts"></div></div>
   </div>
   <div class="quote" id="menuQuote">The simulation is paused. Esc resumes.</div>

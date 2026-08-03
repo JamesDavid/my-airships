@@ -127,7 +127,8 @@ export function buildWorldStLouis(scene) {
   roueGrp.position.set(-350, 0, -330);
   roueGrp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roueGrp);
-  buildings.push({ x: -350, z: -330, w: 40, d: 20, h: 100, top: 106 });
+  // collide only with the support legs — daring pilots may thread the wheel
+  buildings.push({ x: -350, z: -330, w: 10, d: 12, h: 30, top: 30 });
 
   // ---------- the aeronautic concourse (start) ----------
   const hangar = new THREE.Group();

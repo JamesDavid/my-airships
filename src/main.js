@@ -5,12 +5,13 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt } from './world.js';
+import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt, mulberry32 } from './world.js';
 import { buildWorldMonaco } from './world_monaco.js';
 import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
 import { SHIPS, SHIP_KEYS } from './ships.js';
 import { SCENARIOS, Rival } from './scenarios.js';
+import { TRACKS, trackSpawn, GHOST_DT, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 
 // ---------------------------------------------------------------- setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -28,8 +29,13 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 20
 const LOCS = ['paris', 'monaco', 'stlouis'];
 let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
 let rivals = [], scenario = null;
+let track = null;                       // the active course (historic or time trial)
+let ghostBest = null, ghostMesh = null, ghostRec = [], ghostLastSample = -1;
+let editing = null;                     // track-editor state
+let splitUntil = 0;
 let currentLocation = 'paris', currentShip = 'no6';
 const wind = new THREE.Vector3(3.4, 0, 0.7);
+const dailyWind = new THREE.Vector3(3.4, 0, 0.7);
 let windGustT = 0;
 
 function spawnShip(specId) {
@@ -53,6 +59,78 @@ function makeRing(color) {
 
 function clearRivals() { rivals.forEach((r) => r.dispose()); rivals = []; }
 
+// ---------------------------------------------------------------- tracks
+function historicTrack() {
+  return {
+    id: 'historic_' + currentLocation,
+    name: world.name, location: currentLocation,
+    laps: 1, historic: true,
+    gates: (world.gates || []).map((g) => ({ x: g.x, y: g.y, z: g.z, r: 24 })),
+  };
+}
+
+function buildRings(gates) {
+  for (const r of gateRings) scene.remove(r);
+  gateRings = gates.map((g) => {
+    const r = makeRing(0x8a8a8a);
+    r.position.set(g.x, g.y, g.z);
+    r.scale.setScalar((g.r || 24) / 24);
+    r.userData.r = g.r || 24;
+    return r;
+  });
+}
+
+function bestKey(t) { return `tt_${t.id}_${currentShip}`; }
+
+function loadBest(t) {
+  try { ghostBest = JSON.parse(localStorage.getItem(bestKey(t)) || 'null'); }
+  catch { ghostBest = null; }
+  updateGhostMesh();
+}
+
+function updateGhostMesh() {
+  if (ghostMesh) { scene.remove(ghostMesh); ghostMesh = null; }
+  if (!ghostBest) return;
+  const E = ship.spec.envelope;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
+    new THREE.MeshLambertMaterial({ color: 0xd9b24a, transparent: true, opacity: 0.32, depthWrite: false }));
+  m.scale.set(E.length / 2, E.diameter / 2, E.diameter / 2);
+  ghostMesh = new THREE.Group();
+  ghostMesh.add(m);
+  ghostMesh.visible = false;
+  scene.add(ghostMesh);
+}
+
+// start any course: the historic trial or a lap circuit (instant restart)
+function startTrack(t) {
+  track = t;
+  scenario = null;
+  editing = null;
+  clearRivals();
+  buildRings(t.gates);
+  startRing.visible = !!t.historic;
+  race.state = 'count';
+  race.count = t.historic ? 3.5 : 1.8;
+  race.gate = 0; race.lap = 1; race.t = 0; race.splits = [];
+  race.lastResult = null;
+  ghostRec = []; ghostLastSample = -1;
+  loadBest(t);
+  if (!t.historic) {
+    const sp = trackSpawn(t);
+    ship.reset(new THREE.Vector3(sp.x, sp.y, sp.z), sp.yaw);
+    ship.landed = false;
+    setCenter(t.name, ghostBest ? `${t.laps} laps — your ghost flies at ${fmt(ghostBest.t)}` : `${t.laps} laps — set the first time`);
+  }
+}
+
+function endTrack() {
+  track = null;
+  buildRings(historicTrack().gates);
+  startRing.visible = true;
+  if (ghostMesh) ghostMesh.visible = false;
+  race.state = 'idle'; race.t = 0; race.gate = 0;
+}
+
 function loadWorld(loc) {
   currentLocation = loc;
   clearRivals();
@@ -62,13 +140,19 @@ function loadWorld(loc) {
     : loc === 'monaco' ? buildWorldMonaco(scene)
     : buildWorldStLouis(scene);
   startRing = makeRing(0xd9b24a); startRing.position.copy(world.startRing);
-  gateRings = (world.gates || [world.turnRing]).map((g) => {
-    const r = makeRing(0x8a8a8a); r.position.copy(g); return r;
-  });
+  track = null;
+  buildRings(historicTrack().gates);
   scenRing = makeRing(0x4a9c5f);
   scenRing.rotation.set(Math.PI / 2, 0, 0); // flat ground marker
   scenRing.visible = false;
-  wind.copy(world.windBase);
+  // the daily wind: seeded by the date, so everyone flies the same sky today
+  const d = new Date();
+  const dr = mulberry32(d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate());
+  const rot = (dr() - 0.5) * 0.9, mag = 0.85 + dr() * 0.4;
+  const rc = Math.cos(rot), rs = Math.sin(rot);
+  dailyWind.set((world.windBase.x * rc + world.windBase.z * rs) * mag, 0,
+    (-world.windBase.x * rs + world.windBase.z * rc) * mag);
+  wind.copy(dailyWind);
   race.state = 'idle'; race.t = 0; race.gate = 0;
   setCenter('', '');
   spawnShip(currentShip);
@@ -91,7 +175,21 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space') { ship.dropBallast(); e.preventDefault(); }
   if (e.code === 'KeyF') input.coax = true;
   if (e.code === 'Enter') tryStartRace();
-  if (e.code === 'KeyR') { if (scenario) startScenario(scenario); else resetShip(); }
+  if (e.code === 'KeyR') {
+    if (scenario) startScenario(scenario);
+    else if (track && !track.historic) startTrack(track);   // instant restart
+    else resetShip();
+  }
+  if (e.code === 'KeyG' && editing && race.state === 'idle') {
+    editing.gates.push({ x: +ship.pos.x.toFixed(0), y: +ship.pos.y.toFixed(0), z: +ship.pos.z.toFixed(0), r: 16 });
+    buildRings(editing.gates);
+    addMsg('edg', `Gate ${editing.gates.length} dropped. (U undoes · Esc menu to save)`, 0);
+  }
+  if (e.code === 'KeyU' && editing && editing.gates.length) {
+    editing.gates.pop();
+    buildRings(editing.gates);
+    addMsg('edu', `Gate removed — ${editing.gates.length} left.`, 0);
+  }
   if (e.code === 'KeyC') cycleCamera();
   if (e.code === 'Escape') toggleMenu();
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
@@ -227,12 +325,83 @@ function buildMenuButtons() {
   for (const def of SCENARIOS) {
     menuButton(scenDiv, (doneMap[def.id] ? '✓ ' : '') + def.title, def.sub, () => startScenario(def));
   }
+
+  // time trials
+  const trDiv = document.getElementById('menuTracks');
+  trDiv.innerHTML = '';
+  for (const t of [...TRACKS, ...loadCustomTracks()]) {
+    let best = null;
+    try { best = JSON.parse(localStorage.getItem(`tt_${t.id}_${currentShip}`) || 'null'); } catch { /* noop */ }
+    menuButton(trDiv, t.name + (best ? ` — ${fmt(best.t)}` : ''),
+      (t.custom ? '(custom) ' : '') + (t.sub || `${t.laps} laps`), () => {
+        if (currentLocation !== t.location) loadWorld(t.location);
+        startTrack(t);
+        toggleMenu(false);
+      });
+  }
+  menuButton(trDiv, 'Copy ghost code', 'share your best on the current trial', () => {
+    if (!track || track.historic || !ghostBest) { addMsg('gh', 'Fly a time trial and set a time first.', 0); return; }
+    try {
+      navigator.clipboard.writeText(encodeGhost(ghostBest));
+      addMsg('gh', 'Ghost code copied — send it to a rival.', 0);
+    } catch { addMsg('gh', 'Clipboard refused; try a desktop browser.', 0); }
+  });
+  menuButton(trDiv, 'Race a rival’s ghost', 'paste a ghost code', () => {
+    const code = prompt('Paste the ghost code:');
+    if (!code) return;
+    const g = decodeGhost(code);
+    if (!g) { addMsg('gh2', 'That code would not decode.', 0); return; }
+    ghostBest = g;
+    updateGhostMesh();
+    addMsg('gh2', `Rival ghost loaded — it flies at ${fmt(g.t)}. Beat it.`, 0);
+    toggleMenu(false);
+  });
+  if (!editing) {
+    menuButton(trDiv, 'Track editor', 'G drops a gate at the ship · U undoes', () => {
+      if (race.state !== 'idle') { addMsg('ed', 'Finish the current trial first.', 0); return; }
+      editing = { gates: [] };
+      buildRings(editing.gates);
+      toggleMenu(false);
+      addMsg('ed', 'Editor on: fly anywhere, G drops a gate, U undoes. Esc menu → save.', 0);
+    });
+  } else {
+    menuButton(trDiv, `Editor: save & fly (${editing.gates.length} gates)`, 'names it, copies its share code', () => {
+      if (editing.gates.length < 2) { addMsg('ed2', 'Drop at least two gates first (G).', 0); return; }
+      const name = prompt('Name the circuit:', 'My Circuit') || 'My Circuit';
+      const t = {
+        id: 'c_' + name.toLowerCase().replace(/\W+/g, '-'),
+        name, sub: 'custom circuit', custom: true,
+        location: currentLocation, laps: 2, gates: editing.gates.slice(),
+      };
+      saveCustomTrack(t);
+      try { navigator.clipboard.writeText(btoa(JSON.stringify(t))); } catch { /* noop */ }
+      editing = null;
+      startTrack(t);
+      toggleMenu(false);
+      addMsg('ed3', `“${t.name}” saved — its share code is on your clipboard.`, 0);
+    });
+    menuButton(trDiv, 'Editor: cancel', '', () => { editing = null; buildRings(historicTrack().gates); buildMenuButtons(); });
+  }
+  menuButton(trDiv, 'Load a track code', 'paste a friend’s circuit', () => {
+    const code = prompt('Paste the track code:');
+    if (!code) return;
+    try {
+      const t = JSON.parse(atob(code.trim()));
+      if (!t.gates || !t.location) throw new Error('bad');
+      t.custom = true;
+      saveCustomTrack(t);
+      addMsg('tc', `“${t.name}” added to your time trials.`, 0);
+      buildMenuButtons();
+    } catch { addMsg('tc', 'That code would not decode.', 0); }
+  });
   menuButton(optsDiv, 'Camera: ' + CAM_NAMES[camMode], 'change view', () => { cycleCamera(); buildMenuButtons(); });
   menuButton(optsDiv, `Photograph mode: ${document.body.classList.contains('photo') ? 'on' : 'off'}`, 'sepia and grain', () => {
     document.body.classList.toggle('photo'); buildMenuButtons();
   });
   menuButton(optsDiv, `Sound: ${muted ? 'off' : 'on'}`, 'the spitting rumble', () => { muted = !muted; buildMenuButtons(); });
   menuButton(optsDiv, 'Controls', 'the key reference', () => { toggleMenu(false); document.getElementById('help').classList.remove('hidden'); });
+  const wKmh = Math.round(Math.hypot(dailyWind.x, dailyWind.z) * 3.6 * 0.42);
+  menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
   menuButton(optsDiv, 'Resume flying', '', () => toggleMenu(false));
 }
@@ -240,8 +409,9 @@ function buildMenuButtons() {
 function resetShip() {
   const y = ship.spec.keel.drop + 1.2;
   ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
-  race.state = 'idle'; race.t = 0; race.gate = 0;
+  endTrack();
   clearRivals();
+  editing = null;
   if (scenRing) scenRing.visible = false;
   setCenter('', '');
   seen.clear();
@@ -253,59 +423,82 @@ const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult:
 
 function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
+  // in a lap trial, Enter is instant restart
+  if (track && !track.historic && race.state !== 'idle') { startTrack(track); return; }
   if (race.state !== 'idle' || ship.wrecked) return;
   if (ship.pos.distanceTo(world.startRing) > 150) {
     addMsg('far', 'Convoke the Commission at the gold start ring, above the aerodrome.', 6);
     return;
   }
-  race.state = 'count'; race.count = 3.5;
+  startTrack(historicTrack());
 }
 
 function raceTargetPos() {
   return race.gate < gateRings.length ? gateRings[race.gate].position : world.startRing;
 }
 
+function showSplit() {
+  const i = race.splits.length - 1;
+  const elS = document.getElementById('split');
+  if (ghostBest && ghostBest.splits && ghostBest.splits[i] != null) {
+    const d = race.t - ghostBest.splits[i];
+    elS.textContent = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + 's';
+    elS.className = d <= 0 ? 'good' : 'bad';
+  } else {
+    elS.textContent = fmt(race.t);
+    elS.className = '';
+  }
+  splitUntil = performance.now() + 2600;
+}
+
 function updateRace(dt) {
   const s = race.state;
+  if (!track) return;
+  const gates = track.gates;
   const running = s === 'run';
-  const homeward = race.gate >= gateRings.length;
+  const homeward = track.historic && race.gate >= gates.length;
   startRing.material.color.set(!running || homeward ? 0xd9b24a : 0x8a8a8a);
   gateRings.forEach((r, i) => r.material.color.set(running && i === race.gate ? 0xd9b24a : 0x8a8a8a));
   const pulse = 1 + Math.sin(performance.now() * 0.004) * 0.05;
   startRing.scale.setScalar(running && homeward ? pulse : 1);
-  gateRings.forEach((r, i) => r.scale.setScalar(running && i === race.gate ? pulse : 1));
+  gateRings.forEach((r, i) => r.scale.setScalar((r.userData.r / 24) * (running && i === race.gate ? pulse : 1)));
 
   if (s === 'count') {
     race.count -= dt;
     const n = Math.ceil(race.count);
     setCenter(n > 0 ? String(n) : '“Let go all!”', '');
     if (race.count <= 0) {
-      race.state = 'run'; race.t = 0; race.gate = 0; race.lastResult = null;
-      // the rival dirigibles slip their ropes too
-      if (world.rivalSpecs) {
+      race.state = 'run'; race.t = 0; race.gate = 0; race.lap = 1; race.lastResult = null;
+      if (track.historic && world.rivalSpecs) {
         clearRivals();
         world.rivalSpecs.forEach((id, i) => rivals.push(new Rival(scene, id, world, 5 + i * 8)));
         addMsg('rivals', 'The rival dirigibles are away behind you!', 0);
       }
-      setTimeout(() => setCenter('', ''), 1200);
+      setTimeout(() => { if (race.state === 'run') setCenter('', ''); }, 1200);
     }
   } else if (s === 'run') {
     race.t += dt;
-    if (ship.pos.distanceTo(raceTargetPos()) < 30) {
-      if (!homeward) {
-        race.gate++;
-        if (race.gate === gateRings.length) {
+    const tgt = raceTargetPos();
+    const passR = homeward ? 30 : (gates[race.gate].r || 24) + 8;
+    if (ship.pos.distanceTo(tgt) < passR) {
+      if (homeward) { finishRace(); return; }
+      blip(620 + race.gate * 60);
+      race.splits.push(race.t);
+      if (!track.historic) showSplit();
+      race.gate++;
+      if (race.gate === gates.length) {
+        if (track.historic) {
           addMsg('turn', world.hints.turnMsg, 0);
           race.sputterAt = race.t + 10 + Math.random() * 18;
-        } else {
-          addMsg('gate', `Pylon ${race.gate} of ${gateRings.length} rounded!`, 0);
-        }
-      } else {
-        race.state = 'done';
-        finishRace();
+        } else if (race.lap < track.laps) {
+          race.lap++; race.gate = 0;
+          addMsg('lap', `Lap ${race.lap} of ${track.laps}!`, 0);
+        } else { finishRace(); return; }
+      } else if (track.historic && gates.length > 1) {
+        addMsg('gate', `Pylon ${race.gate} of ${gates.length} rounded!`, 0);
       }
     }
-    if (race.sputterAt && race.t > race.sputterAt && !ship.sputtering) {
+    if (track.historic && race.sputterAt && race.t > race.sputterAt && !ship.sputtering) {
       ship.sputtering = true; race.sputterAt = 0;
       addMsg('sputter', 'The capricious motor is stopping! Abandon the wheel — work the levers! (tap F)', 0);
     }
@@ -313,24 +506,41 @@ function updateRace(dt) {
 }
 
 function finishRace() {
+  race.state = 'done';
   const t = race.t;
-  const won = t <= world.raceLimit;
-  const beatSantos = t <= world.raceRecord;
-  const ace = t <= 600;
-  const beatRivals = !rivals.some((r) => r.beatPlayer);
-  race.lastResult = { won, beatSantos, beatRivals, t };
-  if (won && (!race.best || t < race.best)) {
-    race.best = t; localStorage.setItem('myairships_best', String(t));
+  if (track.historic) {
+    const won = t <= world.raceLimit;
+    const beatSantos = t <= world.raceRecord;
+    const ace = t <= 600;
+    const beatRivals = !rivals.some((r) => r.beatPlayer);
+    race.lastResult = { won, beatSantos, beatRivals, t };
+    if (won && (!race.best || t < race.best)) {
+      race.best = t; localStorage.setItem('myairships_best', String(t));
+    }
+    let sub;
+    if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
+    else {
+      sub = `${fmt(t)} — the prize is yours.`;
+      if (beatSantos) sub += ' You have outflown Santos-Dumont himself.';
+      if (ace && currentLocation !== 'stlouis') sub += ' A pace no dirigible of 1901 could have touched.';
+      if (rivals.length) sub += beatRivals ? ' The rival dirigibles trail behind you.' : ' …but a rival crossed first.';
+    }
+    setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…', sub);
+    return;
   }
-  let sub;
-  if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
-  else {
-    sub = `${fmt(t)} — the prize is yours.`;
-    if (beatSantos) sub += ' You have outflown Santos-Dumont himself.';
-    if (ace && currentLocation !== 'stlouis') sub += ' A pace no dirigible of 1901 could have touched.';
-    if (rivals.length) sub += beatRivals ? ' The rival dirigibles trail behind you.' : ' …but a rival crossed first.';
+  // time trial: record the run, crown a new ghost
+  blip(1100); blip(1400);
+  const prev = ghostBest;
+  const improved = !prev || t < prev.t;
+  if (improved) {
+    ghostBest = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice() };
+    try { localStorage.setItem(bestKey(track), JSON.stringify(ghostBest)); } catch { /* full */ }
+    updateGhostMesh();
   }
-  setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…', sub);
+  setCenter(fmt(t),
+    improved
+      ? (prev ? `New best — ${(prev.t - t).toFixed(1)}s faster! (Enter: again)` : 'First time set — your ghost now flies this course. (Enter: again)')
+      : `+${(t - prev.t).toFixed(1)}s off your best of ${fmt(prev.t)}. (Enter: again)`);
 }
 
 // ---------------------------------------------------------------- scenarios
@@ -343,7 +553,7 @@ function scenCtx() {
     },
     setZone(pos, r) { scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24); },
     clearZone() { scenRing.visible = false; },
-    startRace() { race.state = 'count'; race.count = 3.5; },
+    startRace() { startTrack(historicTrack()); },
     raceResult: () => (race.state === 'done' ? race.lastResult : null),
     complete: scenComplete,
     fail: scenFail,
@@ -353,7 +563,8 @@ function scenCtx() {
 function startScenario(def) {
   toggleMenu(false);
   if (currentLocation !== def.location) loadWorld(def.location);
-  race.state = 'idle'; race.t = 0; race.gate = 0;
+  endTrack();
+  editing = null;
   clearRivals();
   seen.clear();
   spawnShip(def.shipId);
@@ -564,7 +775,16 @@ function initAudio() {
   const gain = ctx.createGain(); gain.gain.value = 0;
   osc.connect(filt).connect(gain).connect(ctx.destination);
   osc.start();
-  audio = { ctx, osc, gain };
+  // wind rush: looped noise through a bandpass, louder with airspeed squared
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 480; bp.Q.value = 0.5;
+  const windGain = ctx.createGain(); windGain.gain.value = 0;
+  noise.connect(bp).connect(windGain).connect(ctx.destination);
+  noise.start();
+  audio = { ctx, osc, gain, windGain };
 }
 function updateAudio() {
   if (!audio) return;
@@ -573,6 +793,21 @@ function updateAudio() {
   const target = muted || ship.wrecked || !ship.motorOn ? 0 : ship.throttle * 0.055 * flicker * (0.4 + 0.6 * h);
   audio.gain.gain.setTargetAtTime(target, audio.ctx.currentTime, 0.05);
   audio.osc.frequency.setTargetAtTime(42 + 75 * ship.throttle * h, audio.ctx.currentTime, 0.1);
+  const spd = ship.vel.length();
+  const wt = muted ? 0 : Math.min(0.13, (spd / 17) ** 2 * 0.13);
+  audio.windGain.gain.setTargetAtTime(wt, audio.ctx.currentTime, 0.12);
+}
+// a short chime for gate passes and finishes
+function blip(freq) {
+  if (!audio || muted) return;
+  const { ctx } = audio;
+  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.09, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+  o.connect(g).connect(ctx.destination);
+  o.start();
+  o.stop(ctx.currentTime + 0.25);
 }
 
 // ---------------------------------------------------------------- camera
@@ -650,21 +885,34 @@ function updateHUD() {
 
   const s = race.state;
   el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';
+  el('lapline').textContent = (s === 'run' && track && !track.historic && track.laps > 1)
+    ? `LAP ${race.lap} / ${track.laps}` : '';
+  if (performance.now() > splitUntil) { el('split').textContent = ''; el('split').className = ''; }
   let obj = '';
-  if (scenario && s === 'idle') {
+  if (editing) {
+    obj = `Track editor — ${editing.gates.length} gates. G drops, U undoes, Esc menu saves.`;
+  } else if (scenario && s === 'idle') {
     obj = scenario._failed ? 'R restarts the scenario.' : `${scenario.title} — ${scenario.sub}`;
   } else if (s === 'idle') {
     obj = ship.pos.distanceTo(world.startRing) < 150 ? world.hints.idleNear : world.hints.idleFar;
   } else if (s === 'run') {
-    const homeward = race.gate >= gateRings.length;
     const d = Math.round(ship.pos.distanceTo(raceTargetPos()));
-    obj = homeward
-      ? `${world.hints.back} — ${d} m`
-      : `${world.hints.out} — ${d} m${gateRings.length > 1 ? ` (pylon ${race.gate + 1}/${gateRings.length})` : ''}`;
-  } else if (s === 'done') obj = 'Trial complete. R to fly again.';
+    if (track && !track.historic) {
+      obj = `${track.name} — gate ${race.gate + 1}/${track.gates.length} · ${d} m`;
+    } else {
+      const homeward = race.gate >= gateRings.length;
+      obj = homeward
+        ? `${world.hints.back} — ${d} m`
+        : `${world.hints.out} — ${d} m${gateRings.length > 1 ? ` (pylon ${race.gate + 1}/${gateRings.length})` : ''}`;
+    }
+  } else if (s === 'done') obj = track && !track.historic ? 'Enter: fly it again.' : 'Trial complete. R to fly again.';
   el('objective').textContent = obj;
-  const limitLabel = `limit ${fmt(world.raceLimit)} (${world.limitNote})`;
-  el('best').textContent = race.best ? `best: ${fmt(race.best)} · ${limitLabel}` : limitLabel;
+  if (track && !track.historic) {
+    el('best').textContent = ghostBest ? `ghost: ${fmt(ghostBest.t)} · ${ship.spec.name}` : `no time set yet · ${ship.spec.name}`;
+  } else {
+    const limitLabel = `limit ${fmt(world.raceLimit)} (${world.limitNote})`;
+    el('best').textContent = race.best ? `best: ${fmt(race.best)} · ${limitLabel}` : limitLabel;
+  }
 }
 
 // ---------------------------------------------------------------- loop
@@ -682,7 +930,8 @@ document.getElementById('help').classList.add('hidden');
 // debug handle
 window.__game = { get ship() { return ship; }, get camMode() { return camMode; }, get world() { return world; },
   get rivals() { return rivals; }, get scenario() { return scenario; },
-  startScenario, loadWorld, SCENARIOS, camera, camPos, input, keys, race, wind };
+  get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
+  startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
 let last = performance.now();
 function frame(now) {
@@ -693,8 +942,8 @@ function frame(now) {
   if (menuOpen) { updateCamera(dt); composer.render(); return; }  // paused while the menu is up
 
   windGustT += dt;
-  wind.x = world.windBase.x + Math.sin(windGustT * 0.13) * 0.7 + Math.sin(windGustT * 0.041 + 2) * 0.9;
-  wind.z = world.windBase.z + Math.sin(windGustT * 0.07 + 1) * 0.5;
+  wind.x = dailyWind.x + Math.sin(windGustT * 0.13) * 0.7 + Math.sin(windGustT * 0.041 + 2) * 0.9;
+  wind.z = dailyWind.z + Math.sin(windGustT * 0.07 + 1) * 0.5;
 
   pollInput();
   const env = {
@@ -717,6 +966,30 @@ function frame(now) {
 
   // active scenario logic
   if (scenario && !scenario._failed) scenario.tick?.(scenCtx(), dt);
+
+  // ghost: record this run, and fly the best one alongside
+  if (race.state === 'run' && track && !track.historic) {
+    if (race.t - ghostLastSample >= GHOST_DT) {
+      ghostLastSample = race.t;
+      ghostRec.push(+ship.pos.x.toFixed(1), +ship.pos.y.toFixed(1), +ship.pos.z.toFixed(1), +ship.yaw.toFixed(2));
+    }
+    if (ghostBest && ghostMesh) {
+      const arr = ghostBest.p;
+      const n = arr.length / 4;
+      if (n > 1) {
+        const f = Math.min(n - 1.001, race.t / (ghostBest.dt || GHOST_DT));
+        const i0 = Math.floor(f) * 4, i1 = Math.min((n - 1) * 4, i0 + 4), fr = f - Math.floor(f);
+        ghostMesh.position.set(
+          arr[i0] + (arr[i1] - arr[i0]) * fr,
+          arr[i0 + 1] + (arr[i1 + 1] - arr[i0 + 1]) * fr,
+          arr[i0 + 2] + (arr[i1 + 2] - arr[i0 + 2]) * fr);
+        ghostMesh.rotation.y = arr[i0 + 3];
+        ghostMesh.visible = true;
+      }
+    }
+  } else if (ghostMesh && ghostMesh.visible && race.state !== 'run') {
+    ghostMesh.visible = false;
+  }
   // the aids restock petroleum and ballast at the home station
   if (ship.landed && !ship.wrecked) {
     const dx = ship.pos.x - world.padPos.x, dz = ship.pos.z - world.padPos.z;

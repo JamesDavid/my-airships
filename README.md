@@ -29,6 +29,13 @@ public domain).
   leave one current for another") — smoke, flags, trees, water, and clouds each show a
   different layer of the sky. The crew will also tow your ship by its guide rope to
   period destinations.
+- **Time trials — the aerial gymkhana** ("Ten times in succession I made the circuit of
+  Longchamps"): lap circuits through the Grande Roue, under the Arc de Triomphe, over
+  the bay, and threading the Observation Wheel. Instant restart on Enter, per-gate split
+  times, and a **ghost** of your best run to race against — copy its code and send it to
+  a friend to race asynchronously. Dives trade altitude for speed; times are kept per
+  ship class. A **track editor** (G drops a gate) lets you build and share circuits, and
+  the **wind is seeded by the date** — everyone flies the same sky today.
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |

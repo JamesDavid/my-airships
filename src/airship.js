@@ -542,6 +542,15 @@ export class Airship {
     // rope ground drag (B4: the brake)
     acc.addScaledVector(fwdFlat, -this.groundedFrac * 0.06 * vf * Math.abs(vf));
 
+    // energy exchange: a nose-down dive rams the streamlined hull forward
+    // (altitude is stored speed); hauling the nose up bleeds it away
+    const sp0 = Math.sin(this.pitch);
+    if (sp0 < -0.02 && airspeedV.y < 0) {
+      acc.addScaledVector(fwdFlat, Math.min(6, -airspeedV.y * -sp0 * 2.2));
+    } else if (sp0 > 0.02 && this.vel.y > 0) {
+      acc.addScaledVector(fwdFlat, -Math.min(4, this.vel.y * sp0 * 1.6));
+    }
+
     // buoyancy
     const density = Math.max(0.55, 1 - this.pos.y / 4000);
     const lift = P.gasLift * (this.gas / 100) * this.heat * density
