@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My Airships — Santos-Dumont Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#e8c3a0; height:100%;
+    font-family: Georgia, 'Times New Roman', serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  .hud { position:fixed; color:#3a2c1e; text-shadow:0 1px 0 rgba(255,255,255,.35); user-select:none; pointer-events:none; }
+  #panelTL { top:14px; left:16px; font-size:15px; line-height:1.5; }
+  #panelTL b { font-size:13px; letter-spacing:.12em; opacity:.65; }
+  #panelTR { top:14px; right:18px; text-align:right; }
+  #timer { font-size:30px; font-variant-numeric:tabular-nums; }
+  #objective { font-size:14px; font-style:italic; opacity:.85; max-width:300px; }
+  #best { font-size:12px; opacity:.6; }
+
+  #panelBL { bottom:16px; left:16px; font-size:13px; }
+  .barwrap { width:190px; height:10px; background:rgba(58,44,30,.25); border:1px solid rgba(58,44,30,.5); margin:3px 0 8px; }
+  .bar { height:100%; background:#8a6d3b; }
+  #gasBar { background:#b08d3f; }
+  #pressWarn { color:#8c2f1e; font-weight:bold; visibility:hidden; }
+  #ballast { letter-spacing:3px; font-size:15px; }
+
+  #messages { position:fixed; bottom:70px; left:50%; transform:translateX(-50%); width:640px; max-width:86vw;
+    text-align:center; pointer-events:none; }
+  .msg { color:#41301f; font-size:17px; font-style:italic; margin-top:6px; opacity:0;
+    text-shadow:0 1px 2px rgba(255,244,222,.6); transition:opacity .5s; }
+  .msg.show { opacity:1; }
+
+  #center { position:fixed; top:34%; left:0; right:0; text-align:center; pointer-events:none; }
+  #centerBig { font-size:52px; color:#41301f; font-style:italic; text-shadow:0 2px 6px rgba(255,240,214,.7); }
+  #centerSub { font-size:19px; color:#5a4632; font-style:italic; margin-top:8px; }
+
+  #help { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.88);
+    color:#e9dcc4; padding:26px 34px; font-size:14.5px; line-height:1.75; border:1px solid #7a6647;
+    max-width:560px; pointer-events:none; }
+  #help h2 { margin:0 0 8px; font-weight:normal; font-style:italic; font-size:22px; color:#e8c477; }
+  #help td { padding:0 14px 0 0; white-space:nowrap; color:#e8c477; }
+  #help .quote { font-style:italic; opacity:.75; margin-top:12px; font-size:13px; }
+  .hidden { display:none !important; }
+
+  /* menu */
+  #menu { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.93);
+    color:#e9dcc4; padding:26px 34px; border:1px solid #7a6647; min-width:560px; max-height:82vh; overflow:auto; }
+  #menu h2 { margin:0 0 12px; font-weight:normal; font-style:italic; font-size:24px; color:#e8c477; }
+  #menu h3 { margin:0 0 6px; font-weight:normal; font-size:13px; letter-spacing:.14em; color:#a89163; }
+  #menuBody { display:flex; gap:34px; }
+  .menu-col { flex:1; min-width:240px; }
+  #menu button { display:block; width:100%; text-align:left; margin:3px 0; padding:6px 10px;
+    background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
+    font-family:inherit; font-size:14px; cursor:pointer; }
+  #menu button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
+  #menu button.current { border-color:#e8c477; color:#e8c477; }
+  #menu button small { opacity:.6; font-style:italic; }
+  #menu .quote { font-style:italic; opacity:.7; margin-top:14px; font-size:12.5px; }
+
+  /* Photo mode */
+  #grain, #vignette { position:fixed; inset:0; pointer-events:none; display:none; }
+  #vignette { background:radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(30,18,8,.55) 100%); }
+  #grain { opacity:.18; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.7'/%3E%3C/svg%3E"); }
+  body.photo #app { filter: sepia(.55) contrast(1.08) brightness(1.02) saturate(.62); }
+  body.photo .hud, body.photo #messages { display:none; }
+  body.photo #grain, body.photo #vignette { display:block; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="hud" id="panelTL">
+  <b>ALTITUDE</b> <span id="alt">0</span> m<br>
+  <b>SPEED</b> <span id="spd">0</span> km/h<br>
+  <b>THROTTLE</b> <span id="thr">0</span>%<br>
+  <b>WIND</b> <span id="wind">—</span>
+</div>
+
+<div class="hud" id="panelTR">
+  <div id="timer"></div>
+  <div id="objective"></div>
+  <div id="best"></div>
+</div>
+
+<div class="hud" id="panelBL">
+  <b>HYDROGEN</b> <span id="gasPct"></span>
+  <div class="barwrap"><div class="bar" id="gasBar" style="width:100%"></div></div>
+  <b>PETROL</b> <span id="fuelPct"></span>
+  <div class="barwrap"><div class="bar" id="fuelBar" style="width:100%; background:#7a5a34"></div></div>
+  <b>BALLAST</b> <span id="ballast"></span><br>
+  <span id="pressWarn">⚠ PRESSURE — VALVES HISSING</span>
+</div>
+
+<div id="messages"></div>
+<div id="center"><div id="centerBig"></div><div id="centerSub"></div></div>
+
+<div id="help">
+  <h2 id="helpTitle">My Airships</h2>
+  <table>
+    <tr><td>W / S</td><td>motor throttle</td></tr>
+    <tr><td>A / D</td><td>rudder</td></tr>
+    <tr><td>Q / E</td><td>shifting weights — nose down / nose up</td></tr>
+    <tr><td>SPACE</td><td>drop a sack of ballast (rise)</td></tr>
+    <tr><td>V (hold)</td><td>vent hydrogen (descend — gas never returns)</td></tr>
+    <tr><td>F (tap)</td><td>coax the capricious motor</td></tr>
+    <tr><td>ENTER</td><td>begin the Deutsch Prize trial (near the start ring)</td></tr>
+    <tr><td>C</td><td>camera &nbsp;·&nbsp; P photograph mode &nbsp;·&nbsp; M sound &nbsp;·&nbsp; R reset &nbsp;·&nbsp; H help</td></tr>
+  </table>
+  <table style="margin-top:8px">
+    <tr><td>1 – 7, 9, 0</td><td>change ship when landed: Nos. 1–7, No. 9 runabout, 0 = No. 10 Omnibus</td></tr>
+    <tr><td>B</td><td>the "Brazil" — spherical balloon, no motor: drift, ballast, and guide-rope</td></tr>
+    <tr><td>L</td><td>travel: Paris ⇄ Monaco (when landed)</td></tr>
+  </table>
+  <div class="quote">“To descend without sacrificing gas, to mount without sacrificing ballast.”
+  — fly low and the guide rope will steady you; fly high to find the wind. (H closes this panel)</div>
+</div>
+
+<div class="hud" id="hintBR" style="bottom:16px; right:18px; font-size:12.5px; opacity:.65; text-align:right;">
+  ESC menu &nbsp;·&nbsp; H controls &nbsp;·&nbsp; C camera &nbsp;·&nbsp; P photograph &nbsp;·&nbsp; R reset
+</div>
+
+<div id="menu" class="hidden">
+  <h2>My Airships</h2>
+  <div id="menuBody">
+    <div class="menu-col"><h3>The Fleet</h3><div id="menuShips"></div></div>
+    <div class="menu-col"><h3>Options</h3><div id="menuOpts"></div></div>
+  </div>
+  <div class="quote">The simulation is paused. Esc resumes.</div>
+</div>
+
+<div id="vignette"></div><div id="grain"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
