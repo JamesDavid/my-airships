@@ -71,13 +71,22 @@ function historicTrack() {
 
 function buildRings(gates, originPos) {
   for (const r of gateRings) scene.remove(r);
+  const n = gates.length;
   gateRings = gates.map((g, i) => {
     const r = makeRing(0x8a8a8a);
     r.position.set(g.x, g.y, g.z);
-    // face the ring toward its approach direction so it never reads edge-on
-    const prev = i > 0 ? gates[i - 1]
-      : (originPos || (gates.length > 1 ? gates[gates.length - 1] : null));
-    if (prev) r.rotation.y = Math.atan2(g.x - prev.x, g.z - prev.z);
+    // face each ring square to the flight line: on looping circuits use the
+    // true tangent (central difference of neighbors); on point-to-point
+    // courses, the direction from the previous gate (or the start).
+    let dx = 0, dz = 0;
+    if (!originPos && n > 2) {
+      const p = gates[(i - 1 + n) % n], nx = gates[(i + 1) % n];
+      dx = nx.x - p.x; dz = nx.z - p.z;
+    } else {
+      const prev = i > 0 ? gates[i - 1] : (originPos || (n > 1 ? gates[n - 1] : null));
+      if (prev) { dx = g.x - prev.x; dz = g.z - prev.z; }
+    }
+    if (dx || dz) r.rotation.y = Math.atan2(dx, dz);
     r.scale.setScalar((g.r || 24) / 24);
     r.userData.r = g.r || 24;
     return r;
@@ -116,7 +125,7 @@ function startTrack(t) {
   race.state = 'count';
   race.count = t.historic ? 3.5 : 1.8;
   race.gate = 0; race.lap = 1; race.t = 0; race.splits = [];
-  race.lastResult = null;
+  race.lastResult = null; race._gateS = undefined;
   ghostRec = []; ghostLastSample = -1;
   loadBest(t);
   if (!t.historic) {
@@ -472,7 +481,7 @@ function updateRace(dt) {
     const n = Math.ceil(race.count);
     setCenter(n > 0 ? String(n) : '“Let go all!”', '');
     if (race.count <= 0) {
-      race.state = 'run'; race.t = 0; race.gate = 0; race.lap = 1; race.lastResult = null;
+      race.state = 'run'; race.t = 0; race.gate = 0; race.lap = 1; race.lastResult = null; race._gateS = undefined;
       if (track.historic && world.rivalSpecs) {
         clearRivals();
         world.rivalSpecs.forEach((id, i) => rivals.push(new Rival(scene, id, world, 5 + i * 8)));
@@ -482,24 +491,41 @@ function updateRace(dt) {
     }
   } else if (s === 'run') {
     race.t += dt;
-    const tgt = raceTargetPos();
-    const passR = homeward ? 30 : (gates[race.gate].r || 24) + 8;
-    if (ship.pos.distanceTo(tgt) < passR) {
-      if (homeward) { finishRace(); return; }
-      blip(620 + race.gate * 60);
-      race.splits.push(race.t);
-      if (!track.historic) showSplit();
-      race.gate++;
-      if (race.gate === gates.length) {
-        if (track.historic) {
-          addMsg('turn', world.hints.turnMsg, 0);
-          race.sputterAt = race.t + 10 + Math.random() * 18;
-        } else if (race.lap < track.laps) {
-          race.lap++; race.gate = 0;
-          addMsg('lap', `Lap ${race.lap} of ${track.laps}!`, 0);
-        } else { finishRace(); return; }
-      } else if (track.historic && gates.length > 1) {
-        addMsg('gate', `Pylon ${race.gate} of ${gates.length} rounded!`, 0);
+    // the finish (historic homeward leg) stays a generous radius check
+    if (homeward) {
+      if (ship.pos.distanceTo(world.startRing) < 30) { finishRace(); }
+    } else {
+      // DIRECTIONAL gates: you must cross the ring's plane the right way,
+      // inside its radius — no sideways or backwards triggers
+      const ring = gateRings[race.gate];
+      const gn = new THREE.Vector3(Math.sin(ring.rotation.y), 0, Math.cos(ring.rotation.y));
+      const rel = ship.pos.clone().sub(ring.position);
+      const sd = rel.dot(gn);
+      const lateral = Math.sqrt(Math.max(0, rel.lengthSq() - sd * sd));
+      const passR = (gates[race.gate].r || 24) + 6;
+      const prevSd = race._gateS;
+      race._gateS = sd;
+      if (prevSd !== undefined && prevSd < 0 && sd >= 0) {
+        if (lateral < passR) {
+          race._gateS = undefined;
+          blip(620 + race.gate * 60);
+          race.splits.push(race.t);
+          if (!track.historic) showSplit();
+          race.gate++;
+          if (race.gate === gates.length) {
+            if (track.historic) {
+              addMsg('turn', world.hints.turnMsg, 0);
+              race.sputterAt = race.t + 10 + Math.random() * 18;
+            } else if (race.lap < track.laps) {
+              race.lap++; race.gate = 0;
+              addMsg('lap', `Lap ${race.lap} of ${track.laps}!`, 0);
+            } else { finishRace(); return; }
+          } else if (track.historic && gates.length > 1) {
+            addMsg('gate', `Pylon ${race.gate} of ${gates.length} rounded!`, 0);
+          }
+        } else if (lateral < passR * 3) {
+          addMsg('miss', 'Missed the gate — come round and through it!', 4);
+        }
       }
     }
     if (track.historic && race.sputterAt && race.t > race.sputterAt && !ship.sputtering) {
