@@ -60,6 +60,50 @@ export class Airship {
     this.reset(new THREE.Vector3(0, 2, 0), 0);
   }
 
+  // ------------------------------------------------------------ envelope shape
+  // Per-vertex deformation of the gas bag, in the unit-sphere space that
+  // mesh.scale stretches into the hull. Simulates (B6, B8):
+  //  - slack silk as hydrogen is lost: the belly caves upward, the crown
+  //    holds its shape longest (gas rises), wrinkles ripple in the cloth
+  //  - gas POOLING along the axis when pitched without partitions
+  //  - the pocket-knife FOLD: a waist crease and both arms drooping
+  //  - at zero hydrogen the bag hangs dead — "a great bird that dies"
+  deformEnvelope(force) {
+    const f = clamp(this.fullness ?? 1, 0.03, 1);
+    const F = this.fold || 0;
+    const pool = this.gasPool || 0;
+    const slack = f < 0.9 || F > 0.02;
+    const key = `${(f * 90) | 0},${(F * 50) | 0},${(pool * 40) | 0},${slack ? (this._t * 8) | 0 : 0}`;
+    if (!force && key === this._defKey) return;
+    this._defKey = key;
+    const base = this.envBase, pos = this.envGeo.attributes.position.array;
+    const AB = this.envBaseScale.x / this.envBaseScale.y; // axial-to-radial ratio
+    const t = this._t;
+    for (let i = 0; i < base.length; i += 3) {
+      const x = base[i], y = base[i + 1], z = base[i + 2];
+      const ax = Math.max(-1, Math.min(1, x));
+      // local fullness: pitched gas rushes toward the high end
+      const fl = Math.max(0.04, Math.min(1, f + pool * ax));
+      const empty = 1 - fl;
+      const bottom = Math.max(0, -y);          // 0 at the crown, 1 at the belly
+      // radial slack — the underside collapses far more than the crown
+      let radial = 1 - empty * (0.16 + 0.46 * bottom);
+      // wrinkles ripple through slack silk
+      radial *= 1 + empty * 0.05 * Math.sin(i * 2.4 + t * 2.6) * (0.35 + 0.65 * bottom);
+      // the waist pinches as she folds
+      radial *= 1 - F * 0.4 * Math.exp(-(ax * ax) / 0.05);
+      let ny = y * radial;
+      const nz = z * radial;
+      // the empty belly caves upward
+      ny += empty * 0.3 * bottom * (1 - ax * ax * 0.4);
+      // pocket-knife: both arms droop from the central hinge
+      ny -= F * 0.55 * Math.max(0, Math.abs(ax) - 0.14) * AB;
+      pos[i] = x; pos[i + 1] = ny; pos[i + 2] = nz;
+    }
+    this.envGeo.attributes.position.needsUpdate = true;
+    this.envGeo.computeVertexNormals();
+  }
+
   // ------------------------------------------------------------ state
   reset(pos, yaw) {
     const P = this.spec.physics;
@@ -79,6 +123,12 @@ export class Airship {
     this.wrecked = false;
     this.landed = true;
     this.foulTime = 0;
+    this.fold = 0;
+    this.gasPool = 0;
+    this.fullness = 1;
+    this._defKey = null;
+    this._foldWarned = false;
+    this.deformEnvelope(true);
     this.propAngle = 0;
     this.rudderInput = 0;
     this._t = 0;
@@ -100,6 +150,9 @@ export class Airship {
     this.envBaseScale = new THREE.Vector3(E.length / 2, E.diameter / 2, E.diameter / 2);
     this.envMesh.scale.copy(this.envBaseScale);
     this.pitchGroup.add(this.envMesh);
+    // keep the pristine hull for the deformation pass (fold / slack / wrinkles)
+    this.envGeo = geo;
+    this.envBase = Float32Array.from(geo.attributes.position.array);
 
     // keel + basket + motor
     const wood = new THREE.MeshLambertMaterial({ color: 0x6b5236 });
@@ -441,9 +494,12 @@ export class Airship {
     const P = this.spec.physics;
     this._t += dt;
     if (this.wrecked) {
-      // deflate and settle
-      this.envMesh.scale.y = Math.max(0.18 * this.envBaseScale.y, this.envMesh.scale.y - dt * 2.2);
-      this.envMesh.scale.z = Math.max(0.25 * this.envBaseScale.z, this.envMesh.scale.z - dt * 1.8);
+      // the gas escapes and the bag dies — "losing the remains of its gas
+      // in convulsive agitations, like a great bird that dies"
+      this.gas = Math.max(0, this.gas - 28 * dt);
+      this.fullness = (this.gas / 100) * this.heat;
+      this.fold = Math.min(1, (this.fold || 0) + dt * 0.9 * (1 - this.spec.physics.foldResist * 0.7));
+      this.deformEnvelope();
       this.vel.multiplyScalar(0.97);
       this.vel.y -= 6 * dt;
       this.pos.addScaledVector(this.vel, dt);
@@ -462,7 +518,8 @@ export class Airship {
     this.motorOn = P.thrust > 0 && this.fuel > 0;
     this.rudderInput = input.rudder;
     this.pitchTarget = input.pitch * P.pitchMax;
-    this.pitch += (this.pitchTarget - this.pitch) * Math.min(1, 1.6 * dt);
+    // a folding hull answers the shifting weights sluggishly
+    this.pitch += (this.pitchTarget - this.pitch) * Math.min(1, 1.6 * dt * (1 - (this.fold || 0) * 0.6));
     // impact-induced rotation, decaying
     this.pitchKick = (this.pitchKick || 0) * Math.pow(0.15, dt);
     this.pitch += this.pitchKick * dt * 12;
@@ -500,12 +557,29 @@ export class Airship {
       this.gas = Math.max(0, this.gas - P.ventRate * dt);
     }
 
-    // envelope sag visual + wire fouling (B6)
+    // ---- envelope structural state (B6, B8) ----
+    this.fullness = fullness;
     const sagThresh = 0.78 - P.foldResist * 0.33;
-    const sag = fullness < sagThresh;
-    const rScale = 0.86 + 0.14 * clamp(fullness * 1.15, 0.4, 1);
-    const wrinkle = sag ? 1 + Math.sin(this._t * 14) * 0.012 : 1;
-    this.envMesh.scale.set(this.envBaseScale.x, this.envBaseScale.y * rScale * wrinkle, this.envBaseScale.z * rScale);
+    // the FOLD: a starved long hull creases under way — worse with speed
+    const airspeedNow = Math.hypot(airspeedV.x, airspeedV.z);
+    const speedFac = 0.45 + 0.55 * Math.min(1, airspeedNow / 8);
+    const foldTarget = P.foldResist >= 1 ? 0
+      : clamp((sagThresh - fullness) / 0.22, 0, 1) * speedFac;
+    this.fold += (foldTarget - this.fold) * Math.min(1, 1.1 * dt);
+    if (this.fold > 0.35 && !this._foldWarned) {
+      this._foldWarned = true;
+      this.events.push('folding');
+    } else if (this.fold < 0.2) this._foldWarned = false;
+    // gas pooling along the axis when pitched (partitions nearly stop it)
+    const poolTarget = clamp(Math.sin(this.pitch) * 2.2, -1, 1)
+      * clamp((0.9 - fullness) * 2.2, 0, 1)
+      * (P.partitions ? 0.12 : 0.5);
+    this.gasPool += (poolTarget - this.gasPool) * Math.min(1, 0.5 * dt);
+    // a folding ship wallows: pitch wobble the helm cannot quiet
+    this.pitch += Math.sin(this._t * 3.3) * this.fold * 1.1 * dt;
+    this.deformEnvelope();
+
+    const sag = fullness < sagThresh || this.fold > 0.2;
     if (sag && this.throttle > 0.5 && this.motorOn) {
       this.foulTime += dt;
       this.events.push('sagWarn');
@@ -537,7 +611,9 @@ export class Airship {
     const fwdFlat = new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry));
     const latFlat = new THREE.Vector3(-fwdFlat.z, 0, fwdFlat.x);
     const vf = airspeedV.dot(fwdFlat), vl = airspeedV.dot(latFlat);
-    acc.addScaledVector(fwdFlat, -(P.dragQ * vf * Math.abs(vf) + P.dragL * vf));
+    // a slack or folded bag is no longer streamlined — drag balloons
+    const flab = 1 + this.fold * 2.2 + Math.max(0, 0.6 - this.fullness) * 1.2;
+    acc.addScaledVector(fwdFlat, -(P.dragQ * flab * vf * Math.abs(vf) + P.dragL * vf));
     acc.addScaledVector(latFlat, -(0.9 * vl + 0.12 * vl * Math.abs(vl)));
     // rope ground drag (B4: the brake)
     acc.addScaledVector(fwdFlat, -this.groundedFrac * 0.06 * vf * Math.abs(vf));
@@ -576,7 +652,7 @@ export class Airship {
     // the helm, and only a stern propeller's slipstream steers you at rest
     const wash = this.motorOn && (this.spec.prop === 'stern' || this.spec.prop === 'both')
       ? this.throttle * this.motorHealth * 4 : 0;
-    const steerAuth = clamp((vf + wash) / 9, -1, 1);
+    const steerAuth = clamp((vf + wash) / 9, -1, 1) * (1 - this.fold * 0.55);
     this.yawVel += input.rudder * P.yawRate * steerAuth * dt * 1.1;
     this.yawVel *= Math.pow(0.25, dt);
     this.yaw += this.yawVel * dt;

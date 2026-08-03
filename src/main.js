@@ -768,6 +768,7 @@ const EVENT_TEXT = {
   roughLanding: ['rough', 'A rough landing — the keel groans.', 8],
   motorFixed: ['motorfixed', 'The motor takes heart and rumbles on!', 4],
   fuelOut: ['fuelout', 'The petroleum is spent! The motor dies away — you are a free balloon now.', 0],
+  folding: ['folding', 'The balloon is folding in the middle like a pocket knife! Throttle down, level off, drop sand!', 8],
 };
 
 function drainEvents() {
