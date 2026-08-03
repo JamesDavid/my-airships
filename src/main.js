@@ -93,15 +93,47 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-// mouse orbit offset (chase cam)
-let dragging = false, orbitYaw = 0, orbitPitch = 0;
-addEventListener('mousedown', () => dragging = true);
-addEventListener('mouseup', () => dragging = false);
-addEventListener('mousemove', (e) => {
-  if (!dragging) return;
-  orbitYaw -= e.movementX * 0.005;
-  orbitPitch = Math.max(-0.5, Math.min(0.9, orbitPitch + e.movementY * 0.004));
+// drag orbit (mouse or touch) on the canvas only
+let dragging = false, orbitYaw = 0, orbitPitch = 0, lastPX = 0, lastPY = 0;
+const cvs = renderer.domElement;
+cvs.style.touchAction = 'none';
+cvs.addEventListener('pointerdown', (e) => {
+  dragging = true; lastPX = e.clientX; lastPY = e.clientY;
+  cvs.setPointerCapture(e.pointerId);
 });
+cvs.addEventListener('pointerup', () => dragging = false);
+cvs.addEventListener('pointercancel', () => dragging = false);
+cvs.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  orbitYaw -= (e.clientX - lastPX) * 0.005;
+  orbitPitch = Math.max(-0.5, Math.min(0.9, orbitPitch + (e.clientY - lastPY) * 0.004));
+  lastPX = e.clientX; lastPY = e.clientY;
+});
+
+// ---------------------------------------------------------------- touch controls
+const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0
+  || location.search.includes('touch');
+if (isTouch) {
+  document.body.classList.add('touch');
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); // spare the phone GPU
+  for (const b of document.querySelectorAll('#touchUI .tbtn')) {
+    const code = b.dataset.key;
+    const down = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      b.classList.add('on');
+      window.dispatchEvent(new KeyboardEvent('keydown', { code }));
+    };
+    const up = (e) => {
+      e.preventDefault();
+      b.classList.remove('on');
+      window.dispatchEvent(new KeyboardEvent('keyup', { code }));
+    };
+    b.addEventListener('pointerdown', down);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+  }
+}
 
 function pollInput() {
   input.throttle = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + (keys['KeyS'] || keys['ArrowDown'] ? -1 : 0);
@@ -484,6 +516,9 @@ function updateHUD() {
   el('thr').textContent = Math.round(ship.throttle * 100);
   const w = windAt(wind, ship.pos.y);
   el('wind').textContent = `${Math.round(Math.hypot(w.x, w.z) * 3.6)} km/h ${currentLocation === 'paris' ? 'from the west' : 'along the coast'}`;
+  // true-wind arrow, relative to your heading (up = blowing the way you point)
+  const rel = Math.atan2(-w.z, w.x) - ship.yaw;
+  el('windArrow').style.transform = `rotate(${-90 - rel * 180 / Math.PI}deg)`;
   el('gasBar').style.width = ship.gas + '%';
   el('gasPct').textContent = Math.round(ship.gas) + '%';
   const fMax = ship.spec.physics.fuel;

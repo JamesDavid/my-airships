@@ -65,6 +65,45 @@
   body.photo #app { filter: sepia(.55) contrast(1.08) brightness(1.02) saturate(.62); }
   body.photo .hud, body.photo #messages { display:none; }
   body.photo #grain, body.photo #vignette { display:block; }
+
+  /* ---------- touch controls ---------- */
+  #touchUI { display:none; }
+  body.touch #touchUI { display:block; }
+  .tbtn { position:fixed; width:60px; height:60px; border-radius:50%;
+    background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
+    color:#f2ead6; font-size:15px; font-family:Georgia, serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; touch-action:none; z-index:30; }
+  .tbtn.sm { width:46px; height:46px; font-size:13px; }
+  .tbtn.on { background:rgba(232,196,119,.5); border-color:#e8c477; }
+  body.touch #hintBR { display:none; }
+  body.touch #panelTR { right:74px; }
+  body.touch #panelBL { bottom:238px; }
+  body.touch #messages { bottom:240px; }
+  body.touch #help { pointer-events:auto; }
+
+  /* ---------- small screens (phones, both orientations) ---------- */
+  @media (max-width: 900px), (max-height: 520px) {
+    #panelTL { font-size:11.5px; line-height:1.35; top:8px; left:10px; }
+    #timer { font-size:20px; }
+    #objective { font-size:11px; max-width:190px; }
+    #best { font-size:9.5px; }
+    #centerBig { font-size:28px; }
+    #centerSub { font-size:13px; }
+    #center { top:22%; }
+    #help { max-width:94vw; max-height:86vh; overflow:auto; font-size:11.5px;
+      line-height:1.5; padding:12px 16px; }
+    #help h2 { font-size:16px; }
+    #menu { min-width:unset; width:94vw; max-height:88vh; padding:12px 16px; }
+    #menu h2 { font-size:18px; margin-bottom:6px; }
+    #menuBody { gap:14px; flex-wrap:wrap; }
+    .menu-col { min-width:200px; }
+    #menu button { font-size:12px; padding:4px 8px; margin:2px 0; }
+    #menu .quote { font-size:10.5px; margin-top:8px; }
+    .barwrap { width:120px; }
+    #messages { width:94vw; }
+    .msg { font-size:13px; }
+  }
 </style>
 <script type="importmap">
 { "imports": {
@@ -80,7 +119,7 @@
   <b>ALTITUDE</b> <span id="alt">0</span> m<br>
   <b>SPEED</b> <span id="spd">0</span> km/h<br>
   <b>THROTTLE</b> <span id="thr">0</span>%<br>
-  <b>WIND</b> <span id="wind">—</span>
+  <b>WIND</b> <span id="windArrow" style="display:inline-block">➤</span> <span id="wind">—</span>
 </div>
 
 <div class="hud" id="panelTR">
@@ -133,6 +172,21 @@
     <div class="menu-col"><h3>Options</h3><div id="menuOpts"></div></div>
   </div>
   <div class="quote">The simulation is paused. Esc resumes.</div>
+</div>
+
+<div id="touchUI">
+  <div class="tbtn" data-key="KeyA" style="left:16px; bottom:92px">◀</div>
+  <div class="tbtn" data-key="KeyD" style="left:152px; bottom:92px">▶</div>
+  <div class="tbtn" data-key="KeyW" style="left:84px; bottom:158px">THR+</div>
+  <div class="tbtn" data-key="KeyS" style="left:84px; bottom:26px">THR−</div>
+  <div class="tbtn" data-key="KeyE" style="right:84px; bottom:158px">▲</div>
+  <div class="tbtn" data-key="KeyQ" style="right:84px; bottom:26px">▼</div>
+  <div class="tbtn" data-key="Space" style="right:152px; bottom:92px">SAND</div>
+  <div class="tbtn" data-key="KeyV" style="right:16px; bottom:92px">VENT</div>
+  <div class="tbtn sm" data-key="KeyF" style="right:16px; bottom:170px">FIX</div>
+  <div class="tbtn sm" data-key="Escape" style="right:12px; top:60px">☰</div>
+  <div class="tbtn sm" data-key="KeyC" style="right:12px; top:122px">CAM</div>
+  <div class="tbtn sm" data-key="Enter" style="right:12px; top:184px">GO</div>
 </div>
 
 <div id="vignette"></div><div id="grain"></div>
