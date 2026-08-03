@@ -116,6 +116,18 @@ const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoi
 if (isTouch) {
   document.body.classList.add('touch');
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); // spare the phone GPU
+  document.getElementById('menuQuote').textContent = 'The simulation is paused — tap ☰ or Resume to fly.';
+  // no accidental page zoom while flying
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+  // tapping the controls panel dismisses it; explain the touch scheme there
+  document.getElementById('help').addEventListener('pointerdown', () => {
+    document.getElementById('help').classList.add('hidden');
+  });
+  document.querySelector('#help .quote').textContent =
+    'On touch: hold the round buttons — THR throttle, ◀▶ rudder, ▲▼ shifting weights, ' +
+    'SAND drops ballast, VENT descends, FIX coaxes the motor, GO starts the trial. ' +
+    'Drag the sky to look around. Tap this panel to close it.';
   for (const b of document.querySelectorAll('#touchUI .tbtn')) {
     const code = b.dataset.key;
     const down = (e) => {
