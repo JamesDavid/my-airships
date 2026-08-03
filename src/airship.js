@@ -524,22 +524,19 @@ export class Airship {
     this.pitchKick = (this.pitchKick || 0) * Math.pow(0.15, dt);
     this.pitch += this.pitchKick * dt * 12;
 
-    // B8: gas-rush rearing when starved + steeply pitched (no partitions)
-    if (!P.partitions && this.gas < 70 && Math.abs(this.pitch) > 0.2) {
-      const inst = ((70 - this.gas) / 70) * 0.3;
-      this.pitch += Math.sign(this.pitch) * inst * dt;
-      this.pitch = clamp(this.pitch, -0.9, 0.9);
-      if (Math.abs(this.pitch) > P.pitchMax * 1.6) this.events.push('rearing');
-    }
+    // (B8 gas-rush rearing lives in the structural section below,
+    //  where fullness is known)
 
     // the pennant reads the apparent wind (true wind minus our own motion)
     const appWind = windAt(wind, this.pos.y).sub(this.vel);
     this._pennantAng = Math.atan2(-appWind.z, appWind.x);
 
     // heat: cloud shadow and forest cooling (A2, A4)
+    // superheat is a few percent in reality — at true gravity scale that is
+    // plenty dangerous (a 4.5% loss sinks you ~1.5 m/s until you act)
     let heatTarget = 1.0;
-    if (env.underCloud) heatTarget = 0.93;
-    else if (env.inBois && this.pos.y < 120) heatTarget = 0.955;
+    if (env.underCloud) heatTarget = 0.955;
+    else if (env.inBois && this.pos.y < 120) heatTarget = 0.97;
     this.heat += (heatTarget - this.heat) * Math.min(1, 0.35 * dt);
     if (env.underCloud && this.heat > 0.985) this.events.push('shadow');
 
@@ -575,6 +572,13 @@ export class Airship {
       * clamp((0.9 - fullness) * 2.2, 0, 1)
       * (P.partitions ? 0.12 : 0.5);
     this.gasPool += (poolTarget - this.gasPool) * Math.min(1, 0.5 * dt);
+    // B8: gas-rush rearing — a slack, pitched, unpartitioned bag runs away
+    if (!P.partitions && fullness < 0.92 && Math.abs(this.pitch) > 0.18) {
+      const inst = clamp((0.92 - fullness) / 0.3, 0, 1) * 0.35;
+      this.pitch += Math.sign(this.pitch) * inst * dt;
+      this.pitch = clamp(this.pitch, -0.9, 0.9);
+      if (Math.abs(this.pitch) > P.pitchMax * 1.6) this.events.push('rearing');
+    }
     // a folding ship wallows: pitch wobble the helm cannot quiet
     this.pitch += Math.sin(this._t * 3.3) * this.fold * 1.1 * dt;
     this.deformEnvelope();
@@ -627,15 +631,22 @@ export class Airship {
       acc.addScaledVector(fwdFlat, -Math.min(4, this.vel.y * sp0 * 1.6));
     }
 
-    // buoyancy
-    const density = Math.max(0.55, 1 - this.pos.y / 4000);
-    const lift = P.gasLift * (this.gas / 100) * this.heat * density
+    // buoyancy at true gravity scale: a = g(B - W)/m. LIFT_SCALE raises both
+    // sides so the balance sums to ~g at trim - full-gas handling is unchanged,
+    // but the physics of deficit is now real: airships fly essentially FULL
+    // (neutral ~98% gas - why ballast exists), a cloud shadow's few-percent
+    // superheat loss genuinely sinks you, and a bag at 30% falls at ~6 m/s
+    // ("the descent became a fall").
+    const LIFT_SCALE = 6.5;
+    const density = Math.max(0.7, 1 - this.pos.y / 20000);
+    const lift = (P.gasLift + LIFT_SCALE) * (this.gas / 100) * this.heat * density
       + this.groundedFrac * P.ropeLift;                    // B4 auto-ballast
-    // burning petroleum lightens the ship — the slow drift upward of a long flight
-    const fuelWeight = P.fuel ? (this.fuel / P.fuel) * 0.06 : 0;
-    const weight = P.weightBase + this.bags * P.bagLift + fuelWeight;
+    // petrol is real weight now (~3% of the ship): burning it over a long
+    // flight leaves you light - the classic end-of-voyage lift problem
+    const fuelWeight = P.fuel ? (this.fuel / P.fuel) * 0.25 : 0;
+    const weight = P.weightBase + LIFT_SCALE + this.bags * P.bagLift + fuelWeight;
     let vAcc = lift - weight;
-    vAcc -= 1.1 * airspeedV.y + 0.4 * airspeedV.y * Math.abs(airspeedV.y);
+    vAcc -= 0.5 * airspeedV.y + 0.14 * airspeedV.y * Math.abs(airspeedV.y);
     acc.y += vAcc;
 
     // B5: tangage — bob in the 25-45 km/h airspeed band, worse against the wind

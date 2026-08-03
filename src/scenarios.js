@@ -75,7 +75,7 @@ export const SCENARIOS = [
       this.warned = false;
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(30, ctx.ship.gas - 0.45 * dt);
+      ctx.ship.gas = Math.max(34, ctx.ship.gas - 0.45 * dt);
       if (!this.warned && ctx.ship.gas < 70) {
         this.warned = true;
         ctx.addMsg('sc', '“The balloon began to fold in the middle like a pocket knife…” Throttle DOWN, nose down, ride her in.', 0);
@@ -102,7 +102,7 @@ export const SCENARIOS = [
       ctx.setCenter('August 8th, 1901', 'The valve is gone. The Trocadéro roof or nothing. (green ring)');
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(20, ctx.ship.gas - 0.7 * dt);
+      ctx.ship.gas = Math.max(45, ctx.ship.gas - 0.7 * dt);
       const d = Math.hypot(ctx.ship.pos.x - 20, ctx.ship.pos.z - 140);
       const onRoof = d < 70 && ctx.ship.pos.y > 12 && ctx.ship.pos.y < 45;
       if (onRoof && ctx.ship.vel.length() < 10) {
@@ -162,12 +162,12 @@ export const SCENARIOS = [
     brief: 'The balloon left the aerodrome slack, and the sun is driving the gas to the up-pointed stem. She will rear like a steed. Nurse her back to the landing-stage — the bay is waiting to swallow her.',
     setup(ctx) {
       ctx.place(320, 55, -420, 1.9);
-      ctx.ship.gas = 63;
+      ctx.ship.gas = 86;
       ctx.setZone(V(40, 12, 0), 45);
       ctx.setCenter('February 14th, 1902', 'Imperfectly inflated. Small pitch, gentle throttle — home to the stage.');
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(40, ctx.ship.gas - 0.12 * dt);
+      ctx.ship.gas = Math.max(78, ctx.ship.gas - 0.12 * dt);
       const d = Math.hypot(ctx.ship.pos.x - 40, ctx.ship.pos.z);
       if (ctx.ship.wrecked) return ctx.fail('“Balloon, keel, and motor were fished up the next day.” History repeats — unless you fly it better.');
       if (ctx.ship.landed && d < 45) {
