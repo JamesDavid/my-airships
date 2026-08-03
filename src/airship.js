@@ -639,9 +639,10 @@ export class Airship {
   }
 }
 
-// wind is weaker near the ground (B1 / A10 reason (c))
+// wind is weaker near the ground (B1 / A10 reason (c)) — a steep gradient,
+// so the high-road/low-road choice genuinely decides the race
 export function windAt(wind, y) {
-  const f = 0.55 + 0.45 * clamp(y / 150, 0, 1);
+  const f = 0.42 + 0.58 * clamp(y / 120, 0, 1);
   return new THREE.Vector3(wind.x * f, 0, wind.z * f);
 }
 

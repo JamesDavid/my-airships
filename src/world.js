@@ -131,12 +131,14 @@ export function makeWaterSurface(geometry, sunDir, waterColor) {
   return water;
 }
 
+// Half real scale: St. Cloud to the Tower is ~2.5 km here (5.5 km in 1901),
+// so climbing for the gradient wind genuinely pays on each leg.
 export const TOWER_POS = new THREE.Vector3(260, 0, 150);
-export const PAD_POS = new THREE.Vector3(-940, 2.0, 0);
-export const START_RING = new THREE.Vector3(-870, 55, 0);
+export const PAD_POS = new THREE.Vector3(-2140, 2.0, 0);
+export const START_RING = new THREE.Vector3(-2065, 55, 0);
 export const TOWER_RING = new THREE.Vector3(430, 70, 150);
 
-const LONGCHAMPS = { x: -560, z: 180, rx: 170, rz: 110 };
+const LONGCHAMPS = { x: -1250, z: 200, rx: 260, rz: 150 };
 
 export function buildWorld(scene) {
   windMats.length = 0;
@@ -165,7 +167,7 @@ export function buildWorld(scene) {
   // Longchamps pelouse
   addOval(scene, LONGCHAMPS.x, LONGCHAMPS.z, LONGCHAMPS.rx, LONGCHAMPS.rz, 0x86a05e, 0.12);
   // aerodrome grounds
-  addFlat(scene, -940, 0, 220, 220, 0x84925f, 0.1);
+  addFlat(scene, -2140, 0, 240, 240, 0x84925f, 0.1);
 
   // ---------- the Seine: stone quays and living, reflecting water ----------
   const riverPts = seinePoints();
@@ -179,11 +181,11 @@ export function buildWorld(scene) {
   // the western reach — the river loops AROUND the Bois; the race crosses it
   // at the start, exactly as in 1901 (PERIOD_NOTES.md)
   const westPts = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-960, 0, -1500),
-    new THREE.Vector3(-895, 0, -700),
-    new THREE.Vector3(-865, 0, 0),
-    new THREE.Vector3(-900, 0, 700),
-    new THREE.Vector3(-1000, 0, 1500),
+    new THREE.Vector3(-2090, 0, -1600),
+    new THREE.Vector3(-2010, 0, -700),
+    new THREE.Vector3(-1985, 0, 0),
+    new THREE.Vector3(-2020, 0, 700),
+    new THREE.Vector3(-2130, 0, 1600),
   ]).getPoints(100);
   scene.add(makeRibbon(westPts, 86, 0xa39a86, 0.18));
   const seineW = makeWaterSurface(ribbonGeoXY(westPts, 64), sunDir, 0x24405a);
@@ -191,7 +193,7 @@ export function buildWorld(scene) {
   seineW.position.y = 0.3;
   scene.add(seineW);
   const wb = new THREE.Mesh(new THREE.BoxGeometry(14, 2.2, 92), new THREE.MeshLambertMaterial({ color: 0xa8a094 }));
-  wb.position.set(-866, 2.4, 40); // Pont de St-Cloud, under the start ring
+  wb.position.set(-1986, 2.4, 40); // Pont de St-Cloud, just past the start
   scene.add(wb);
 
   // river traffic: barges and a puffing steamer
@@ -269,7 +271,7 @@ export function buildWorld(scene) {
   scene.add(hangar);
 
   // ---------- clouds ----------
-  const windB = new THREE.Vector3(3.4, 0, 0.7);
+  const windB = new THREE.Vector3(4.2, 0, 0.8);
   const clouds = makeClouds(scene, windB);
 
   return {
@@ -280,8 +282,8 @@ export function buildWorld(scene) {
     towerPos: TOWER_POS, padPos: PAD_POS,
     startRing: START_RING, turnRing: TOWER_RING,
     vistaPos: new THREE.Vector3(TOWER_POS.x + 20, 215, TOWER_POS.z + 20),
-    windBase: new THREE.Vector3(3.4, 0, 0.7),
-    raceLimit: 300, raceRecord: 295,
+    windBase: windB,
+    raceLimit: 600, raceRecord: 585,
     hints: {
       idleNear: 'Press ENTER to convoke the Commission. (1-7, 9, 0, B change ships · L: Monaco)',
       idleFar: 'Free flight — the start ring waits above the Aéro Club at St. Cloud.',
@@ -291,10 +293,10 @@ export function buildWorld(scene) {
     },
     isWater: () => false,
     isInBois(x, z) {
-      if (x < -820 || x > -280 || Math.abs(z) > 520) return false;
+      if (x < -1900 || x > -340 || Math.abs(z) > 560) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
       if (dx * dx + dz * dz < 1) return false;
-      if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 130 * 130) return false;
+      if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 150 * 150) return false;
       return true;
     },
   };
@@ -757,11 +759,11 @@ function addBuildingMeshes(scene, list) {
 function addTrees(scene) {
   const rand = mulberry32(99);
   const pts = [];
-  for (let i = 0; i < 650; i++) {
-    const x = -820 + rand() * 540, z = -520 + rand() * 1040;
+  for (let i = 0; i < 1250; i++) {
+    const x = -1900 + rand() * 1560, z = -560 + rand() * 1120;
     const dx = (x - LONGCHAMPS.x) / (LONGCHAMPS.rx + 14), dz = (z - LONGCHAMPS.z) / (LONGCHAMPS.rz + 14);
     if (dx * dx + dz * dz < 1) continue;
-    if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 140 * 140) continue;
+    if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 160 * 160) continue;
     pts.push({ x, z, s: 3 + rand() * 3.4, r: rand() });
   }
   const geo = new THREE.SphereGeometry(1, 7, 5); geo.translate(0, 0.6, 0);
@@ -839,26 +841,26 @@ function makeHangar() {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1);
   const body = new THREE.Mesh(new THREE.BoxGeometry(44, 15, 18),
     new THREE.MeshLambertMaterial({ map: tex }));
-  body.position.set(-1025, 7.5, 0);
+  body.position.set(-2225, 7.5, 0);
   g.add(body);
   const roof = new THREE.Mesh(new THREE.BoxGeometry(46, 2.5, 20),
     new THREE.MeshLambertMaterial({ color: 0x8a3a28 }));
-  roof.position.set(-1025, 16.2, 0);
+  roof.position.set(-2225, 16.2, 0);
   g.add(roof);
   const door = new THREE.Mesh(new THREE.PlaneGeometry(15, 12),
     new THREE.MeshLambertMaterial({ color: 0x241a12 }));
   door.rotation.y = Math.PI / 2;
-  door.position.set(-1002.9, 6, 0);
+  door.position.set(-2202.9, 6, 0);
   g.add(door);
   // flag mast
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 22, 6),
     new THREE.MeshLambertMaterial({ color: 0x5a4632 }));
-  mast.position.set(-1040, 11, 14); g.add(mast);
+  mast.position.set(-2240, 11, 14); g.add(mast);
   const flagGeo = new THREE.PlaneGeometry(6, 3);
   flagGeo.translate(3, 0, 0); // pivot at the mast so it can stream downwind
   const flag = new THREE.Mesh(flagGeo,
     new THREE.MeshLambertMaterial({ color: 0xb5442f, side: THREE.DoubleSide }));
-  flag.position.set(-1040, 20.5, 14); g.add(flag);
+  flag.position.set(-2240, 20.5, 14); g.add(flag);
   g.userData.flag = flag;
   return g;
 }

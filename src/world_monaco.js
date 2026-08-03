@@ -9,7 +9,7 @@ import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurfac
 
 const PAD = new THREE.Vector3(40, 2, 0);
 const START = new THREE.Vector3(120, 42, 0);
-const TURN = new THREE.Vector3(430, 55, -1380);
+const TURN = new THREE.Vector3(520, 55, -2550); // Cap Martin, at half real scale
 const SHORE_X = 26;
 
 export function buildWorldMonaco(scene) {
@@ -77,9 +77,9 @@ export function buildWorldMonaco(scene) {
   const rock = new THREE.Mesh(new THREE.CylinderGeometry(120, 160, 60, 12), rockMat);
   rock.position.set(-30, 30, 420); scene.add(rock);
   buildings.push({ x: -30, z: 420, w: 220, d: 220, h: 62, top: 62 });
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(200, 90, 12), rockMat);
-  cap.position.set(320, 45, -1520); scene.add(cap);
-  buildings.push({ x: 320, z: -1520, w: 260, d: 260, h: 60, top: 60 });
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(240, 100, 12), rockMat);
+  cap.position.set(400, 50, -2720); scene.add(cap);
+  buildings.push({ x: 400, z: -2720, w: 300, d: 300, h: 66, top: 66 });
 
   // ---------- Monte Carlo terraces ----------
   const cream = ['#e3d3b5', '#dcc4a8', '#e8dcc2', '#d9c8ae'];
@@ -183,7 +183,7 @@ export function buildWorldMonaco(scene) {
   }
 
   // ---------- yachts in the bay — anchored head-to-wind, a pilot's wind vane ----------
-  const WINDB = new THREE.Vector3(0.4, 0, 3.2);
+  const WINDB = new THREE.Vector3(0.5, 0, 3.9);
   const headToWind = Math.atan2(WINDB.z, -WINDB.x);
   for (let i = 0; i < 6; i++) {
     scene.add(makeYacht(120 + rand() * 220, -220 + rand() * 440, rand(), headToWind + (rand() - 0.5) * 0.3));
@@ -234,8 +234,8 @@ export function buildWorldMonaco(scene) {
     towerPos: null, padPos: PAD,
     startRing: START, turnRing: TURN,
     vistaPos: new THREE.Vector3(-160, 120, -320), // from the Monte Carlo terraces
-    windBase: new THREE.Vector3(0.4, 0, 3.2),     // down the coast: headwind out, flying home
-    raceLimit: 300, raceRecord: 295,
+    windBase: WINDB,                              // down the coast: headwind out, flying home
+    raceLimit: 600, raceRecord: 585,
     hints: {
       idleNear: 'Press ENTER for the flight to Cap Martin. (1-7, 9, 0, B change ships · L: Paris)',
       idleFar: 'Free flight — the start ring waits over the landing-stage of La Condamine.',
