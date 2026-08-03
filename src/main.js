@@ -264,12 +264,18 @@ function finishRace() {
   const t = race.t;
   const won = t <= world.raceLimit;
   const beatSantos = t <= world.raceRecord;
+  const ace = t <= 600;
   if (won && (!race.best || t < race.best)) {
     race.best = t; localStorage.setItem('myairships_best', String(t));
   }
-  setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…',
-    won ? `${fmt(t)} — the Deutsch Prize is yours.` + (beatSantos ? ' You have outflown Santos-Dumont himself (29:31).' : '')
-        : `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`);
+  let sub;
+  if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
+  else {
+    sub = `${fmt(t)} — the Deutsch Prize is yours.`;
+    if (beatSantos) sub += ' You have outflown Santos-Dumont himself (29:31 → 14:45 at this scale).';
+    if (ace) sub += ' A pace no dirigible of 1901 could have touched.';
+  }
+  setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…', sub);
 }
 
 function fmt(t) {
@@ -549,7 +555,8 @@ function updateHUD() {
   else if (s === 'back') obj = `${world.hints.back} — ${Math.round(ship.pos.distanceTo(world.startRing))} m`;
   else if (s === 'done') obj = 'Trial complete. R to fly again.';
   el('objective').textContent = obj;
-  el('best').textContent = race.best ? `best: ${fmt(race.best)} · limit ${fmt(world.raceLimit)} (the historic 30:00)` : `limit ${fmt(world.raceLimit)} (the historic 30:00)`;
+  const limitLabel = `limit ${fmt(world.raceLimit)} (the historic 30:00 at half scale)`;
+  el('best').textContent = race.best ? `best: ${fmt(race.best)} · ${limitLabel}` : limitLabel;
 }
 
 // ---------------------------------------------------------------- loop

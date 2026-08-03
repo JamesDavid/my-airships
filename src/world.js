@@ -283,7 +283,7 @@ export function buildWorld(scene) {
     startRing: START_RING, turnRing: TOWER_RING,
     vistaPos: new THREE.Vector3(TOWER_POS.x + 20, 215, TOWER_POS.z + 20),
     windBase: windB,
-    raceLimit: 600, raceRecord: 585,
+    raceLimit: 900, raceRecord: 885,
     hints: {
       idleNear: 'Press ENTER to convoke the Commission. (1-7, 9, 0, B change ships · L: Monaco)',
       idleFar: 'Free flight — the start ring waits above the Aéro Club at St. Cloud.',

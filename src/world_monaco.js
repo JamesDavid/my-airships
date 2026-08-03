@@ -235,7 +235,7 @@ export function buildWorldMonaco(scene) {
     startRing: START, turnRing: TURN,
     vistaPos: new THREE.Vector3(-160, 120, -320), // from the Monte Carlo terraces
     windBase: WINDB,                              // down the coast: headwind out, flying home
-    raceLimit: 600, raceRecord: 585,
+    raceLimit: 900, raceRecord: 885,
     hints: {
       idleNear: 'Press ENTER for the flight to Cap Martin. (1-7, 9, 0, B change ships · L: Paris)',
       idleFar: 'Free flight — the start ring waits over the landing-stage of La Condamine.',
