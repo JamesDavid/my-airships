@@ -69,11 +69,15 @@ function historicTrack() {
   };
 }
 
-function buildRings(gates) {
+function buildRings(gates, originPos) {
   for (const r of gateRings) scene.remove(r);
-  gateRings = gates.map((g) => {
+  gateRings = gates.map((g, i) => {
     const r = makeRing(0x8a8a8a);
     r.position.set(g.x, g.y, g.z);
+    // face the ring toward its approach direction so it never reads edge-on
+    const prev = i > 0 ? gates[i - 1]
+      : (originPos || (gates.length > 1 ? gates[gates.length - 1] : null));
+    if (prev) r.rotation.y = Math.atan2(g.x - prev.x, g.z - prev.z);
     r.scale.setScalar((g.r || 24) / 24);
     r.userData.r = g.r || 24;
     return r;
@@ -107,7 +111,7 @@ function startTrack(t) {
   scenario = null;
   editing = null;
   clearRivals();
-  buildRings(t.gates);
+  buildRings(t.gates, t.historic ? world.startRing : null);
   startRing.visible = !!t.historic;
   race.state = 'count';
   race.count = t.historic ? 3.5 : 1.8;
@@ -125,7 +129,7 @@ function startTrack(t) {
 
 function endTrack() {
   track = null;
-  buildRings(historicTrack().gates);
+  buildRings(historicTrack().gates, world.startRing);
   startRing.visible = true;
   if (ghostMesh) ghostMesh.visible = false;
   race.state = 'idle'; race.t = 0; race.gate = 0;
@@ -141,7 +145,7 @@ function loadWorld(loc) {
     : buildWorldStLouis(scene);
   startRing = makeRing(0xd9b24a); startRing.position.copy(world.startRing);
   track = null;
-  buildRings(historicTrack().gates);
+  buildRings(historicTrack().gates, world.startRing);
   scenRing = makeRing(0x4a9c5f);
   scenRing.rotation.set(Math.PI / 2, 0, 0); // flat ground marker
   scenRing.visible = false;

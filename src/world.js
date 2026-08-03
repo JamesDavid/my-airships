@@ -251,6 +251,7 @@ export function buildWorld(scene) {
 
   // ---------- landmarks ----------
   const lm = addLandmarks(scene);
+  buildings.push(...lm.lmColliders);
 
   // flags on the Tower and the Arc — wind vanes a pilot can see from afar
   const towerFlag = makeStreamFlag(9, 4.5, 0x2b4a8c);
@@ -456,6 +457,7 @@ function makeGroundTexture() {
 
 // distant landmarks of the 1901 skyline
 function addLandmarks(scene) {
+  const lmColliders = [];
   const cream = new THREE.MeshLambertMaterial({ color: 0xd6cbb4 });
   const white = new THREE.MeshLambertMaterial({ color: 0xe9e4d6 });
   const gold = new THREE.MeshPhongMaterial({ color: 0xc9a437, shininess: 80, specular: 0xffe9a0 });
@@ -537,6 +539,7 @@ function addLandmarks(scene) {
   roue.position.set(400, 0, 560);
   roue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roue);
+  lmColliders.push({ x: 400, z: 560, w: 10, d: 10, h: 30, top: 30 }); // wheel legs only
 
   // Grand Palais (1900): stone colonnade with the great glass barrel vault
   const gp = new THREE.Group();
@@ -586,7 +589,7 @@ function addLandmarks(scene) {
     spire.position.set(x, 38, z); scene.add(spire);
   }
 
-  return { roueWheel: wheel };
+  return { roueWheel: wheel, lmColliders };
 }
 
 // a flag pivoted at its staff; world.flags holds the cloth mesh (main.js

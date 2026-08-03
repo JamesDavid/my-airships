@@ -16,14 +16,14 @@ export const TRACKS = [
   {
     id: 'gymkhana', location: 'paris', laps: 2,
     name: 'The Aerial Gymkhana',
-    sub: 'the Roue, the Tower’s shoulder, under the Arc — 2 laps',
+    sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
     gates: [
-      { x: 400, y: 52, z: 560, r: 16 },   // through the Grande Roue
+      { x: 452, y: 35, z: 560, r: 16 },   // skirt the rim of the Grande Roue
       { x: 300, y: 25, z: 330, r: 18 },   // low over the Champ de Mars
-      { x: 260, y: 35, z: 88, r: 18 },    // the Tower's shoulder — his one danger
-      { x: 20, y: 45, z: 140, r: 18 },    // the Trocadéro rotunda
-      { x: 240, y: 16, z: -180, r: 16 },  // rooftop run toward the Étoile
-      { x: 420, y: 13, z: -420, r: 9 },   // UNDER the Arc de Triomphe
+      { x: 260, y: 35, z: 75, r: 18 },    // the Tower's shoulder — his one danger
+      { x: 20, y: 50, z: 140, r: 18 },    // over the Trocadéro dome, between its towers
+      { x: 640, y: 20, z: -335, r: 15 },  // down the Champs-Élysées canyon
+      { x: 420, y: 13, z: -420, r: 5.5 }, // UNDER the Arc de Triomphe
     ],
   },
   {
@@ -41,13 +41,13 @@ export const TRACKS = [
   {
     id: 'basin', location: 'stlouis', laps: 3,
     name: 'The Basin Sprint',
-    sub: 'thread the Observation Wheel, skim the Grand Basin — 3 laps',
+    sub: 'skirt the Observation Wheel, skim the Grand Basin — 3 laps',
     gates: [
-      { x: -350, y: 56, z: -330, r: 15 }, // THROUGH the great wheel
+      { x: -288, y: 40, z: -330, r: 15 }, // skirt the great wheel's rim
       { x: -80, y: 18, z: -120, r: 16 },
-      { x: 180, y: 12, z: 0, r: 14 },     // skim the Grand Basin
+      { x: 180, y: 16, z: 0, r: 14 },     // skim the Grand Basin (mind the water!)
       { x: 620, y: 62, z: 90, r: 18 },    // round Festival Hall
-      { x: 100, y: 30, z: 220, r: 16 },
+      { x: 100, y: 24, z: 130, r: 16 },   // the plaza gap between the palaces
       { x: -450, y: 16, z: 40, r: 16 },
     ],
   },
