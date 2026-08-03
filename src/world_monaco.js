@@ -5,7 +5,7 @@
 // stabilizer — and landing IN the sea ends the experiments (Ch. XX).
 
 import * as THREE from 'three';
-import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface, windify, windMats } from './world.js';
+import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface, windify, windMats, makeFacadeTexture } from './world.js';
 
 const PAD = new THREE.Vector3(40, 2, 0);
 const START = new THREE.Vector3(120, 42, 0);
@@ -61,6 +61,18 @@ export function buildWorldMonaco(scene) {
     buildings.push({ x, z, w: r * 0.9, d: r * 0.9, h: h * 0.55, top: h * 0.55 });
   }
 
+  // the Tete de Chien — the great promontory that overlooks the principality
+  const tete = new THREE.Group();
+  const teteBase = new THREE.Mesh(new THREE.ConeGeometry(420, 520, 16), rockMat);
+  teteBase.position.y = 260; tete.add(teteBase);
+  const cliff = new THREE.Mesh(new THREE.CylinderGeometry(90, 130, 190, 10),
+    new THREE.MeshLambertMaterial({ color: 0x8a8874 }));
+  cliff.position.set(140, 330, 0); tete.add(cliff);
+  tete.position.set(-620, 0, -60);
+  tete.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
+  scene.add(tete);
+  buildings.push({ x: -620, z: -60, w: 620, d: 620, h: 300, top: 300 });
+
   // Monaco rock (south headland) and Cap Martin (down the coast)
   const rock = new THREE.Mesh(new THREE.CylinderGeometry(120, 160, 60, 12), rockMat);
   rock.position.set(-30, 30, 420); scene.add(rock);
@@ -90,7 +102,8 @@ export function buildWorldMonaco(scene) {
       town.push({ x, z, w, d, h, top: h + 2, r: rand() });
     }
   }
-  const body = new THREE.InstancedMesh(bodyGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), town.length);
+  const body = new THREE.InstancedMesh(bodyGeo,
+    new THREE.MeshLambertMaterial({ color: 0xffffff, map: makeFacadeTexture() }), town.length);
   const roof = new THREE.InstancedMesh(bodyGeo.clone(), new THREE.MeshLambertMaterial({ color: 0xa05a40 }), town.length);
   const m = new THREE.Matrix4(); const col = new THREE.Color();
   town.forEach((b, i) => {
@@ -107,18 +120,36 @@ export function buildWorldMonaco(scene) {
   roof.castShadow = true;
   scene.add(body, roof);
 
-  // the Casino, on the Monte Carlo height
+  // the Casino (Garnier) — cream palace, seaside cupola towers, the 1900 clock
   const casino = new THREE.Group();
-  const cBase = new THREE.Mesh(new THREE.BoxGeometry(50, 16, 30), new THREE.MeshLambertMaterial({ color: 0xe8dcc2 }));
-  cBase.position.y = 8; casino.add(cBase);
+  const creamMat = new THREE.MeshLambertMaterial({ color: 0xe8dcc2 });
+  const copper = new THREE.MeshPhongMaterial({ color: 0x5f8a74, shininess: 60 });
+  const cBase = new THREE.Mesh(new THREE.BoxGeometry(54, 18, 32), creamMat);
+  cBase.position.y = 9; casino.add(cBase);
   for (const s of [-1, 1]) {
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 8),
-      new THREE.MeshPhongMaterial({ color: 0x7a9c74, shininess: 60 }));
-    dome.position.set(s * 16, 18, 0); dome.scale.y = 1.2; casino.add(dome);
+    const twr = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 26, 10), creamMat);
+    twr.position.set(20, 13, s * 13); casino.add(twr);
+    const cup = new THREE.Mesh(new THREE.SphereGeometry(5.5, 10, 8), copper);
+    cup.position.set(20, 28, s * 13); cup.scale.y = 1.25; casino.add(cup);
   }
+  const cRoof = new THREE.Mesh(new THREE.BoxGeometry(40, 5, 24), copper);
+  cRoof.position.y = 20; casino.add(cRoof);
+  const clock = new THREE.Mesh(new THREE.CircleGeometry(2.2, 12),
+    new THREE.MeshLambertMaterial({ color: 0xf4eee0, emissive: 0x5a5648 }));
+  clock.position.set(27.1, 12, 0); clock.rotation.y = Math.PI / 2; casino.add(clock);
   casino.position.set(-130, 0, -300);
+  casino.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(casino);
-  buildings.push({ x: -130, z: -300, w: 50, d: 30, h: 22, top: 22 });
+  buildings.push({ x: -130, z: -300, w: 54, d: 32, h: 24, top: 24 });
+
+  // terraced hotels stepping down the Monte Carlo height to the port
+  for (let tI = 0; tI < 3; tI++) {
+    const terr = new THREE.Mesh(new THREE.BoxGeometry(20, 8 + tI * 6, 130), creamMat);
+    terr.position.set(-38 - tI * 26, (8 + tI * 6) / 2, -240);
+    terr.castShadow = terr.receiveShadow = true;
+    scene.add(terr);
+    buildings.push({ x: terr.position.x, z: -240, w: 20, d: 130, h: 8 + tI * 6, top: 8 + tI * 6 });
+  }
 
   // ---------- the aerodrome of La Condamine, with its giant doors ----------
   const hangar = new THREE.Group();
@@ -194,7 +225,7 @@ export function buildWorldMonaco(scene) {
   });
   scene.add(sMesh);
 
-  const clouds = makeClouds(scene);
+  const clouds = makeClouds(scene, WINDB);
 
   return {
     name: 'Monaco, winter 1902',

@@ -560,8 +560,11 @@ export class Airship {
     this.vel.addScaledVector(acc, dt);
     this.pos.addScaledVector(this.vel, dt);
 
-    // yaw — rudder needs airflow
-    const steerAuth = 0.25 + 0.75 * clamp(Math.abs(vf) / 9, 0, 1);
+    // yaw — the rudder works on the airflow over the tail: sternway REVERSES
+    // the helm, and only a stern propeller's slipstream steers you at rest
+    const wash = this.motorOn && (this.spec.prop === 'stern' || this.spec.prop === 'both')
+      ? this.throttle * this.motorHealth * 4 : 0;
+    const steerAuth = clamp((vf + wash) / 9, -1, 1);
     this.yawVel += input.rudder * P.yawRate * steerAuth * dt * 1.1;
     this.yawVel *= Math.pow(0.25, dt);
     this.yaw += this.yawVel * dt;
@@ -611,7 +614,9 @@ export class Airship {
     if (this._pennantAng !== undefined) {
       this.pennant.rotation.y = this._pennantAng - this.yaw + Math.sin(this._t * 4.2) * 0.1;
     }
-    this.compassNeedle.rotation.x = -this.yaw;                       // needle holds its bearing
+    // needle points true north (-z). Dial reads clockwise-from-ahead:
+    // facing east (yaw 0), north is 90° to port, so the needle leans left.
+    this.compassNeedle.rotation.x = this.yaw - Math.PI / 2;
     for (let i = 0; i < this.sackMeshes.length; i++) this.sackMeshes[i].visible = i < this.bags;
     this.propAngle += (this.motorOn ? 4 + 40 * this.throttle * this.motorHealth : 0.3) * dt;
     for (const p of this.props) p.rotation.x = this.propAngle;

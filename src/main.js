@@ -620,7 +620,11 @@ function frame(now) {
     world.sun.target.position.copy(ship.pos);
     world.sun.target.updateMatrixWorld();
   }
-  if (world.waters) for (const w of world.waters) w.material.uniforms.time.value += dt * 0.5;
+  if (world.waters) for (const w of world.waters) {
+    const u = w.material.uniforms;
+    u.time.value += dt * 0.5;
+    if (u.flowUv) { u.flowUv.value.x += wind.x * dt; u.flowUv.value.y += wind.z * dt; }
+  }
 
   updateCamera(dt);
   updateHUD();
