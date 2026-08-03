@@ -68,8 +68,8 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no1',
     brief: 'The balloon is losing gas and beginning to fold. Get down to the lawn at Bagatelle — the boys flying kites there will catch your rope. Land gently, or not at all.',
     setup(ctx) {
-      ctx.place(-1150, 240, -120, 0);
-      ctx.ship.gas = 88;
+      ctx.place(-1150, 270, -120, 0);
+      ctx.ship.gas = 90;
       ctx.setZone(V(-450, 12, -140), 90);
       ctx.setCenter('September 1898', 'The cylinder is folding — make for Bagatelle! (green ring)');
       this.warned = false;
@@ -94,7 +94,7 @@ export const SCENARIOS = [
     title: 'II. A Fall Before a Rise (Aug 8, 1901)',
     sub: 'No. 5 — the valve leaks; put her on the Trocadéro roof',
     location: 'paris', shipId: 'no5',
-    brief: 'Returning from the Tower, the balloon is losing hydrogen fast and the wires will reach the propeller. You cannot make St. Cloud. Put the keel on the Trocadéro hotels — the roof, not the street.',
+    brief: 'The balloon is losing hydrogen fast and you cannot make St. Cloud. The Tower stands between you and the Trocadéro hotels — round her, or dare the arch beneath her legs. The roof, not the street.',
     setup(ctx) {
       ctx.place(380, 130, 160, Math.PI);
       ctx.ship.gas = 74;
@@ -161,13 +161,13 @@ export const SCENARIOS = [
     location: 'monaco', shipId: 'no6',
     brief: 'The balloon left the aerodrome slack, and the sun is driving the gas to the up-pointed stem. She will rear like a steed. Nurse her back to the landing-stage — the bay is waiting to swallow her.',
     setup(ctx) {
-      ctx.place(320, 55, -420, 1.9);
-      ctx.ship.gas = 86;
+      ctx.place(320, 85, -420, 1.9);
+      ctx.ship.gas = 88;
       ctx.setZone(V(40, 12, 0), 45);
       ctx.setCenter('February 14th, 1902', 'Imperfectly inflated. Small pitch, gentle throttle — home to the stage.');
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(78, ctx.ship.gas - 0.12 * dt);
+      ctx.ship.gas = Math.max(80, ctx.ship.gas - 0.12 * dt);
       const d = Math.hypot(ctx.ship.pos.x - 40, ctx.ship.pos.z);
       if (ctx.ship.wrecked) return ctx.fail('“Balloon, keel, and motor were fished up the next day.” History repeats — unless you fly it better.');
       if (ctx.ship.landed && d < 45) {

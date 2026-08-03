@@ -673,12 +673,24 @@ function checkCollisions(dt) {
   if (ship.wrecked) return;
   const pts = hullPoints();
 
-  // Eiffel Tower — the one unsurvivable impact (A3, Paris only)
+  // Eiffel Tower — the one unsurvivable impact (A3, Paris only).
+  // Below the first platform she is four legs and an open arch: a daring
+  // pilot can fly THROUGH her. Above, the lattice is solid death.
   if (world.towerPos) {
     for (const { q, r } of pts) {
       const dx = q.x - world.towerPos.x, dz = q.z - world.towerPos.z;
-      const d = Math.hypot(dx, dz);
-      if (d < towerRadiusAt(q.y) + r) {
+      let hit = false;
+      if (q.y < 52) {
+        const off = 52 - (q.y / 100) * 31;   // leg corners taper with height
+        for (const sx of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            if (Math.hypot(q.x - (world.towerPos.x + sx * off), q.z - (world.towerPos.z + sz * off)) < 7 + r) hit = true;
+          }
+        }
+      } else {
+        hit = Math.hypot(dx, dz) < towerRadiusAt(q.y) + r;
+      }
+      if (hit) {
         ship.wreck('tower');
         setCenter('Dashed against the Tower!', '“The impact would certainly burst my balloon, and I should fall like a stone.” (R)');
         return;
