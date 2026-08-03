@@ -242,11 +242,20 @@ function hullPoints() {
   const fwdP = new THREE.Vector3(Math.cos(ship.yaw) * cp, sp, -Math.sin(ship.yaw) * cp);
   const half = ship.spec.envelope.length / 2;
   const b = ship.spec.envelope.diameter / 2;
-  return HULL_T.map(t => ({
+  const pts = HULL_T.map(t => ({
     q: ship.pos.clone().addScaledVector(fwdP, half * t),
     r: b * Math.sqrt(Math.max(0.15, 1 - t * t)) + 0.6,
     s: half * t,
   }));
+  // the keel and basket hang far below the gas bag — they hit things too
+  const drop = ship.spec.keel.drop;
+  const kHalf = ship.spec.keel.length * 0.3;
+  for (const t of [-1, 0, 1]) {
+    const q = ship.pos.clone().addScaledVector(fwdP, kHalf * t);
+    q.y -= drop - 0.4;
+    pts.push({ q, r: 1.5, s: kHalf * t });
+  }
+  return pts;
 }
 
 function resolveHit(q, n, pen, s, hard) {
