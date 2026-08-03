@@ -5,10 +5,12 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats } from './world.js';
+import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt } from './world.js';
 import { buildWorldMonaco } from './world_monaco.js';
-import { Airship, windAt } from './airship.js';
+import { buildWorldStLouis } from './world_stlouis.js';
+import { Airship } from './airship.js';
 import { SHIPS, SHIP_KEYS } from './ships.js';
+import { SCENARIOS, Rival } from './scenarios.js';
 
 // ---------------------------------------------------------------- setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -21,9 +23,11 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('app').appendChild(renderer.domElement);
 let composer = null;
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 9000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 20000);
 
-let scene, world, ship = null, startRing, turnRing;
+const LOCS = ['paris', 'monaco', 'stlouis'];
+let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
+let rivals = [], scenario = null;
 let currentLocation = 'paris', currentShip = 'no6';
 const wind = new THREE.Vector3(3.4, 0, 0.7);
 let windGustT = 0;
@@ -47,14 +51,25 @@ function makeRing(color) {
   return m;
 }
 
+function clearRivals() { rivals.forEach((r) => r.dispose()); rivals = []; }
+
 function loadWorld(loc) {
   currentLocation = loc;
+  clearRivals();
+  scenario = null;
   scene = new THREE.Scene();
-  world = loc === 'paris' ? buildWorld(scene) : buildWorldMonaco(scene);
+  world = loc === 'paris' ? buildWorld(scene)
+    : loc === 'monaco' ? buildWorldMonaco(scene)
+    : buildWorldStLouis(scene);
   startRing = makeRing(0xd9b24a); startRing.position.copy(world.startRing);
-  turnRing = makeRing(0x8a8a8a); turnRing.position.copy(world.turnRing);
+  gateRings = (world.gates || [world.turnRing]).map((g) => {
+    const r = makeRing(0x8a8a8a); r.position.copy(g); return r;
+  });
+  scenRing = makeRing(0x4a9c5f);
+  scenRing.rotation.set(Math.PI / 2, 0, 0); // flat ground marker
+  scenRing.visible = false;
   wind.copy(world.windBase);
-  race.state = 'idle'; race.t = 0;
+  race.state = 'idle'; race.t = 0; race.gate = 0;
   setCenter('', '');
   spawnShip(currentShip);
   camPos.set(world.padPos.x - 90, 45, world.padPos.z + 90);
@@ -76,7 +91,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space') { ship.dropBallast(); e.preventDefault(); }
   if (e.code === 'KeyF') input.coax = true;
   if (e.code === 'Enter') tryStartRace();
-  if (e.code === 'KeyR') resetShip();
+  if (e.code === 'KeyR') { if (scenario) startScenario(scenario); else resetShip(); }
   if (e.code === 'KeyC') cycleCamera();
   if (e.code === 'Escape') toggleMenu();
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
@@ -87,7 +102,7 @@ addEventListener('keydown', (e) => {
     else addMsg('noswitch', 'Land (and finish the trial) to change ships.', 6);
   }
   if (e.code === 'KeyL') {
-    if (ship.landed && race.state === 'idle') loadWorld(currentLocation === 'paris' ? 'monaco' : 'paris');
+    if (ship.landed && race.state === 'idle') loadWorld(LOCS[(LOCS.indexOf(currentLocation) + 1) % LOCS.length]);
     else addMsg('noloc', 'Land (and finish the trial) before travelling — the air-ship goes by railway waggon.', 6);
   }
 });
@@ -181,6 +196,7 @@ function buildMenuButtons() {
   const optsDiv = document.getElementById('menuOpts');
   shipsDiv.innerHTML = ''; optsDiv.innerHTML = '';
   for (const [id, s] of Object.entries(SHIPS)) {
+    if (s.ai) continue;
     menuButton(shipsDiv, s.name, s.sub, () => {
       if (ship.landed && race.state === 'idle') { spawnShip(id); toggleMenu(false); }
       else addMsg('noswitch', 'Land (and finish the trial) to change ships.', 0);
@@ -193,6 +209,24 @@ function buildMenuButtons() {
   }, id === currentLocation);
   locBtn('paris', 'Paris, 1901', 'the Deutsch Prize course');
   locBtn('monaco', 'Monaco, winter 1902', 'the maritime guide rope');
+  locBtn('stlouis', 'St. Louis, 1904', 'the World’s Fair grand prize');
+  // the ground crew tows the ship by its guide rope (Ch. XXIII)
+  for (const spot of world.towSpots || []) {
+    menuButton(optsDiv, `Tow to ${spot.name}`, 'the men walk her by the rope', () => {
+      if (!ship.landed || race.state !== 'idle') { addMsg('notow', 'Land first — the men cannot catch a flying rope.', 0); return; }
+      const y = ship.spec.keel.drop + 1.2;
+      ship.reset(new THREE.Vector3(spot.pos.x, y, spot.pos.z), ship.yaw);
+      toggleMenu(false);
+      addMsg('tow', `The men walk her out by the guide rope to ${spot.name} — “as stable-boys lead a racehorse.”`, 0);
+    });
+  }
+  // scenarios column
+  const scenDiv = document.getElementById('menuScens');
+  scenDiv.innerHTML = '';
+  const doneMap = JSON.parse(localStorage.getItem('myairships_scen') || '{}');
+  for (const def of SCENARIOS) {
+    menuButton(scenDiv, (doneMap[def.id] ? '✓ ' : '') + def.title, def.sub, () => startScenario(def));
+  }
   menuButton(optsDiv, 'Camera: ' + CAM_NAMES[camMode], 'change view', () => { cycleCamera(); buildMenuButtons(); });
   menuButton(optsDiv, `Photograph mode: ${document.body.classList.contains('photo') ? 'on' : 'off'}`, 'sepia and grain', () => {
     document.body.classList.toggle('photo'); buildMenuButtons();
@@ -206,13 +240,16 @@ function buildMenuButtons() {
 function resetShip() {
   const y = ship.spec.keel.drop + 1.2;
   ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
-  race.state = 'idle'; race.t = 0;
+  race.state = 'idle'; race.t = 0; race.gate = 0;
+  clearRivals();
+  if (scenRing) scenRing.visible = false;
   setCenter('', '');
   seen.clear();
 }
 
 // ---------------------------------------------------------------- race
-const race = { state: 'idle', t: 0, count: 0, sputterAt: 0, best: +(localStorage.getItem('myairships_best') || 0) };
+const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult: null,
+  best: +(localStorage.getItem('myairships_best') || 0) };
 
 function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
@@ -224,38 +261,53 @@ function tryStartRace() {
   race.state = 'count'; race.count = 3.5;
 }
 
+function raceTargetPos() {
+  return race.gate < gateRings.length ? gateRings[race.gate].position : world.startRing;
+}
+
 function updateRace(dt) {
   const s = race.state;
-  startRing.material.color.set(s === 'out' ? 0x8a8a8a : 0xd9b24a);
-  turnRing.material.color.set(s === 'out' ? 0xd9b24a : 0x8a8a8a);
+  const running = s === 'run';
+  const homeward = race.gate >= gateRings.length;
+  startRing.material.color.set(!running || homeward ? 0xd9b24a : 0x8a8a8a);
+  gateRings.forEach((r, i) => r.material.color.set(running && i === race.gate ? 0xd9b24a : 0x8a8a8a));
   const pulse = 1 + Math.sin(performance.now() * 0.004) * 0.05;
-  (s === 'out' ? turnRing : startRing).scale.setScalar(pulse);
-  (s === 'out' ? startRing : turnRing).scale.setScalar(1);
+  startRing.scale.setScalar(running && homeward ? pulse : 1);
+  gateRings.forEach((r, i) => r.scale.setScalar(running && i === race.gate ? pulse : 1));
 
   if (s === 'count') {
     race.count -= dt;
     const n = Math.ceil(race.count);
     setCenter(n > 0 ? String(n) : '“Let go all!”', '');
     if (race.count <= 0) {
-      race.state = 'out'; race.t = 0;
+      race.state = 'run'; race.t = 0; race.gate = 0; race.lastResult = null;
+      // the rival dirigibles slip their ropes too
+      if (world.rivalSpecs) {
+        clearRivals();
+        world.rivalSpecs.forEach((id, i) => rivals.push(new Rival(scene, id, world, 5 + i * 8)));
+        addMsg('rivals', 'The rival dirigibles are away behind you!', 0);
+      }
       setTimeout(() => setCenter('', ''), 1200);
     }
-  } else if (s === 'out') {
+  } else if (s === 'run') {
     race.t += dt;
-    if (ship.pos.distanceTo(world.turnRing) < 30) {
-      race.state = 'back';
-      race.sputterAt = race.t + 10 + Math.random() * 18;
-      addMsg('turn', world.hints.turnMsg, 0);
+    if (ship.pos.distanceTo(raceTargetPos()) < 30) {
+      if (!homeward) {
+        race.gate++;
+        if (race.gate === gateRings.length) {
+          addMsg('turn', world.hints.turnMsg, 0);
+          race.sputterAt = race.t + 10 + Math.random() * 18;
+        } else {
+          addMsg('gate', `Pylon ${race.gate} of ${gateRings.length} rounded!`, 0);
+        }
+      } else {
+        race.state = 'done';
+        finishRace();
+      }
     }
-  } else if (s === 'back') {
-    race.t += dt;
     if (race.sputterAt && race.t > race.sputterAt && !ship.sputtering) {
       ship.sputtering = true; race.sputterAt = 0;
       addMsg('sputter', 'The capricious motor is stopping! Abandon the wheel — work the levers! (tap F)', 0);
-    }
-    if (ship.pos.distanceTo(world.startRing) < 30) {
-      race.state = 'done';
-      finishRace();
     }
   }
 }
@@ -265,17 +317,64 @@ function finishRace() {
   const won = t <= world.raceLimit;
   const beatSantos = t <= world.raceRecord;
   const ace = t <= 600;
+  const beatRivals = !rivals.some((r) => r.beatPlayer);
+  race.lastResult = { won, beatSantos, beatRivals, t };
   if (won && (!race.best || t < race.best)) {
     race.best = t; localStorage.setItem('myairships_best', String(t));
   }
   let sub;
   if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
   else {
-    sub = `${fmt(t)} — the Deutsch Prize is yours.`;
-    if (beatSantos) sub += ' You have outflown Santos-Dumont himself (29:31 → 14:45 at this scale).';
-    if (ace) sub += ' A pace no dirigible of 1901 could have touched.';
+    sub = `${fmt(t)} — the prize is yours.`;
+    if (beatSantos) sub += ' You have outflown Santos-Dumont himself.';
+    if (ace && currentLocation !== 'stlouis') sub += ' A pace no dirigible of 1901 could have touched.';
+    if (rivals.length) sub += beatRivals ? ' The rival dirigibles trail behind you.' : ' …but a rival crossed first.';
   }
   setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…', sub);
+}
+
+// ---------------------------------------------------------------- scenarios
+function scenCtx() {
+  return {
+    ship, world, addMsg, setCenter,
+    place(x, y, z, yaw) {
+      ship.reset(new THREE.Vector3(x, y, z), yaw);
+      ship.landed = y <= ship.spec.keel.drop + 2;
+    },
+    setZone(pos, r) { scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24); },
+    clearZone() { scenRing.visible = false; },
+    startRace() { race.state = 'count'; race.count = 3.5; },
+    raceResult: () => (race.state === 'done' ? race.lastResult : null),
+    complete: scenComplete,
+    fail: scenFail,
+  };
+}
+
+function startScenario(def) {
+  toggleMenu(false);
+  if (currentLocation !== def.location) loadWorld(def.location);
+  race.state = 'idle'; race.t = 0; race.gate = 0;
+  clearRivals();
+  seen.clear();
+  spawnShip(def.shipId);
+  scenario = def;
+  def._failed = false;
+  def.setup(scenCtx());
+  addMsg('brief', def.brief, 0);
+}
+
+function scenComplete(text) {
+  const done = JSON.parse(localStorage.getItem('myairships_scen') || '{}');
+  done[scenario.id] = true;
+  localStorage.setItem('myairships_scen', JSON.stringify(done));
+  scenRing.visible = false;
+  scenario = null;
+  setCenter('Scenario complete', `${text}  (Esc for the menu)`);
+}
+
+function scenFail(text) {
+  scenario._failed = true;
+  setCenter('Not this time', `${text}  (R to retry)`);
 }
 
 function fmt(t) {
@@ -533,7 +632,10 @@ function updateHUD() {
   el('spd').textContent = Math.round(ship.vel.length() * 3.6);
   el('thr').textContent = Math.round(ship.throttle * 100);
   const w = windAt(wind, ship.pos.y);
-  el('wind').textContent = `${Math.round(Math.hypot(w.x, w.z) * 3.6)} km/h ${currentLocation === 'paris' ? 'from the west' : 'along the coast'}`;
+  // compass name of where the wind is FROM, at YOUR altitude (currents veer aloft)
+  const fromBearing = ((Math.atan2(-w.x, w.z) * 180 / Math.PI) + 360) % 360;
+  const dirName = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(fromBearing / 45) % 8];
+  el('wind').textContent = `${Math.round(Math.hypot(w.x, w.z) * 3.6)} km/h from the ${dirName}`;
   // true-wind arrow, relative to your heading (up = blowing the way you point)
   const rel = Math.atan2(-w.z, w.x) - ship.yaw;
   el('windArrow').style.transform = `rotate(${-90 - rel * 180 / Math.PI}deg)`;
@@ -547,15 +649,21 @@ function updateHUD() {
     (ship.pressure > ship.spec.physics.pressureLimit * 0.97 || ship.foulTime > 0.5) ? 'visible' : 'hidden';
 
   const s = race.state;
-  el('timer').textContent = (s === 'out' || s === 'back') ? fmt(race.t) : (s === 'done' ? fmt(race.t) : '');
+  el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';
   let obj = '';
-  if (s === 'idle') obj = ship.pos.distanceTo(world.startRing) < 150
-    ? world.hints.idleNear : world.hints.idleFar;
-  else if (s === 'out') obj = `${world.hints.out} — ${Math.round(ship.pos.distanceTo(world.turnRing))} m`;
-  else if (s === 'back') obj = `${world.hints.back} — ${Math.round(ship.pos.distanceTo(world.startRing))} m`;
-  else if (s === 'done') obj = 'Trial complete. R to fly again.';
+  if (scenario && s === 'idle') {
+    obj = scenario._failed ? 'R restarts the scenario.' : `${scenario.title} — ${scenario.sub}`;
+  } else if (s === 'idle') {
+    obj = ship.pos.distanceTo(world.startRing) < 150 ? world.hints.idleNear : world.hints.idleFar;
+  } else if (s === 'run') {
+    const homeward = race.gate >= gateRings.length;
+    const d = Math.round(ship.pos.distanceTo(raceTargetPos()));
+    obj = homeward
+      ? `${world.hints.back} — ${d} m`
+      : `${world.hints.out} — ${d} m${gateRings.length > 1 ? ` (pylon ${race.gate + 1}/${gateRings.length})` : ''}`;
+  } else if (s === 'done') obj = 'Trial complete. R to fly again.';
   el('objective').textContent = obj;
-  const limitLabel = `limit ${fmt(world.raceLimit)} (the historic 30:00 at half scale)`;
+  const limitLabel = `limit ${fmt(world.raceLimit)} (${world.limitNote})`;
   el('best').textContent = race.best ? `best: ${fmt(race.best)} · ${limitLabel}` : limitLabel;
 }
 
@@ -572,7 +680,9 @@ toggleMenu(true);   // start screen: choose your ship and your sky
 document.getElementById('help').classList.add('hidden');
 
 // debug handle
-window.__game = { get ship() { return ship; }, get camMode() { return camMode; }, get world() { return world; }, camera, camPos, input, keys, race, wind };
+window.__game = { get ship() { return ship; }, get camMode() { return camMode; }, get world() { return world; },
+  get rivals() { return rivals; }, get scenario() { return scenario; },
+  startScenario, loadWorld, SCENARIOS, camera, camPos, input, keys, race, wind };
 
 let last = performance.now();
 function frame(now) {
@@ -594,6 +704,19 @@ function frame(now) {
   };
   ship.update(dt, input, wind, env);
   checkCollisions(dt);
+
+  // rival dirigibles fly their own race
+  for (const r of rivals) {
+    r.update(dt, wind);
+    if (r.finished && !r._announced) {
+      r._announced = true;
+      r.beatPlayer = race.state === 'run';
+      addMsg('rv' + r.ship.spec.id, `${r.ship.spec.name} crosses the line!`, 0);
+    }
+  }
+
+  // active scenario logic
+  if (scenario && !scenario._failed) scenario.tick?.(scenCtx(), dt);
   // the aids restock petroleum and ballast at the home station
   if (ship.landed && !ship.wrecked) {
     const dx = ship.pos.x - world.padPos.x, dz = ship.pos.z - world.padPos.z;
@@ -620,6 +743,9 @@ function frame(now) {
   const flagAng = Math.atan2(-wind.z, wind.x);
   for (const f of world.flags || []) f.rotation.y = flagAng + Math.sin(windGustT * 3.1) * 0.14;
   world.tick?.(dt, windGustT, wind);
+
+  // the sky box re-centers on the camera (or its walls show as black past 2 km)
+  if (world.sky) world.sky.position.copy(camera.position);
 
   // sun shadow frustum follows the ship; water shimmers
   if (world.sun) {

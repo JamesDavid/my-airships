@@ -17,7 +17,7 @@ export function buildWorldMonaco(scene) {
   // ---------- sky, light, fog (brighter, bluer Mediterranean morning) ----------
   scene.fog = new THREE.FogExp2(0xdfd4bc, 0.00038);
   const sunDir = new THREE.Vector3(0.9, 0.22, -0.35).normalize();
-  makePhysicalSky(scene, sunDir, { rayleigh: 1.8, turbidity: 4 });
+  const sky = makePhysicalSky(scene, sunDir, { rayleigh: 1.8, turbidity: 4 });
   const hemi = new THREE.HemisphereLight(0xfdeccd, 0x5f6a5a, 0.8);
   scene.add(hemi);
   const sun = makeShadowSun(scene, sunDir, 2.8);
@@ -229,10 +229,13 @@ export function buildWorldMonaco(scene) {
 
   return {
     name: 'Monaco, winter 1902',
-    sun, sunDir, waters: [sea], flags: [], tick,
+    sun, sunDir, sky, waters: [sea], flags: [], tick,
     buildings, clouds, trees: scrub,
     towerPos: null, padPos: PAD,
     startRing: START, turnRing: TURN,
+    gates: [TURN],
+    towSpots: [{ name: 'the far quay of the port', pos: new THREE.Vector3(-10, 0, 180) }],
+    limitNote: 'the historic 30:00 at half scale',
     vistaPos: new THREE.Vector3(-160, 120, -320), // from the Monte Carlo terraces
     windBase: WINDB,                              // down the coast: headwind out, flying home
     raceLimit: 900, raceRecord: 885,

@@ -159,6 +159,22 @@ export const SHIPS = {
       foldResist: 0.8, partitions: true,
     },
   },
+
+  // "La Ville de Paris" — Henry Deutsch's own dirigible, built on the lines of
+  // the No. 6. The rival ship (AI only; not player-selectable).
+  villedeparis: {
+    id: 'villedeparis', name: 'La Ville de Paris', sub: 'M. Deutsch’s rival dirigible',
+    ai: true,
+    envelope: { shape: 'ellipsoid', length: 32, diameter: 6.4, color: 0xb8ab5f },
+    keel: { type: 'truss', length: 18, drop: 8.5 },
+    prop: 'stern', rudderScale: 1.0,
+    physics: {
+      thrust: 5.0, dragQ: 0.040, dragL: 0.05, yawRate: 0.5, pitchMax: 0.3,
+      gasLift: 3.25, weightBase: 1.55, bagLift: 0.15, bags: 10, fuel: 900, ventRate: 3.0,
+      ropeLen: 60, ropeLift: 0.5, pressureLimit: 2.0, speedPressure: 0,
+      foldResist: 1.0, partitions: true,   // AI-friendly: no death spirals
+    },
+  },
 };
 
 // keyboard mapping for ship selection at the aerodrome

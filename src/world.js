@@ -60,6 +60,26 @@ function makeWaterNormals(size = 512) {
   return _waterNormals;
 }
 
+// ---------------------------------------------------------------- the wind
+// "The air is full of varying currents... he can leave one current for
+// another" (B1). Near the ground the gradient thins the wind (42% at the
+// deck to full at 120 m, with a slight veer); above ~180 m a DIFFERENT
+// river of air takes over — rotated well off the surface wind and stronger.
+// Clouds ride the upper current; smoke and flags show the surface one.
+export function windAt(wind, y) {
+  const f = 0.42 + 0.58 * Math.min(Math.max(y / 120, 0), 1);
+  // slight surface veer as the gradient wind comes in
+  const lowAng = 0.17 * Math.min(Math.max(y / 120, 0), 1);
+  // the upper current: blends in from 180 m to 320 m
+  const t = Math.min(Math.max((y - 180) / 140, 0), 1);
+  const ang = lowAng + 1.0 * t;         // up to ~67° off the surface wind aloft
+  const mag = f * (1 + 0.3 * t);        // and stronger
+  const c = Math.cos(ang), s = Math.sin(ang);
+  return new THREE.Vector3(
+    (wind.x * c + wind.z * s) * mag, 0,
+    (-wind.x * s + wind.z * c) * mag);
+}
+
 // Materials whose vertices sway with the wind (trees, scrub). main.js feeds the
 // uniforms each frame so a pilot can READ the wind in the foliage (A9/B1).
 export const windMats = [];
@@ -82,9 +102,11 @@ export function windify(mat) {
   return mat;
 }
 
+// NOTE: Sky renders on a box — keep it larger than the world and re-centered on
+// the camera every frame (main.js) or the horizon goes black past its walls.
 export function makePhysicalSky(scene, sunDir, { rayleigh = 2.2, turbidity = 6 } = {}) {
   const sky = new Sky();
-  sky.scale.setScalar(4000);
+  sky.scale.setScalar(10000);
   const u = sky.material.uniforms;
   u.turbidity.value = turbidity;
   u.rayleigh.value = rayleigh;
@@ -146,7 +168,7 @@ export function buildWorld(scene) {
   scene.fog = new THREE.FogExp2(0xeccfa8, 0.00042);
 
   const sunDir = new THREE.Vector3(1, 0.14, 0.16).normalize();
-  makePhysicalSky(scene, sunDir, { rayleigh: 2.6, turbidity: 7 });
+  const sky = makePhysicalSky(scene, sunDir, { rayleigh: 2.6, turbidity: 7 });
   const hemi = new THREE.HemisphereLight(0xfde3bd, 0x6b6b52, 0.75);
   scene.add(hemi);
   const sun = makeShadowSun(scene, sunDir, 2.6);
@@ -276,11 +298,18 @@ export function buildWorld(scene) {
 
   return {
     name: 'Paris, 1901',
-    sun, sunDir, waters: [seine, seineW], tick,
+    sun, sunDir, sky, waters: [seine, seineW], tick,
     flags: [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag],
     buildings, clouds, riverPts, trees,
     towerPos: TOWER_POS, padPos: PAD_POS,
     startRing: START_RING, turnRing: TOWER_RING,
+    gates: [TOWER_RING],
+    towSpots: [
+      { name: 'Bagatelle, by the Bois', pos: new THREE.Vector3(-450, 0, -140) },
+      { name: 'Longchamps racecourse', pos: new THREE.Vector3(LONGCHAMPS.x, 0, LONGCHAMPS.z) },
+      { name: 'the Trocadéro bank', pos: new THREE.Vector3(-60, 0, 60) },
+    ],
+    limitNote: 'the historic 30:00 at half scale',
     vistaPos: new THREE.Vector3(TOWER_POS.x + 20, 215, TOWER_POS.z + 20),
     windBase: windB,
     raceLimit: 900, raceRecord: 885,
@@ -941,10 +970,14 @@ function makeCirrusTexture() {
 
 export function updateClouds(clouds, wind, dt) {
   for (const c of clouds) {
-    c.grp.position.x += wind.x * c.drift * dt;
-    c.grp.position.z += wind.z * c.drift * dt;
-    if (c.grp.position.x > 2200) c.grp.position.x = -2200;
-    if (c.grp.position.x < -2200) c.grp.position.x = 2200;
+    // cumulus ride the upper current — visibly a different heading than smoke
+    const w = windAt(wind, c.grp.position.y);
+    c.grp.position.x += w.x * c.drift * dt;
+    c.grp.position.z += w.z * c.drift * dt;
+    if (c.grp.position.x > 2600) c.grp.position.x = -2600;
+    if (c.grp.position.x < -2600) c.grp.position.x = 2600;
+    if (c.grp.position.z > 2600) c.grp.position.z = -2600;
+    if (c.grp.position.z < -2600) c.grp.position.z = 2600;
     c.shadow.position.set(c.grp.position.x, 0.45, c.grp.position.z);
   }
 }

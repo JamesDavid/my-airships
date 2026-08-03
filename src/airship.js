@@ -7,6 +7,9 @@
 //  B9 landing discipline
 
 import * as THREE from 'three';
+import { windAt } from './world.js';
+
+export { windAt }; // re-export for existing importers
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -637,13 +640,6 @@ export class Airship {
     this.scene.remove(this.group, this.shadow, this.ropeLine);
     this.ropeLine = null;
   }
-}
-
-// wind is weaker near the ground (B1 / A10 reason (c)) — a steep gradient,
-// so the high-road/low-road choice genuinely decides the race
-export function windAt(wind, y) {
-  const f = 0.42 + 0.58 * clamp(y / 120, 0, 1);
-  return new THREE.Vector3(wind.x * f, 0, wind.z * f);
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }

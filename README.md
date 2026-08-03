@@ -19,6 +19,16 @@ public domain).
   the race he won on 19 October 1901 with 29 seconds to spare.
 - **Winter in Monaco**: launch from the aerodrome of La Condamine and run the coast to
   Cap Martin, guide-roping low over the waves. Don't put her in the bay.
+- **St. Louis, 1904**: the World's Fair grand prize that never happened — his proposed
+  triangular pylon course, flown against rival dirigibles (Deutsch's *La Ville de Paris*
+  among them).
+- **Six historical scenarios** (Esc menu): the No. 1's fold and the kite-boys' rescue,
+  the No. 5's crash onto the Trocadéro roof, the Deutsch Prize run, landing the No. 9 at
+  his own door, Monaco's fatal 14th of February — flown better — and the $100,000 race.
+- **Read the wind like a pilot**: currents veer and strengthen with altitude ("he can
+  leave one current for another") — smoke, flags, trees, water, and clouds each show a
+  different layer of the sky. The crew will also tow your ship by its guide rope to
+  period destinations.
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |
