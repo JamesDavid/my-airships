@@ -96,13 +96,13 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no5',
     brief: 'The balloon is losing hydrogen fast and you cannot make St. Cloud. The Tower stands between you and the Trocadéro hotels — round her, or dare the arch beneath her legs. The roof, not the street.',
     setup(ctx) {
-      ctx.place(380, 130, 160, Math.PI);
-      ctx.ship.gas = 74;
+      ctx.place(330, 150, 160, Math.PI);
+      ctx.ship.gas = 80;
       ctx.setZone(V(20, 40, 140), 70);
       ctx.setCenter('August 8th, 1901', 'The valve is gone. The Trocadéro roof or nothing. (green ring)');
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(45, ctx.ship.gas - 0.7 * dt);
+      ctx.ship.gas = Math.max(55, ctx.ship.gas - 0.35 * dt);
       const d = Math.hypot(ctx.ship.pos.x - 20, ctx.ship.pos.z - 140);
       const onRoof = d < 70 && ctx.ship.pos.y > 12 && ctx.ship.pos.y < 45;
       if (onRoof && ctx.ship.vel.length() < 10) {
