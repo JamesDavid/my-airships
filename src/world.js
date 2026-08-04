@@ -624,6 +624,7 @@ function makeArc(pos) {
   top.position.y = 27.5;
   g.add(top);
   g.position.copy(pos);
+  g.rotation.y = 1.107; // the archway spans the Champs-Élysées axis, as built
   return g;
 }
 
@@ -698,12 +699,53 @@ function addBridges(scene, pts) {
 }
 
 // ---------------------------------------------------------------- city
+// Shared frontage generator: buildings along both sides of a street list,
+// oriented to the street. Used by Paris and Monaco.
+export function generateFrontages(streets, canPlace, rand, opts = {}) {
+  const hMin = opts.hMin ?? 14, hVar = opts.hVar ?? 10;
+  const list = [];
+  const push = (x, z, w, d, h, ry, r) => {
+    const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
+    list.push({
+      x, z, w: w * c + d * s, d: w * s + d * c, h,
+      rw: w, rd: d, ry, r,
+      nChim: 2 + Math.floor(r * 2),
+    });
+  };
+  for (const st of streets) {
+    if (!st.frontage) continue;
+    for (let sIdx = 0; sIdx < st.pts.length - 1; sIdx++) {
+      const [x1, z1] = st.pts[sIdx], [x2, z2] = st.pts[sIdx + 1];
+      const len = Math.hypot(x2 - x1, z2 - z1);
+      const dirx = (x2 - x1) / len, dirz = (z2 - z1) / len;
+      const nx = -dirz, nz = dirx;
+      const ry = Math.atan2(-dirz, dirx);
+      let t = 12 + rand() * 12;
+      while (t < len - 14) {
+        const w = (opts.wMin ?? 18) + rand() * (opts.wVar ?? 14);
+        const depth = (opts.dMin ?? 15) + rand() * (opts.dVar ?? 8);
+        for (const side of [-1, 1]) {
+          if (rand() < 0.12) continue;
+          const off = st.w / 2 + depth / 2 + 1.5;
+          const cx = x1 + dirx * (t + w / 2) + nx * off * side;
+          const cz = z1 + dirz * (t + w / 2) + nz * off * side;
+          if (!canPlace(cx, cz)) continue;
+          let h = hMin + rand() * hVar;
+          if (rand() < 0.05) h *= 1.5;
+          push(cx, cz, w, depth, h, ry, rand());
+        }
+        t += w + 3 + rand() * 6;
+      }
+    }
+  }
+  return list;
+}
+
 // Buildings generate along their real street frontages (paris_plan.js),
 // oriented to the street — plus an interior fill for the deep-city skyline
 // and the Exposition pavilion rows along the river quays.
 function buildCity(scene, riverPts) {
   const rand = mulberry32(42);
-  const list = [];
   const distToRiver = (x, z) => {
     let d = 1e9;
     for (let i = 0; i < riverPts.length; i += 2) {
@@ -715,43 +757,7 @@ function buildCity(scene, riverPts) {
   };
   const canPlace = (x, z) => !inSite(x, z) && distToRiver(x, z) > 58;
 
-  const push = (x, z, w, d, h, ry, r) => {
-    // colliders stay axis-aligned: store the rotated box's AABB extents
-    const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
-    list.push({
-      x, z, w: w * c + d * s, d: w * s + d * c, h,
-      rw: w, rd: d, ry, r,
-      nChim: 2 + Math.floor(r * 2),
-    });
-  };
-
-  // street frontages
-  for (const st of STREETS) {
-    if (!st.frontage) continue;
-    for (let sIdx = 0; sIdx < st.pts.length - 1; sIdx++) {
-      const [x1, z1] = st.pts[sIdx], [x2, z2] = st.pts[sIdx + 1];
-      const len = Math.hypot(x2 - x1, z2 - z1);
-      const dirx = (x2 - x1) / len, dirz = (z2 - z1) / len;
-      const nx = -dirz, nz = dirx;
-      const ry = Math.atan2(-dirz, dirx); // box local x runs along the street
-      let t = 12 + rand() * 12;
-      while (t < len - 14) {
-        const w = 18 + rand() * 14;      // frontage width
-        const depth = 15 + rand() * 8;
-        for (const side of [-1, 1]) {
-          if (rand() < 0.12) continue;   // courtyards and gaps
-          const off = st.w / 2 + depth / 2 + 1.5;
-          const cx = x1 + dirx * (t + w / 2) + nx * off * side;
-          const cz = z1 + dirz * (t + w / 2) + nz * off * side;
-          if (!canPlace(cx, cz)) continue;
-          let h = 14 + rand() * 10;
-          if (rand() < 0.05) h *= 1.5;   // a grand hotel
-          push(cx, cz, w, depth, h, ry, rand());
-        }
-        t += w + 3 + rand() * 6;
-      }
-    }
-  }
+  const list = generateFrontages(STREETS, canPlace, rand);
 
   // interior fill: the deep-city backdrop east of the race line
   for (let gx = 480; gx <= 1240; gx += 54) {
@@ -760,7 +766,8 @@ function buildCity(scene, riverPts) {
       if (!canPlace(x, z)) continue;
       if (distToStreets(x, z) < 34) continue;
       if (rand() < 0.25) continue;
-      push(x, z, 30 + rand() * 14, 30 + rand() * 14, 13 + rand() * 9, 0, rand());
+      const w = 30 + rand() * 14, d = 30 + rand() * 14, r = rand();
+      list.push({ x, z, w, d, h: 13 + rand() * 9, rw: w, rd: d, ry: 0, r, nChim: 2 });
     }
   }
 
@@ -771,7 +778,7 @@ function buildCity(scene, riverPts) {
   return list;
 }
 
-function addBuildingMeshes(scene, list) {
+export function addBuildingMeshes(scene, list, colorOf) {
   const n = list.length;
   const bodyGeo = new THREE.BoxGeometry(1, 1, 1); bodyGeo.translate(0, 0.5, 0);
   const body = new THREE.InstancedMesh(bodyGeo,
@@ -793,7 +800,8 @@ function addBuildingMeshes(scene, list) {
     q.setFromAxisAngle(yAxis, ry);
     m.compose(pos.set(b.x, 0, b.z), q, scl.set(rw, b.h, rd));
     body.setMatrixAt(i, m);
-    col.setHSL(0.09 + b.r * 0.02, 0.22, 0.66 + b.r * 0.1);
+    if (colorOf) colorOf(b, col);
+    else col.setHSL(0.09 + b.r * 0.02, 0.22, 0.66 + b.r * 0.1);
     body.setColorAt(i, col);
     const roofH = 3.5 + b.r * 1.5;
     m.compose(pos.set(b.x, b.h, b.z), q, scl.set(rw * 0.84, roofH, rd * 0.84));

@@ -22,33 +22,33 @@ export const TRACKS = [
       { x: 300, y: 25, z: 330, r: 18 },   // low over the Champ de Mars
       { x: 260, y: 35, z: 75, r: 18 },    // the Tower's shoulder — his one danger
       { x: 20, y: 50, z: 140, r: 18 },    // over the Trocadéro dome, between its towers
-      { x: 425, y: 22, z: -300, r: 15 },  // north of the Étoile, lining up the arch
-      { x: 420, y: 13, z: -420, r: 5.5 }, // UNDER the Arc de Triomphe
+      { x: 660, y: 16, z: -300, r: 13 },  // DOWN the Champs-Élysées canyon
+      { x: 420, y: 13, z: -420, r: 5.5, ang: -2.034 }, // UNDER the Arc, along the avenue
     ],
   },
   {
     id: 'harbor', location: 'monaco', laps: 3,
     name: 'The Harbor Circuit',
-    sub: 'low over the bay, round the Rock — 3 laps',
+    sub: 'the Casino terrace, over the Prince’s Palace — 3 laps',
     gates: [
-      { x: 100, y: 18, z: 40, r: 16 },
-      { x: 280, y: 17, z: -200, r: 16 },  // wave-top, rope in the sea
-      { x: 360, y: 22, z: 160, r: 16 },
-      { x: 160, y: 30, z: 380, r: 18 },   // round Monaco rock
-      { x: 40, y: 24, z: 150, r: 16 },
+      { x: 100, y: 18, z: 40, r: 16 },    // off the landing-stage
+      { x: 300, y: 16, z: -160, r: 16 },  // wave-top down the coast
+      { x: -75, y: 38, z: -295, r: 14 },  // the Casino terrace
+      { x: 250, y: 20, z: 120, r: 16 },   // back out over the bay
+      { x: -10, y: 75, z: 420, r: 15 },   // climb OVER the Prince's Palace
     ],
   },
   {
     id: 'basin', location: 'stlouis', laps: 3,
     name: 'The Basin Sprint',
-    sub: 'skirt the Observation Wheel, skim the Grand Basin — 3 laps',
+    sub: 'the wheel, The Pike’s midway, the lagoon avenue — 3 laps',
     gates: [
       { x: -288, y: 40, z: -330, r: 15 }, // skirt the great wheel's rim
-      { x: -80, y: 18, z: -120, r: 16 },
+      { x: -520, y: 14, z: -331, r: 13 }, // down The Pike's midway canyon
+      { x: -450, y: 16, z: 60, r: 16 },   // the plaza of St. Louis
       { x: 180, y: 16, z: 0, r: 14 },     // skim the Grand Basin (mind the water!)
       { x: 620, y: 62, z: 90, r: 18 },    // round Festival Hall
-      { x: 100, y: 24, z: 130, r: 16 },   // the plaza gap between the palaces
-      { x: -450, y: 16, z: 40, r: 16 },
+      { x: -80, y: 18, z: -120, r: 15 },  // up the lagoon avenue
     ],
   },
 ];

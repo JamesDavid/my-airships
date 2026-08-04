@@ -89,6 +89,7 @@ function buildRings(gates, originPos) {
     let dx = ix + ox, dz = iz + oz;
     if (Math.hypot(dx, dz) < 0.15) { dx = ix; dz = iz; } // hairpin: face the entry
     if (dx || dz) r.rotation.y = Math.atan2(dx, dz);
+    if (g.ang != null) r.rotation.y = g.ang; // explicit heading (e.g. an archway)
     r.scale.setScalar((g.r || 24) / 24);
     r.userData.r = g.r || 24;
     return r;

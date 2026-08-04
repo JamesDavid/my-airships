@@ -79,30 +79,111 @@ export function buildWorldStLouis(scene) {
   scene.add(fest);
   buildings.push({ x: 620, z: 0, w: 110, d: 110, h: 70, top: 74 }); // the hall itself, not the whole hill
 
-  // ---------- the great white palaces, flanking the spine ----------
+  // ---------- the fan plan of 1904 (official ground plan): the palaces
+  // radiate from Festival Hall's apex around the Grand Basin ----------
   const palaceSites = [
-    [40, -220], [-260, -240], [420, -260], [40, 220], [-260, 240], [420, 260],
-    [-560, -200], [-560, 210],
+    [250, -210], [80, -330], [-150, -400],   // northeast arc
+    [250, 210], [80, 330], [-150, 400],      // southwest arc
+    [-420, -230], [-420, 230],               // the outer pair
   ];
   for (const [px, pz] of palaceSites) {
-    const w = 150 + rand() * 60, d = 80 + rand() * 30, h = 22 + rand() * 6;
+    const w = 150 + rand() * 50, d = 80 + rand() * 25, h = 22 + rand() * 6;
+    // long axis tangent to the fan: perpendicular to the ray from the apex
+    const rayAng = Math.atan2(-(0 - pz), 620 - px);
+    const ry = rayAng + Math.PI / 2;
+    const grpP = new THREE.Group();
     const pal = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), white);
-    pal.position.set(px, h / 2, pz);
-    pal.castShadow = pal.receiveShadow = true;
-    scene.add(pal);
+    pal.position.y = h / 2; grpP.add(pal);
     const roofP = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 5, d * 0.9),
       new THREE.MeshLambertMaterial({ color: 0xb9b2a0 }));
-    roofP.position.set(px, h + 2.5, pz);
-    scene.add(roofP);
-    // corner pavilion domes
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(9, 10, 8),
-        new THREE.MeshLambertMaterial({ color: 0xd9cfae }));
-      dome.position.set(px + sx * (w / 2 - 12), h + 4, pz + sz * (d / 2 - 12));
-      dome.scale.y = 0.9;
-      scene.add(dome);
+    roofP.position.y = h + 2.5; grpP.add(roofP);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(9, 10, 8),
+          new THREE.MeshLambertMaterial({ color: 0xd9cfae }));
+        dome.position.set(sx * (w / 2 - 12), h + 4, sz * (d / 2 - 12));
+        dome.scale.y = 0.9;
+        grpP.add(dome);
+      }
     }
-    buildings.push({ x: px, z: pz, w, d, h: h + 6, top: h + 8 });
+    grpP.position.set(px, 0, pz);
+    grpP.rotation.y = ry;
+    grpP.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
+    scene.add(grpP);
+    const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
+    buildings.push({ x: px, z: pz, w: w * c + d * s, d: w * s + d * c, h: h + 6, top: h + 8 });
+  }
+
+  // the radiating lagoon avenues of the fan
+  for (const sideZ of [-1, 1]) {
+    const ax1 = 60, az1 = 40 * sideZ, ax2 = -560, az2 = 360 * sideZ;
+    const len = Math.hypot(ax2 - ax1, az2 - az1);
+    const ang = Math.atan2(az2 - az1, ax2 - ax1);
+    const ave = new THREE.Mesh(new THREE.PlaneGeometry(len, 30),
+      new THREE.MeshLambertMaterial({ color: 0xcfc9b8 }));
+    ave.rotation.x = -Math.PI / 2; ave.rotation.z = -ang;
+    ave.position.set((ax1 + ax2) / 2, 0.08, (az1 + az2) / 2);
+    scene.add(ave);
+    const lagoon = makeWaterSurface(new THREE.PlaneGeometry(len * 0.7, 22), sunDir, 0x2a4a5e);
+    lagoon.rotation.x = -Math.PI / 2; lagoon.rotation.z = -ang;
+    lagoon.position.set((ax1 + ax2) / 2 + 6, 0.3, (az1 + az2) / 2 + 24 * sideZ);
+    scene.add(lagoon);
+  }
+
+  // THE PIKE: the mile of midway attractions along the north edge
+  const pikeColors = ['#c9a437', '#a05a40', '#5f8a74', '#8a6a9c', '#b5442f', '#d9cfae'];
+  for (const rowZ of [-300, -362]) {
+    let px = -690;
+    while (px < -140) {
+      const w = 16 + rand() * 14, d = 12 + rand() * 6, h = 7 + rand() * 6;
+      if (Math.abs(px - -350) > 44 && rand() > 0.15) { // clear of the wheel's legs
+        const att = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+          new THREE.MeshLambertMaterial({ color: pikeColors[Math.floor(rand() * pikeColors.length)] }));
+        att.position.set(px, h / 2, rowZ);
+        att.castShadow = true;
+        scene.add(att);
+        if (rand() < 0.3) {
+          const twr = new THREE.Mesh(new THREE.ConeGeometry(3.4, 8, 6),
+            new THREE.MeshLambertMaterial({ color: '#e9e2d0' }));
+          twr.position.set(px, h + 4, rowZ);
+          scene.add(twr);
+        }
+        buildings.push({ x: px, z: rowZ, w, d, h, top: h + 1 });
+      }
+      px += w + 5 + rand() * 8;
+    }
+  }
+  // the Pike's entrance arch at its east end
+  const pikeArch = new THREE.Group();
+  for (const s2 of [-1, 1]) {
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(6, 18, 6), white);
+    pil.position.set(0, 9, s2 * 20); pikeArch.add(pil);
+  }
+  const lint = new THREE.Mesh(new THREE.BoxGeometry(7, 6, 46), white);
+  lint.position.y = 20; pikeArch.add(lint);
+  pikeArch.position.set(-120, 0, -331);
+  pikeArch.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(pikeArch);
+
+  // the Louisiana Purchase Monument on the plaza
+  const mon = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3, 38, 10), white);
+  shaft.position.y = 19; mon.add(shaft);
+  const fig = new THREE.Mesh(new THREE.ConeGeometry(1.6, 5, 6),
+    new THREE.MeshPhongMaterial({ color: 0xc9a437, shininess: 90 }));
+  fig.position.y = 40.5; mon.add(fig);
+  mon.position.set(-140, 0, 60);
+  mon.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(mon);
+  buildings.push({ x: -140, z: 60, w: 6, d: 6, h: 43, top: 43 });
+
+  // the Cascades spilling from Festival Hall to the Grand Basin
+  for (const cz of [-26, 0, 26]) {
+    const casc = new THREE.Mesh(new THREE.PlaneGeometry(95, 8),
+      new THREE.MeshPhongMaterial({ color: 0x7fb0c9, shininess: 120, specular: 0xffffff }));
+    casc.rotation.x = -Math.PI / 2 + 0.21;
+    casc.position.set(515, 24, cz);
+    scene.add(casc);
   }
 
   // ---------- the Observation Wheel (the rebuilt 1893 giant) ----------

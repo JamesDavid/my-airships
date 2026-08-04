@@ -5,7 +5,8 @@
 // stabilizer — and landing IN the sea ends the experiments (Ch. XX).
 
 import * as THREE from 'three';
-import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface, windify, windMats, makeFacadeTexture } from './world.js';
+import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface, windify, windMats, makeFacadeTexture, generateFrontages, addBuildingMeshes } from './world.js';
+import { STREETS_MC, inSiteMC } from './monaco_plan.js';
 
 const PAD = new THREE.Vector3(40, 2, 0);
 const START = new THREE.Vector3(120, 42, 0);
@@ -81,44 +82,75 @@ export function buildWorldMonaco(scene) {
   cap.position.set(400, 50, -2720); scene.add(cap);
   buildings.push({ x: 400, z: -2720, w: 300, d: 300, h: 66, top: 66 });
 
-  // ---------- Monte Carlo terraces ----------
-  const cream = ['#e3d3b5', '#dcc4a8', '#e8dcc2', '#d9c8ae'];
-  const bodyGeo = new THREE.BoxGeometry(1, 1, 1); bodyGeo.translate(0, 0.5, 0);
-  const town = [];
-  for (let gx = -40; gx >= -260; gx -= 34) {
-    for (let gz = -160; gz >= -620; gz -= 34) {
-      if (rand() < 0.25) continue;
-      const x = gx + (rand() - 0.5) * 8, z = gz + (rand() - 0.5) * 8;
-      const w = 18 + rand() * 9, d = 18 + rand() * 9, h = 9 + rand() * 8;
-      town.push({ x, z, w, d, h, top: h + 2.5, r: rand() });
+  // ---------- the town along its real streets (monaco_plan.js) ----------
+  for (const st of STREETS_MC) {
+    const col2 = st.rail ? 0x4a4238 : st.dirt ? 0x8f8a6a : 0x9a9285;
+    for (let i = 0; i < st.pts.length - 1; i++) {
+      const [ax, az] = st.pts[i], [bx2, bz2] = st.pts[i + 1];
+      const strip = new THREE.Mesh(
+        new THREE.PlaneGeometry(Math.hypot(bx2 - ax, bz2 - az), st.w),
+        new THREE.MeshLambertMaterial({ color: col2 }));
+      strip.rotation.x = -Math.PI / 2;
+      strip.rotation.z = -Math.atan2(bz2 - az, bx2 - ax);
+      strip.position.set((ax + bx2) / 2, 0.12, (az + bz2) / 2);
+      scene.add(strip);
     }
   }
-  // old town on the south side too
-  for (let gx = -60; gx >= -200; gx -= 30) {
-    for (let gz = 220; gz <= 560; gz += 30) {
+  const cream = ['#e3d3b5', '#dcc4a8', '#e8dcc2', '#d9c8ae', '#e2c8b0'];
+  const canPlaceMC = (x, z) => !inSiteMC(x, z) && x < 22;
+  const town = generateFrontages(STREETS_MC, canPlaceMC, rand,
+    { hMin: 9, hVar: 8, wMin: 14, wVar: 9, dMin: 12, dVar: 7 });
+  // the old town packed on the Rock's shoulder
+  for (let gx = -80; gx >= -190; gx -= 28) {
+    for (let gz = 250; gz <= 560; gz += 28) {
       if (rand() < 0.35) continue;
       const x = gx + (rand() - 0.5) * 8, z = gz + (rand() - 0.5) * 8;
-      const w = 15 + rand() * 8, d = 15 + rand() * 8, h = 8 + rand() * 6;
-      town.push({ x, z, w, d, h, top: h + 2, r: rand() });
+      if (inSiteMC(x, z)) continue;
+      const w = 14 + rand() * 8, d = 14 + rand() * 8, h = 8 + rand() * 6, r = rand();
+      town.push({ x, z, w, d, h, rw: w, rd: d, ry: rand() * 0.5, r, nChim: 1 });
     }
   }
-  const body = new THREE.InstancedMesh(bodyGeo,
-    new THREE.MeshLambertMaterial({ color: 0xffffff, map: makeFacadeTexture() }), town.length);
-  const roof = new THREE.InstancedMesh(bodyGeo.clone(), new THREE.MeshLambertMaterial({ color: 0xa05a40 }), town.length);
-  const m = new THREE.Matrix4(); const col = new THREE.Color();
-  town.forEach((b, i) => {
-    m.makeScale(b.w, b.h, b.d).setPosition(b.x, 0, b.z);
-    body.setMatrixAt(i, m);
-    col.set(cream[Math.floor(b.r * cream.length)]);
-    body.setColorAt(i, col);
-    m.makeScale(b.w * 0.9, 2.5, b.d * 0.9).setPosition(b.x, b.h, b.z);
-    roof.setMatrixAt(i, m);
-    buildings.push(b);
-  });
-  body.instanceColor.needsUpdate = true;
-  body.castShadow = body.receiveShadow = true;
-  roof.castShadow = true;
-  scene.add(body, roof);
+  addBuildingMeshes(scene, town, (b, col3) => col3.set(cream[Math.floor(b.r * cream.length) % cream.length]));
+  for (const b of town) buildings.push(b);
+
+  // the Prince's Palace on the Rock, the Cathedral, and Sainte-Dévote
+  const palace = new THREE.Group();
+  const pMat = new THREE.MeshLambertMaterial({ color: 0xe6d9c0 });
+  const pBody = new THREE.Mesh(new THREE.BoxGeometry(46, 14, 30), pMat);
+  pBody.position.y = 7; palace.add(pBody);
+  for (const [tx, tz] of [[-20, -12], [20, -12], [-20, 12], [20, 12]]) {
+    const tw = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.4, 20, 8), pMat);
+    tw.position.set(tx, 10, tz); palace.add(tw);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(4.8, 5, 8),
+      new THREE.MeshLambertMaterial({ color: 0x8a3a28 }));
+    cap.position.set(tx, 22.5, tz); palace.add(cap);
+  }
+  palace.position.set(-55, 60, 400);
+  palace.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(palace);
+  const cath = new THREE.Group();
+  const cBody2 = new THREE.Mesh(new THREE.BoxGeometry(30, 12, 16), pMat);
+  cBody2.position.y = 6; cath.add(cBody2);
+  const cDome = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 8),
+    new THREE.MeshLambertMaterial({ color: 0xb9ad93 }));
+  cDome.position.y = 14; cDome.scale.y = 1.1; cath.add(cDome);
+  cath.position.set(0, 60, 455);
+  cath.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(cath);
+  const chapel = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 7),
+    new THREE.MeshLambertMaterial({ color: 0xe8dcc2 }));
+  chapel.position.set(-95, 4, 42);
+  chapel.castShadow = true;
+  scene.add(chapel);
+  buildings.push({ x: -95, z: 42, w: 10, d: 7, h: 8, top: 9 });
+
+  // the first jetty works of Port Hercule
+  const jetty = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 90),
+    new THREE.MeshLambertMaterial({ color: 0xa39a86 }));
+  jetty.position.set(90, 1, 330);
+  jetty.rotation.y = -0.5;
+  scene.add(jetty);
+  buildings.push({ x: 90, z: 330, w: 50, d: 90, h: 3, top: 4 });
 
   // the Casino (Garnier) — cream palace, seaside cupola towers, the 1900 clock
   const casino = new THREE.Group();
@@ -219,6 +251,7 @@ export function buildWorldMonaco(scene) {
   }
   const sGeo = new THREE.SphereGeometry(1, 6, 5); sGeo.translate(0, 0.6, 0);
   const sMesh = new THREE.InstancedMesh(sGeo, windify(new THREE.MeshLambertMaterial({ color: 0x5d6b46 })), scrub.length);
+  const m = new THREE.Matrix4();
   scrub.forEach((t, i) => {
     m.makeScale(t.s, t.s * 0.8, t.s).setPosition(t.x, 0, t.z);
     sMesh.setMatrixAt(i, m);

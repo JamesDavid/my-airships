@@ -50,6 +50,29 @@ aerodrome, the Tower, and the Arc stream; chimney smoke over the city and steame
 in the bay drift downwind; anchored yachts ride head-to-wind; clouds (cumulus and high
 cirrus) drift with the gradient wind.
 
+## St. Louis, 1904 — the fan plan
+
+The official ground plans (Library of Congress; Missouri Digital Heritage; AGS
+Library/UWM) show the fair's celebrated fan: **Festival Hall** on Art Hill at the
+apex, the **Cascades** spilling down to the **Grand Basin**, and the great
+exhibit palaces arranged in radiating arcs around lagoon-lined avenues.
+**The Pike** — the mile-long midway of attractions — ran along the northern
+edge, with the **Observation Wheel** (the rebuilt 1893 Ferris giant) beside it,
+and the **Louisiana Purchase Monument** column on the plaza. The **Aeronautic
+Concourse** at the western edge hosted the airship trials. → all modeled:
+palace fan with tangent orientation, lagoon avenues with water, Pike attraction
+rows with entrance arch, monument, cascades.
+
+## Monaco street plan (implemented)
+
+`src/monaco_plan.js`: Boulevard de la Condamine along the waterfront (the
+aerodrome's address), Rue Grimaldi behind it, the Avenue de Monte-Carlo and
+Avenue de la Costa climbing to the Casino, the Boulevard des Moulins through
+Monte Carlo, the Rampe Major up the Rock (Prince's Palace with its corner
+towers, the Cathedral), Sainte-Dévote's chapel in her ravine, the
+Nice–Ventimiglia railway cut along the slope, and the first jetty works of
+Port Hercule.
+
 ## Sources
 
 - Getty Images / Alamy period photo collections of the Exposition Universelle 1900
@@ -62,3 +85,6 @@ cirrus) drift with the gradient wind.
 - Architecture of Monaco: en.wikipedia.org/wiki/Architecture_of_Monaco
 - Period photo, "Monaco Monte Carlo Avenue towards Condamine" (~1900, Possemiers):
   abebooks.com listing 22869524382
+- 1904 World's Fair ground plans: Library of Congress (loc.gov/item/2007633932,
+  Pharus-map loc.gov/item/99466762), Missouri Digital Heritage (official ground
+  plan), AGS Library Digital Map Collection (UWM)
