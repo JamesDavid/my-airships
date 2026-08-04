@@ -75,17 +75,19 @@ function buildRings(gates, originPos) {
   gateRings = gates.map((g, i) => {
     const r = makeRing(0x8a8a8a);
     r.position.set(g.x, g.y, g.z);
-    // face each ring square to the flight line: on looping circuits use the
-    // true tangent (central difference of neighbors); on point-to-point
-    // courses, the direction from the previous gate (or the start).
-    let dx = 0, dz = 0;
-    if (!originPos && n > 2) {
-      const p = gates[(i - 1 + n) % n], nx = gates[(i + 1) % n];
-      dx = nx.x - p.x; dz = nx.z - p.z;
-    } else {
-      const prev = i > 0 ? gates[i - 1] : (originPos || (n > 1 ? gates[n - 1] : null));
-      if (prev) { dx = g.x - prev.x; dz = g.z - prev.z; }
-    }
+    // face each ring along the BISECTOR of its incoming and outgoing legs:
+    // on an oval this is the true tangent; at a sharp corner it splits the
+    // turn, so the fly-through always makes sense. Point-to-point courses
+    // use the start ring as the leg before gate 0 and the start ring again
+    // as the leg after the last gate (the homeward turn).
+    const prev = i > 0 ? gates[i - 1] : (originPos || gates[n - 1]);
+    const next = i < n - 1 ? gates[i + 1] : (originPos || gates[0]);
+    let ix = g.x - prev.x, iz = g.z - prev.z;
+    let ox = next.x - g.x, oz = next.z - g.z;
+    const il = Math.hypot(ix, iz) || 1, ol = Math.hypot(ox, oz) || 1;
+    ix /= il; iz /= il; ox /= ol; oz /= ol;
+    let dx = ix + ox, dz = iz + oz;
+    if (Math.hypot(dx, dz) < 0.15) { dx = ix; dz = iz; } // hairpin: face the entry
     if (dx || dz) r.rotation.y = Math.atan2(dx, dz);
     r.scale.setScalar((g.r || 24) / 24);
     r.userData.r = g.r || 24;
@@ -251,9 +253,10 @@ if (isTouch) {
     document.getElementById('help').classList.add('hidden');
   });
   document.querySelector('#help .quote').textContent =
-    'On touch: hold the round buttons — THR throttle, ◀▶ rudder, ▲▼ shifting weights, ' +
-    'SAND drops ballast, VENT descends, FIX coaxes the motor, GO starts the trial. ' +
-    'Drag the sky to look around. Tap this panel to close it.';
+    'On touch: hold the round buttons — THR throttle, ◀▶ rudder; the TRIM slider is the ' +
+    'shifting weights and stays where you set it (center to level off). SAND drops ballast, ' +
+    'VENT descends, FIX coaxes the motor, GO starts the trial. Drag the sky to look around. ' +
+    'Tap this panel to close it.';
   for (const b of document.querySelectorAll('#touchUI .tbtn')) {
     const code = b.dataset.key;
     const down = (e) => {
@@ -271,12 +274,31 @@ if (isTouch) {
     b.addEventListener('pointercancel', up);
     b.addEventListener('pointerleave', up);
   }
+  // the pitch TRIM slider: drag or tap; it stays where you leave it,
+  // exactly like the shifting weights it commands
+  const trk = document.getElementById('pitchTrack');
+  const thumb = document.getElementById('pitchThumb');
+  const setTrim = (e) => {
+    e.preventDefault();
+    initAudio();
+    const rect = trk.getBoundingClientRect();
+    const half = rect.height / 2 - 22;
+    let v = (rect.top + rect.height / 2 - e.clientY) / half;
+    v = Math.max(-1, Math.min(1, v));
+    if (Math.abs(v) < 0.08) v = 0;   // gentle center detent
+    touchPitch = v;
+    thumb.style.top = `calc(50% - 19px - ${v * half}px)`;
+  };
+  trk.addEventListener('pointerdown', (e) => { trk.setPointerCapture(e.pointerId); setTrim(e); });
+  trk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setTrim(e); });
 }
 
+let touchPitch = 0;   // the trim slider: holds its setting, like real weights
 function pollInput() {
   input.throttle = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + (keys['KeyS'] || keys['ArrowDown'] ? -1 : 0);
   input.rudder = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + (keys['KeyD'] || keys['ArrowRight'] ? -1 : 0);
-  input.pitch = (keys['KeyE'] ? 1 : 0) + (keys['KeyQ'] ? -1 : 0);
+  const kb = (keys['KeyE'] ? 1 : 0) + (keys['KeyQ'] ? -1 : 0);
+  input.pitch = kb !== 0 ? kb : touchPitch;
   input.vent = !!keys['KeyV'];
 }
 

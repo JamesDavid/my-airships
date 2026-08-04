@@ -22,7 +22,7 @@ export const TRACKS = [
       { x: 300, y: 25, z: 330, r: 18 },   // low over the Champ de Mars
       { x: 260, y: 35, z: 75, r: 18 },    // the Tower's shoulder — his one danger
       { x: 20, y: 50, z: 140, r: 18 },    // over the Trocadéro dome, between its towers
-      { x: 640, y: 20, z: -335, r: 15 },  // down the Champs-Élysées canyon
+      { x: 425, y: 22, z: -300, r: 15 },  // north of the Étoile, lining up the arch
       { x: 420, y: 13, z: -420, r: 5.5 }, // UNDER the Arc de Triomphe
     ],
   },
@@ -32,7 +32,7 @@ export const TRACKS = [
     sub: 'low over the bay, round the Rock — 3 laps',
     gates: [
       { x: 100, y: 18, z: 40, r: 16 },
-      { x: 280, y: 12, z: -200, r: 16 },  // wave-top, rope in the sea
+      { x: 280, y: 17, z: -200, r: 16 },  // wave-top, rope in the sea
       { x: 360, y: 22, z: 160, r: 16 },
       { x: 160, y: 30, z: 380, r: 18 },   // round Monaco rock
       { x: 40, y: 24, z: 150, r: 16 },

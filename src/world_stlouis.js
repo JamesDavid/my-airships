@@ -77,7 +77,7 @@ export function buildWorldStLouis(scene) {
   fest.position.set(620, 44, 0);
   fest.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(fest);
-  buildings.push({ x: 620, z: 0, w: 260, d: 260, h: 70, top: 70 });
+  buildings.push({ x: 620, z: 0, w: 110, d: 110, h: 70, top: 74 }); // the hall itself, not the whole hill
 
   // ---------- the great white palaces, flanking the spine ----------
   const palaceSites = [

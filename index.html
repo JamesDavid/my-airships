@@ -81,6 +81,16 @@
     user-select:none; -webkit-user-select:none; touch-action:none; z-index:30; }
   .tbtn.sm { width:46px; height:46px; font-size:13px; }
   .tbtn.on { background:rgba(232,196,119,.5); border-color:#e8c477; }
+  /* pitch trim slider — the shifting weights stay where you haul them */
+  #pitchTrack { position:fixed; right:84px; bottom:26px; width:48px; height:196px;
+    border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
+    touch-action:none; z-index:30; }
+  #pitchCenter { position:absolute; left:6px; right:6px; top:50%; height:2px;
+    background:rgba(233,220,196,.45); }
+  #pitchThumb { position:absolute; left:4px; width:38px; height:38px; border-radius:50%;
+    background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
+    font-size:10px; display:flex; align-items:center; justify-content:center;
+    top:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
   body.touch #hintBR { display:none; }
   body.touch #panelTR { right:74px; }
   body.touch #panelBL { bottom:238px; }
@@ -91,6 +101,8 @@
   @media (pointer: coarse) and (min-width: 900px) {
     .tbtn { width: 72px; height: 72px; font-size: 17px; }
     .tbtn.sm { width: 56px; height: 56px; font-size: 14px; }
+    #pitchTrack { width: 56px; height: 230px; right: 96px; }
+    #pitchThumb { width: 44px; height: 44px; left: 4px; font-size: 11px; }
     #menu button { padding: 10px 12px; font-size: 15px; }
     #panelTL { font-size: 16px; }
     #timer { font-size: 34px; }
@@ -201,8 +213,10 @@
   <div class="tbtn" data-key="KeyD" style="left:152px; bottom:92px">▶</div>
   <div class="tbtn" data-key="KeyW" style="left:84px; bottom:158px">THR+</div>
   <div class="tbtn" data-key="KeyS" style="left:84px; bottom:26px">THR−</div>
-  <div class="tbtn" data-key="KeyE" style="right:84px; bottom:158px">▲</div>
-  <div class="tbtn" data-key="KeyQ" style="right:84px; bottom:26px">▼</div>
+  <div id="pitchTrack">
+    <div id="pitchCenter"></div>
+    <div id="pitchThumb">TRIM</div>
+  </div>
   <div class="tbtn" data-key="Space" style="right:152px; bottom:92px">SAND</div>
   <div class="tbtn" data-key="KeyV" style="right:16px; bottom:92px">VENT</div>
   <div class="tbtn sm" data-key="KeyF" style="right:16px; bottom:170px">FIX</div>
