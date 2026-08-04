@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
+import { STREETS, SITES, inSite, distToStreets } from './paris_plan.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -226,20 +227,22 @@ export function buildWorld(scene) {
     scene.add(barge);
   }
 
-  // ---------- avenues: the Étoile's radiating star ----------
+  // ---------- the real street plan of 1901 (src/paris_plan.js) ----------
   const arcPos = new THREE.Vector3(420, 0, -420);
-  addStrip(scene, arcPos.x, arcPos.z, 1020, -300, 26, 0x9a9285); // Champs-Elysees
-  addStrip(scene, arcPos.x, arcPos.z, -240, -470, 24, 0x8f8d76); // Avenue du Bois
-  for (let a = 0; a < 8; a++) { // "all the avenues meeting at the great Star look alike"
-    const ang = (a / 8) * Math.PI * 2 + 0.35;
-    addStrip(scene, arcPos.x, arcPos.z,
-      arcPos.x + Math.cos(ang) * 330, arcPos.z + Math.sin(ang) * 330, 15, 0x93907d);
+  for (const st of STREETS) {
+    const col = st.dirt ? 0x8f8a6a : 0x9a9285;
+    for (let i = 0; i < st.pts.length - 1; i++) {
+      addStrip(scene, st.pts[i][0], st.pts[i][1], st.pts[i + 1][0], st.pts[i + 1][1], st.w, col);
+    }
   }
+  addOval(scene, 420, -420, 64, 64, 0x9a9285, 0.08);   // the Étoile
+  addOval(scene, 900, -180, 85, 85, 0x9a9285, 0.08);   // Place de la Concorde
   scene.add(makeArc(arcPos));
+  scene.add(makeConcorde());
+  scene.add(makeMadeleine());
 
-  // ---------- city blocks ----------
-  const buildings = layoutBuildings(riverPts, arcPos);
-  addBuildingMeshes(scene, buildings);
+  // ---------- the city: buildings along their real street frontages ----------
+  const buildings = buildCity(scene, riverPts);
 
   // ---------- the Bois ----------
   const trees = addTrees(scene);
@@ -695,9 +698,12 @@ function addBridges(scene, pts) {
 }
 
 // ---------------------------------------------------------------- city
-function layoutBuildings(riverPts, arcPos) {
-  const out = [];
+// Buildings generate along their real street frontages (paris_plan.js),
+// oriented to the street — plus an interior fill for the deep-city skyline
+// and the Exposition pavilion rows along the river quays.
+function buildCity(scene, riverPts) {
   const rand = mulberry32(42);
+  const list = [];
   const distToRiver = (x, z) => {
     let d = 1e9;
     for (let i = 0; i < riverPts.length; i += 2) {
@@ -707,47 +713,62 @@ function layoutBuildings(riverPts, arcPos) {
     }
     return Math.sqrt(d);
   };
-  const avenue = segDist2D(arcPos.x, arcPos.z, 1020, -300);
-  const avenue2 = segDist2D(arcPos.x, arcPos.z, -240, -470);
-  const radials = [];
-  for (let a = 0; a < 8; a++) {
-    const ang = (a / 8) * Math.PI * 2 + 0.35;
-    radials.push(segDist2D(arcPos.x, arcPos.z, arcPos.x + Math.cos(ang) * 330, arcPos.z + Math.sin(ang) * 330));
-  }
+  const canPlace = (x, z) => !inSite(x, z) && distToRiver(x, z) > 58;
 
-  for (let gx = 180; gx <= 1150; gx += 47) {
-    for (let gz = -840; gz <= 840; gz += 47) {
-      const x = gx + (rand() - 0.5) * 10;
-      const z = gz + (rand() - 0.5) * 10;
-      if (distToRiver(x, z) < 62) continue;
-      // Champ de Mars + tower plaza
-      if (x > 180 && x < 400 && z > 40 && z < 500) continue;
-      if ((x - arcPos.x) ** 2 + (z - arcPos.z) ** 2 < 55 * 55) continue;
-      if (avenue(x, z) < 22 || avenue2(x, z) < 20) continue;
-      if (radials.some((rd) => rd(x, z) < 13)) continue;
-      // sites reserved for landmarks (Grande Roue, Grand Palais, Opera, etc.)
-      if ((x - 400) ** 2 + (z - 560) ** 2 < 80 * 80) continue;
-      if ((x - 560) ** 2 + (z - (-310)) ** 2 < 70 * 70) continue;
-      if ((x - 700) ** 2 + (z - (-560)) ** 2 < 55 * 55) continue;
-      if ((x - 1040) ** 2 + (z - 140) ** 2 < 70 * 70) continue;
-      if ((x - 920) ** 2 + (z - 460) ** 2 < 55 * 55) continue;
-      if (rand() < 0.14) continue; // squares and gaps
-      const w = 26 + rand() * 12, d = 26 + rand() * 12;
-      let h = 14 + rand() * 11;
-      if (rand() < 0.06) h *= 1.55; // an occasional grand hotel
-      out.push({ x, z, w, d, h, nChim: 2 + Math.floor(rand() * 2), r: rand() });
+  const push = (x, z, w, d, h, ry, r) => {
+    // colliders stay axis-aligned: store the rotated box's AABB extents
+    const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
+    list.push({
+      x, z, w: w * c + d * s, d: w * s + d * c, h,
+      rw: w, rd: d, ry, r,
+      nChim: 2 + Math.floor(r * 2),
+    });
+  };
+
+  // street frontages
+  for (const st of STREETS) {
+    if (!st.frontage) continue;
+    for (let sIdx = 0; sIdx < st.pts.length - 1; sIdx++) {
+      const [x1, z1] = st.pts[sIdx], [x2, z2] = st.pts[sIdx + 1];
+      const len = Math.hypot(x2 - x1, z2 - z1);
+      const dirx = (x2 - x1) / len, dirz = (z2 - z1) / len;
+      const nx = -dirz, nz = dirx;
+      const ry = Math.atan2(-dirz, dirx); // box local x runs along the street
+      let t = 12 + rand() * 12;
+      while (t < len - 14) {
+        const w = 18 + rand() * 14;      // frontage width
+        const depth = 15 + rand() * 8;
+        for (const side of [-1, 1]) {
+          if (rand() < 0.12) continue;   // courtyards and gaps
+          const off = st.w / 2 + depth / 2 + 1.5;
+          const cx = x1 + dirx * (t + w / 2) + nx * off * side;
+          const cz = z1 + dirz * (t + w / 2) + nz * off * side;
+          if (!canPlace(cx, cz)) continue;
+          let h = 14 + rand() * 10;
+          if (rand() < 0.05) h *= 1.5;   // a grand hotel
+          push(cx, cz, w, depth, h, ry, rand());
+        }
+        t += w + 3 + rand() * 6;
+      }
     }
   }
-  return out;
-}
 
-function segDist2D(x1, z1, x2, z2) {
-  const dx = x2 - x1, dz = z2 - z1, len2 = dx * dx + dz * dz;
-  return (x, z) => {
-    let t = ((x - x1) * dx + (z - z1) * dz) / len2;
-    t = Math.max(0, Math.min(1, t));
-    return Math.hypot(x - (x1 + dx * t), z - (z1 + dz * t));
-  };
+  // interior fill: the deep-city backdrop east of the race line
+  for (let gx = 480; gx <= 1240; gx += 54) {
+    for (let gz = -760; gz <= 760; gz += 54) {
+      const x = gx + (rand() - 0.5) * 14, z = gz + (rand() - 0.5) * 14;
+      if (!canPlace(x, z)) continue;
+      if (distToStreets(x, z) < 34) continue;
+      if (rand() < 0.25) continue;
+      push(x, z, 30 + rand() * 14, 30 + rand() * 14, 13 + rand() * 9, 0, rand());
+    }
+  }
+
+  addBuildingMeshes(scene, list);
+
+  // the Exposition pavilions of 1900 line both quays near the Tower
+  addExpoPavilions(scene, riverPts, list, rand);
+  return list;
 }
 
 function addBuildingMeshes(scene, list) {
@@ -761,22 +782,29 @@ function addBuildingMeshes(scene, list) {
   const chim = new THREE.InstancedMesh(bodyGeo.clone(), new THREE.MeshLambertMaterial({ color: 0x7a5a4a }), chimTotal);
 
   const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  const pos = new THREE.Vector3(), scl = new THREE.Vector3();
   const col = new THREE.Color();
   let ci = 0;
   const rand = mulberry32(7);
   list.forEach((b, i) => {
-    m.makeScale(b.w, b.h, b.d).setPosition(b.x, 0, b.z);
+    const ry = b.ry || 0, rw = b.rw || b.w, rd = b.rd || b.d;
+    q.setFromAxisAngle(yAxis, ry);
+    m.compose(pos.set(b.x, 0, b.z), q, scl.set(rw, b.h, rd));
     body.setMatrixAt(i, m);
     col.setHSL(0.09 + b.r * 0.02, 0.22, 0.66 + b.r * 0.1);
     body.setColorAt(i, col);
     const roofH = 3.5 + b.r * 1.5;
-    m.makeScale(b.w * 0.84, roofH, b.d * 0.84).setPosition(b.x, b.h, b.z);
+    m.compose(pos.set(b.x, b.h, b.z), q, scl.set(rw * 0.84, roofH, rd * 0.84));
     roof.setMatrixAt(i, m);
     b.top = b.h + roofH;
+    const cR = Math.cos(ry), sR = Math.sin(ry);
     for (let k = 0; k < b.nChim; k++) {
-      const cx = b.x + (rand() - 0.5) * b.w * 0.6;
-      const cz = b.z + (rand() - 0.5) * b.d * 0.6;
-      m.makeScale(1.2, 2.2 + rand() * 1.4, 1.2).setPosition(cx, b.top - 0.5, cz);
+      const lx = (rand() - 0.5) * rw * 0.6, lz = (rand() - 0.5) * rd * 0.6;
+      const cx = b.x + lx * cR + lz * sR;
+      const cz = b.z - lx * sR + lz * cR;
+      m.compose(pos.set(cx, b.top - 0.5, cz), q, scl.set(1.2, 2.2 + rand() * 1.4, 1.2));
       chim.setMatrixAt(ci++, m);
     }
   });
@@ -785,6 +813,74 @@ function addBuildingMeshes(scene, list) {
   roof.castShadow = roof.receiveShadow = true;
   chim.castShadow = true;
   scene.add(body, roof, chim);
+}
+
+// the white pavilions of the 1900 Exposition, domed, along the riverfront
+function addExpoPavilions(scene, riverPts, list, rand) {
+  const pav = [];
+  for (let i = 60; i <= 94; i += 3) {
+    const p = riverPts[i], q2 = riverPts[i + 1];
+    const tx = q2.x - p.x, tz = q2.z - p.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const nx = -tz / tl, nz = tx / tl;
+    const ry = Math.atan2(-tz / tl, tx / tl);
+    for (const side of [-1, 1]) {
+      if (rand() < 0.2) continue;
+      const cx = p.x + nx * 64 * side, cz = p.z + nz * 64 * side;
+      if (inSite(cx, cz)) continue;
+      pav.push({ x: cx, z: cz, ry, r: rand() });
+      const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
+      list.push({ x: cx, z: cz, w: 28 * c + 16 * s, d: 28 * s + 16 * c, h: 14, top: 21, nChim: 0, r: 0 });
+    }
+  }
+  const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+  const bodyM = new THREE.InstancedMesh(geo,
+    new THREE.MeshLambertMaterial({ color: 0xe9e2d0 }), pav.length);
+  const domeM = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8),
+    new THREE.MeshLambertMaterial({ color: 0xd9cfae }), pav.length);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  pav.forEach((b, i) => {
+    q.setFromAxisAngle(yAxis, b.ry);
+    m.compose(pos.set(b.x, 0, b.z), q, scl.set(28, 14, 16));
+    bodyM.setMatrixAt(i, m);
+    m.compose(pos.set(b.x, 14, b.z), q, scl.set(7, 6 + b.r * 3, 7));
+    domeM.setMatrixAt(i, m);
+  });
+  bodyM.castShadow = bodyM.receiveShadow = true;
+  domeM.castShadow = true;
+  scene.add(bodyM, domeM);
+}
+
+// Place de la Concorde: the obelisk with its gilded cap
+function makeConcorde() {
+  const g = new THREE.Group();
+  const ob = new THREE.Mesh(new THREE.BoxGeometry(2.6, 23, 2.6),
+    new THREE.MeshLambertMaterial({ color: 0xc9b68a }));
+  ob.position.y = 11.5; g.add(ob);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(1.9, 3, 4),
+    new THREE.MeshPhongMaterial({ color: 0xc9a437, shininess: 90 }));
+  cap.position.y = 24.5; g.add(cap);
+  g.position.set(900, 0, -180);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+// the Madeleine: the temple front at the head of the Rue Royale
+function makeMadeleine() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(38, 16, 22),
+    new THREE.MeshLambertMaterial({ color: 0xd6cbb4 }));
+  body.position.y = 8; g.add(body);
+  const roofM = new THREE.Mesh(new THREE.BoxGeometry(40, 5, 12),
+    new THREE.MeshLambertMaterial({ color: 0x46505c }));
+  roofM.position.y = 18; g.add(roofM);
+  g.position.set(810, 0, -380);
+  g.rotation.y = 0.5;
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
 }
 
 // ---------------------------------------------------------------- Bois
@@ -796,6 +892,7 @@ function addTrees(scene) {
     const dx = (x - LONGCHAMPS.x) / (LONGCHAMPS.rx + 14), dz = (z - LONGCHAMPS.z) / (LONGCHAMPS.rz + 14);
     if (dx * dx + dz * dz < 1) continue;
     if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 160 * 160) continue;
+    if (distToStreets(x, z) < 13) continue; // keep the carriage roads clear
     pts.push({ x, z, s: 3 + rand() * 3.4, r: rand() });
   }
   const geo = new THREE.SphereGeometry(1, 7, 5); geo.translate(0, 0.6, 0);
