@@ -161,13 +161,13 @@ export const SCENARIOS = [
     location: 'monaco', shipId: 'no6',
     brief: 'The balloon left the aerodrome slack, and the sun is driving the gas to the up-pointed stem. She will rear like a steed. Nurse her back to the landing-stage — the bay is waiting to swallow her.',
     setup(ctx) {
-      ctx.place(320, 85, -420, 1.9);
-      ctx.ship.gas = 88;
+      ctx.place(260, 90, -320, -2.16); // facing the stage, wind at your back
+      ctx.ship.gas = 90;
       ctx.setZone(V(40, 12, 0), 45);
-      ctx.setCenter('February 14th, 1902', 'Imperfectly inflated. Small pitch, gentle throttle — home to the stage.');
+      ctx.setCenter('February 14th, 1902', 'Imperfectly inflated, sinking — the wind is behind you. Spend the sand and run for the stage.');
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(80, ctx.ship.gas - 0.12 * dt);
+      ctx.ship.gas = Math.max(82, ctx.ship.gas - 0.12 * dt);
       const d = Math.hypot(ctx.ship.pos.x - 40, ctx.ship.pos.z);
       if (ctx.ship.wrecked) return ctx.fail('“Balloon, keel, and motor were fished up the next day.” History repeats — unless you fly it better.');
       if (ctx.ship.landed && d < 45) {

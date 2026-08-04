@@ -87,6 +87,18 @@
   body.touch #messages { bottom:240px; }
   body.touch #help { pointer-events:auto; }
 
+  /* ---------- tablets (iPad: touch + a big screen) ---------- */
+  @media (pointer: coarse) and (min-width: 900px) {
+    .tbtn { width: 72px; height: 72px; font-size: 17px; }
+    .tbtn.sm { width: 56px; height: 56px; font-size: 14px; }
+    #menu button { padding: 10px 12px; font-size: 15px; }
+    #panelTL { font-size: 16px; }
+    #timer { font-size: 34px; }
+    #objective { font-size: 15px; max-width: 340px; }
+    body.touch #panelBL { bottom: 260px; }
+    body.touch #messages { bottom: 262px; }
+  }
+
   /* ---------- small screens (phones, both orientations) ---------- */
   @media (max-width: 900px), (max-height: 520px) {
     #panelTL { font-size:11.5px; line-height:1.35; top:8px; left:10px; }

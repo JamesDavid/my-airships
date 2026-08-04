@@ -10,11 +10,20 @@ import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurfac
 
 const PAD = new THREE.Vector3(-900, 2, 60);
 const START = new THREE.Vector3(-820, 55, 60);
-const GATES = [
-  new THREE.Vector3(-150, 80, -560),
-  new THREE.Vector3(760, 80, -220),
-  new THREE.Vector3(260, 80, 470),
+// the three pylons you round (visual towers)…
+const PYLONS = [
+  new THREE.Vector3(-150, 0, -560),
+  new THREE.Vector3(760, 0, -220),
+  new THREE.Vector3(260, 0, 470),
 ];
+// …and the race gates: rings set ~40 m OUTSIDE each pylon, so flying the
+// hoop naturally rounds the tower (the ring is never on the pole itself)
+const CENTROID = { x: 290, z: -103 };
+const GATES = PYLONS.map((p) => {
+  const dx = p.x - CENTROID.x, dz = p.z - CENTROID.z;
+  const len = Math.hypot(dx, dz) || 1;
+  return new THREE.Vector3(p.x + (dx / len) * 40, 58, p.z + (dz / len) * 40);
+});
 
 export function buildWorldStLouis(scene) {
   windMats.length = 0;
@@ -144,15 +153,16 @@ export function buildWorldStLouis(scene) {
 
   // ---------- the three race pylons, each flying a big flag ----------
   const flags = [];
-  for (const g of GATES) {
+  for (const p of PYLONS) {
     const pylon = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 3.2, 76, 8), white);
-    pylon.position.set(g.x, 38, g.z);
+    pylon.position.set(p.x, 38, p.z);
     pylon.castShadow = true;
     scene.add(pylon);
     const fl = makeStreamFlag(10, 5, 0xb5442f);
-    fl.position.set(g.x, 78, g.z);
+    fl.position.set(p.x, 78, p.z);
     scene.add(fl);
     flags.push(fl.userData.flag);
+    buildings.push({ x: p.x, z: p.z, w: 7, d: 7, h: 76, top: 78 });
   }
   const homeFlag = makeStreamFlag(8, 4, 0x2b4a8c);
   homeFlag.position.set(PAD.x, 26, PAD.z + 30);

@@ -811,8 +811,13 @@ function ambientQuotes() {
 // ---------------------------------------------------------------- audio
 let audio = null;
 function initAudio() {
-  if (audio) return;
+  // iOS/iPad Safari starts the context suspended — resume inside the gesture
+  if (audio) {
+    if (audio.ctx.state === 'suspended') audio.ctx.resume();
+    return;
+  }
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
   const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 50;
   const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 320;
   const gain = ctx.createGain(); gain.gain.value = 0;
