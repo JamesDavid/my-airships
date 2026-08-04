@@ -242,7 +242,6 @@ cvs.addEventListener('pointermove', (e) => {
 const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0
   || location.search.includes('touch');
 if (isTouch) {
-  document.body.classList.add('touch');
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); // spare the phone GPU
   document.getElementById('menuQuote').textContent = 'The simulation is paused — tap ☰ or Resume to fly.';
   // no accidental page zoom while flying
@@ -253,10 +252,24 @@ if (isTouch) {
     document.getElementById('help').classList.add('hidden');
   });
   document.querySelector('#help .quote').textContent =
-    'On touch: hold the round buttons — THR throttle, ◀▶ rudder; the TRIM slider is the ' +
-    'shifting weights and stays where you set it (center to level off). SAND drops ballast, ' +
-    'VENT descends, FIX coaxes the motor, GO starts the trial. Drag the sky to look around. ' +
-    'Tap this panel to close it.';
+    'On touch: THR buttons for throttle. The HELM slider steers and stays where you lash it; ' +
+    'the TRIM slider is the shifting weights and holds too — center either to run straight ' +
+    'and level. SAND drops ballast, VENT descends, FIX coaxes the motor, GO starts the trial. ' +
+    'Drag the sky to look around. Tap this panel to close it.';
+}
+
+// the on-screen controls work anywhere — touch devices get them by default,
+// and PC pilots can switch them on from the menu
+function setTouchUI(on) {
+  document.body.classList.toggle('touch', on);
+  if (on) wireTouchControls();
+  else { touchPitch = 0; touchHelm = 0; }
+  localStorage.setItem('myairships_touchui', on ? '1' : '0');
+}
+
+function wireTouchControls() {
+  if (wireTouchControls._done) return;
+  wireTouchControls._done = true;
   for (const b of document.querySelectorAll('#touchUI .tbtn')) {
     const code = b.dataset.key;
     const down = (e) => {
@@ -291,12 +304,33 @@ if (isTouch) {
   };
   trk.addEventListener('pointerdown', (e) => { trk.setPointerCapture(e.pointerId); setTrim(e); });
   trk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setTrim(e); });
+  // the helm: horizontal, and it stays where you lash it (drag left = port)
+  const hTrk = document.getElementById('helmTrack');
+  const hThumb = document.getElementById('helmThumb');
+  const setHelm = (e) => {
+    e.preventDefault();
+    initAudio();
+    const rect = hTrk.getBoundingClientRect();
+    const half = rect.width / 2 - 22;
+    let v = (rect.left + rect.width / 2 - e.clientX) / half;
+    v = Math.max(-1, Math.min(1, v));
+    if (Math.abs(v) < 0.08) v = 0;   // gentle center detent
+    touchHelm = v;
+    hThumb.style.left = `calc(50% - 19px - ${v * half}px)`;
+  };
+  hTrk.addEventListener('pointerdown', (e) => { hTrk.setPointerCapture(e.pointerId); setHelm(e); });
+  hTrk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setHelm(e); });
 }
 
-let touchPitch = 0;   // the trim slider: holds its setting, like real weights
+const touchPref = localStorage.getItem('myairships_touchui');
+if (isTouch ? touchPref !== '0' : touchPref === '1') setTouchUI(true);
+
+let touchPitch = 0;   // trim sliders: they hold their setting, like real weights
+let touchHelm = 0;    // and a lashed helm
 function pollInput() {
   input.throttle = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + (keys['KeyS'] || keys['ArrowDown'] ? -1 : 0);
-  input.rudder = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + (keys['KeyD'] || keys['ArrowRight'] ? -1 : 0);
+  const kbR = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + (keys['KeyD'] || keys['ArrowRight'] ? -1 : 0);
+  input.rudder = kbR !== 0 ? kbR : touchHelm;
   const kb = (keys['KeyE'] ? 1 : 0) + (keys['KeyQ'] ? -1 : 0);
   input.pitch = kb !== 0 ? kb : touchPitch;
   input.vent = !!keys['KeyV'];
@@ -434,6 +468,11 @@ function buildMenuButtons() {
     document.body.classList.toggle('photo'); buildMenuButtons();
   });
   menuButton(optsDiv, `Sound: ${muted ? 'off' : 'on'}`, 'the spitting rumble', () => { muted = !muted; buildMenuButtons(); });
+  menuButton(optsDiv, `On-screen controls: ${document.body.classList.contains('touch') ? 'on' : 'off'}`,
+    'the helm and trim sliders, on any screen', () => {
+      setTouchUI(!document.body.classList.contains('touch'));
+      buildMenuButtons();
+    });
   menuButton(optsDiv, 'Controls', 'the key reference', () => { toggleMenu(false); document.getElementById('help').classList.remove('hidden'); });
   const wKmh = Math.round(Math.hypot(dailyWind.x, dailyWind.z) * 3.6 * 0.42);
   menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});

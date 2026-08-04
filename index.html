@@ -32,8 +32,9 @@
 
   #messages { position:fixed; bottom:70px; left:50%; transform:translateX(-50%); width:640px; max-width:86vw;
     text-align:center; pointer-events:none; }
-  .msg { color:#41301f; font-size:17px; font-style:italic; margin-top:6px; opacity:0;
-    text-shadow:0 1px 2px rgba(255,244,222,.6); transition:opacity .5s; }
+  .msg { display:table; margin:6px auto 0; color:#f2e9d8; font-size:16.5px; font-style:italic;
+    padding:6px 16px; background:rgba(24,17,10,.62); border-radius:5px;
+    border:1px solid rgba(233,220,196,.2); opacity:0; transition:opacity .5s; }
   .msg.show { opacity:1; }
 
   #center { position:fixed; top:34%; left:0; right:0; text-align:center; pointer-events:none; }
@@ -91,6 +92,16 @@
     background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
     font-size:10px; display:flex; align-items:center; justify-content:center;
     top:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
+  /* helm trim — horizontal; the wheel stays where you lash it */
+  #helmTrack { position:fixed; left:16px; bottom:92px; width:196px; height:48px;
+    border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
+    touch-action:none; z-index:30; }
+  #helmCenter { position:absolute; top:6px; bottom:6px; left:50%; width:2px;
+    background:rgba(233,220,196,.45); }
+  #helmThumb { position:absolute; top:4px; width:38px; height:38px; border-radius:50%;
+    background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
+    font-size:9.5px; display:flex; align-items:center; justify-content:center;
+    left:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
   body.touch #hintBR { display:none; }
   body.touch #panelTR { right:74px; }
   body.touch #panelBL { bottom:238px; }
@@ -103,6 +114,8 @@
     .tbtn.sm { width: 56px; height: 56px; font-size: 14px; }
     #pitchTrack { width: 56px; height: 230px; right: 96px; }
     #pitchThumb { width: 44px; height: 44px; left: 4px; font-size: 11px; }
+    #helmTrack { width: 230px; height: 56px; }
+    #helmThumb { width: 44px; height: 44px; top: 4px; font-size: 10px; }
     #menu button { padding: 10px 12px; font-size: 15px; }
     #panelTL { font-size: 16px; }
     #timer { font-size: 34px; }
@@ -209,8 +222,10 @@
 </div>
 
 <div id="touchUI">
-  <div class="tbtn" data-key="KeyA" style="left:16px; bottom:92px">◀</div>
-  <div class="tbtn" data-key="KeyD" style="left:152px; bottom:92px">▶</div>
+  <div id="helmTrack">
+    <div id="helmCenter"></div>
+    <div id="helmThumb">HELM</div>
+  </div>
   <div class="tbtn" data-key="KeyW" style="left:84px; bottom:158px">THR+</div>
   <div class="tbtn" data-key="KeyS" style="left:84px; bottom:26px">THR−</div>
   <div id="pitchTrack">

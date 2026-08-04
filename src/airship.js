@@ -364,9 +364,10 @@ export class Airship {
       const rShape = new THREE.Shape();
       rShape.moveTo(0, 0); rShape.lineTo(-3.4 * rudderScale, 1.6 * rudderScale);
       rShape.lineTo(-3.4 * rudderScale, -1.6 * rudderScale); rShape.lineTo(0, 0);
+      // a VERTICAL silk fin, as in the photographs — it steers by swinging
+      // about its vertical hinge, not lying flat like an elevator
       this.rudder = new THREE.Mesh(new THREE.ShapeGeometry(rShape),
         new THREE.MeshLambertMaterial({ color: 0xefe8d6, side: THREE.DoubleSide }));
-      this.rudder.rotation.x = Math.PI / 2;
       this.rudder.position.set(-this.spec.envelope.length / 2 + 0.5, -this.spec.envelope.diameter * 0.25, 0);
       this.pitchGroup.add(this.rudder);
     }
@@ -719,7 +720,7 @@ export class Airship {
     for (let i = 0; i < this.sackMeshes.length; i++) this.sackMeshes[i].visible = i < this.bags;
     this.propAngle += (this.motorOn ? 4 + 40 * this.throttle * this.motorHealth : 0.3) * dt;
     for (const p of this.props) p.rotation.x = this.propAngle;
-    if (this.rudder) this.rudder.rotation.z = this.rudderInput * 0.5;
+    if (this.rudder) this.rudder.rotation.y = this.rudderInput * 0.5;
     this.shadow.position.set(this.pos.x, 0.5, this.pos.z);
     const so = clamp(0.26 * (1 - this.pos.y / 350), 0, 0.26);
     this.shadow.material.opacity = so;
