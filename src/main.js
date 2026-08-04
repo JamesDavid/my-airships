@@ -323,8 +323,9 @@ function wireTouchControls() {
   hTrk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setHelm(e); });
 }
 
+// on-screen controls default ON everywhere; the menu toggle remembers "off"
 const touchPref = localStorage.getItem('myairships_touchui');
-if (isTouch ? touchPref !== '0' : touchPref === '1') setTouchUI(true);
+if (touchPref !== '0') setTouchUI(true);
 
 let touchPitch = 0;   // trim sliders: they hold their setting, like real weights
 let touchHelm = 0;    // and a lashed helm
