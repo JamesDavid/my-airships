@@ -297,11 +297,12 @@ function wireTouchControls() {
     initAudio();
     const rect = trk.getBoundingClientRect();
     const half = rect.height / 2 - 22;
-    let v = (rect.top + rect.height / 2 - e.clientY) / half;
+    // reversed sense: haul the thumb DOWN to bring the nose up (weights aft)
+    let v = (e.clientY - (rect.top + rect.height / 2)) / half;
     v = Math.max(-1, Math.min(1, v));
     if (Math.abs(v) < 0.08) v = 0;   // gentle center detent
     touchPitch = v;
-    thumb.style.top = `calc(50% - 19px - ${v * half}px)`;
+    thumb.style.top = `calc(50% - 19px + ${v * half}px)`;   // thumb tracks the pointer
   };
   trk.addEventListener('pointerdown', (e) => { trk.setPointerCapture(e.pointerId); setTrim(e); });
   trk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setTrim(e); });
