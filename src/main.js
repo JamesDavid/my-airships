@@ -821,9 +821,12 @@ function addMsg(key, text, cooldown = 10) {
   while (msgBox.children.length > 3) msgBox.firstChild.remove();
 }
 
+let centerSetAt = 0;
 function setCenter(big, sub) {
   document.getElementById('centerBig').textContent = big;
   document.getElementById('centerSub').textContent = sub;
+  document.getElementById('center').classList.remove('parked');
+  centerSetAt = performance.now();
 }
 
 const seen = new Set();
@@ -954,9 +957,15 @@ function updateCamera(dt) {
     if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
     snap = true;
   } else if (camMode === 2) {
+    // postcard: drag to pan and tilt around the ship; glides back to the
+    // classic side framing when released
     const lat = new THREE.Vector3(-fwd.z, 0, fwd.x);
-    desired = p.clone().addScaledVector(lat, 60).add(new THREE.Vector3(0, 6, 0));
+    const off = lat.multiplyScalar(60).add(new THREE.Vector3(0, 6, 0));
+    off.applyAxisAngle(new THREE.Vector3(0, 1, 0), orbitYaw);
+    off.y += orbitPitch * 45;
+    desired = p.clone().add(off);
     look = p;
+    if (!dragging) { orbitYaw *= Math.pow(0.45, dt); orbitPitch *= Math.pow(0.45, dt); }
   } else {
     desired = world.vistaPos.clone();
     look = p;
@@ -992,6 +1001,11 @@ function updateHUD() {
   el('pressWarn').style.visibility =
     (ship.pressure > ship.spec.physics.pressureLimit * 0.97 || ship.foulTime > 0.5) ? 'visible' : 'hidden';
 
+  // after a few seconds, park the center notice at the top of the view
+  // (countdown numbers refresh the timer each frame, so they stay centered)
+  if (el('centerBig').textContent && performance.now() - centerSetAt > 3500) {
+    document.getElementById('center').classList.add('parked');
+  }
   const s = race.state;
   el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';
   el('lapline').textContent = (s === 'run' && track && !track.historic && track.laps > 1)

@@ -37,9 +37,16 @@
     border:1px solid rgba(233,220,196,.2); opacity:0; transition:opacity .5s; }
   .msg.show { opacity:1; }
 
-  #center { position:fixed; top:34%; left:0; right:0; text-align:center; pointer-events:none; }
-  #centerBig { font-size:52px; color:#41301f; font-style:italic; text-shadow:0 2px 6px rgba(255,240,214,.7); }
-  #centerSub { font-size:19px; color:#5a4632; font-style:italic; margin-top:8px; }
+  #center { position:fixed; top:34%; left:0; right:0; text-align:center; pointer-events:none;
+    transition: top .7s ease; }
+  #centerBig { font-size:52px; color:#41301f; font-style:italic; text-shadow:0 2px 6px rgba(255,240,214,.7);
+    transition: font-size .7s ease; }
+  #centerSub { font-size:19px; color:#5a4632; font-style:italic; margin-top:8px;
+    transition: font-size .7s ease; }
+  /* after a moment the notice parks at the top, out of the pilot's view */
+  #center.parked { top:5.5%; }
+  #center.parked #centerBig { font-size:26px; }
+  #center.parked #centerSub { font-size:13.5px; }
 
   #help { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.88);
     color:#e9dcc4; padding:26px 34px; font-size:14.5px; line-height:1.75; border:1px solid #7a6647;

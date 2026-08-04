@@ -648,6 +648,9 @@ export class Airship {
     const weight = P.weightBase + LIFT_SCALE + this.bags * P.bagLift + fuelWeight;
     let vAcc = lift - weight;
     vAcc -= 0.5 * airspeedV.y + 0.14 * airspeedV.y * Math.abs(airspeedV.y);
+    // the grounded rope steadies her — "an incessant little tugging...
+    // infinitely gentle": heavy damping, no porpoising at the pad
+    if (this.groundedFrac > 0.25) vAcc -= this.vel.y * 2.2;
     acc.y += vAcc;
 
     // B5: tangage — bob in the 25-45 km/h airspeed band, worse against the wind
@@ -720,7 +723,8 @@ export class Airship {
     for (let i = 0; i < this.sackMeshes.length; i++) this.sackMeshes[i].visible = i < this.bags;
     this.propAngle += (this.motorOn ? 4 + 40 * this.throttle * this.motorHealth : 0.3) * dt;
     for (const p of this.props) p.rotation.x = this.propAngle;
-    if (this.rudder) this.rudder.rotation.y = this.rudderInput * 0.5;
+    // helm to port (positive input) swings the trailing edge to PORT
+    if (this.rudder) this.rudder.rotation.y = -this.rudderInput * 0.5;
     this.shadow.position.set(this.pos.x, 0.5, this.pos.z);
     const so = clamp(0.26 * (1 - this.pos.y / 350), 0, 0.26);
     this.shadow.material.opacity = so;
