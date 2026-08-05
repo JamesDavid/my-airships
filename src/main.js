@@ -609,7 +609,11 @@ function layoutHud() {
   const rm = document.getElementById('room');
   const ct = document.getElementById('center');
   const parked = ct.classList.contains('parked');
-  if (innerWidth > 900) {
+  // On its side the screen is wide and very short: the round buttons run across
+  // the TOP, so there is no column to dodge and no room to stack under. The
+  // stylesheet puts each panel in its own corner there; leave them alone.
+  if (innerWidth > 900
+      || matchMedia('(orientation: landscape) and (max-height: 560px)').matches) {
     tr.style.top = ''; tr.style.left = ''; rm.style.top = ''; ct.style.top = '';
     return;
   }
@@ -1883,6 +1887,19 @@ function resolveHit(q, n, pen, s, hard, keel) {
       ship.gas = Math.max(0, ship.gas - Math.min(6, j * 0.9));
       addMsg('scrape', 'The chimney-pots claw at the envelope! Hydrogen bleeds away…', 8);
     }
+    return false;
+  }
+  // A touch too light to cost anything used to say nothing at all, and the ship
+  // was simply pushed back out of the wall — so a pilot could not tell whether
+  // they had hit the building or merely come near it. Say so, seldom.
+  if (hard) {
+    const now = performance.now();
+    if (!ship._brushAt || now - ship._brushAt > 2500) {
+      ship._brushAt = now;
+      addMsg('brush', keel
+        ? 'The basket touches the wall — no harm in it.'
+        : 'Silk brushes the stonework — no harm in it.', 5);
+    }
   }
   return false;
 }
@@ -2301,12 +2318,38 @@ function updateHUD() {
 }
 
 // ---------------------------------------------------------------- loop
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+/**
+ * Fit the canvas to the window. Reported from a telephone: turned on its side,
+ * the view kept its portrait width and filled about half the screen.
+ *
+ * A single resize listener is not enough on iOS. Rotating fires resize while
+ * innerWidth/innerHeight are still the OLD values, and the visual viewport
+ * changes again as Safari's toolbars slide in and out without firing resize at
+ * all. So: listen to everything that hints at it, AND check cheaply every frame
+ * — the check costs two comparisons and only does work when they disagree,
+ * which makes the canvas self-healing whatever the browser forgot to tell us.
+ */
+function fitToWindow() {
+  const w = innerWidth, h = innerHeight;
+  if (fitToWindow.w === w && fitToWindow.h === h) return;
+  fitToWindow.w = w; fitToWindow.h = h;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  if (composer) composer.setSize(innerWidth, innerHeight);
+  renderer.setSize(w, h);
+  if (composer) composer.setSize(w, h);
+  layoutHud();
+}
+addEventListener('resize', fitToWindow);
+addEventListener('orientationchange', () => {
+  fitToWindow();
+  // iOS reports the old size during the event itself: measure again after
+  setTimeout(fitToWindow, 60);
+  setTimeout(fitToWindow, 350);
 });
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', fitToWindow);
+  visualViewport.addEventListener('scroll', fitToWindow);
+}
 
 // ---------------------------------------------------------------- casting off
 // Each step stands on its own. A fault in the register, or in the fault book
@@ -2355,6 +2398,7 @@ let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   window.__maBooted = true;      // tells the boot guard she is drawing
+  fitToWindow();                 // cheap, and does nothing until the size moves
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 

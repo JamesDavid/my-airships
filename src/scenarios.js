@@ -144,18 +144,25 @@ export const SCENARIOS = [
     brief: 'Dawn, and the avenues are empty. Take the little No. 9 across the city at rooftop height and land in the Champs-Élysées at your own door, where the servants wait to catch her.',
     setup(ctx) {
       ctx.place(-450, 14, -140, 0); // towed to Bagatelle overnight
-      // his corner, 180 m down the Champs from the Étoile — on the avenue's
-      // axis where the frontages stand back, not buried in a block
-      ctx.setZone(V(581, 10, -340), 30);
+      // His door, at 114 Champs-Élysées. The ring used to sit at (581, -340),
+      // which a pilot reported as buried in a building — and it was: the 18 m
+      // block under its rim is the GRAND PALAIS, which carries no collider and
+      // so was invisible to a check against the collider list. Raycasting the
+      // avenue instead (paris_plan.js: a straight 30 m street from the Étoile
+      // at (420,-420) to (900,-180)) gives the open stretches: the first one
+      // clear of both the Étoile frontages and the Palais runs s=135..165 m
+      // along it. This is its middle, and 28% down the avenue — about where
+      // No. 114 stands. A 30 m street cannot hold a wider ring than this.
+      ctx.setZone(V(554, 2, -353), 13);
       // the way he went: over the Bois, across the Seine, round the Arc to the
       // right "as the law directs", and down the avenue at rooftop height
-      ctx.setRoute([V(-150, 30, -90), V(190, 26, -250), V(420, 20, -455)]);
+      ctx.setRoute([V(-150, 30, -90), V(190, 26, -250), V(430, 22, -430)]);
       ctx.setCenter('June 23rd, 1903, 4 a.m.', 'Your door is on the Champs-Élysées. (green ring — land gently in the avenue)');
     },
     tick(ctx) {
-      const d = Math.hypot(ctx.ship.pos.x - 581, ctx.ship.pos.z + 340);
+      const d = Math.hypot(ctx.ship.pos.x - 554, ctx.ship.pos.z + 353);
       if (ctx.ship.wrecked) return ctx.fail('The chimney-pots claimed her. The avenue next time.');
-      if (ctx.ship.landed && d < 30) {
+      if (ctx.ship.landed && d < 13) {
         ctx.complete('Two servants catch and steady the ship while you go up for coffee. “From my round bay window I looked down upon the air-ship.”');
       }
     },

@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <title>My Airships — Santos-Dumont Prototype</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- Added to the Home Screen she runs without Safari's bars, which is the only
+     way to be rid of them on an iPhone: there is no Fullscreen API there. -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon.svg">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Airships">
+<meta name="theme-color" content="#1e160e">
 <style>
   html, body { margin:0; padding:0; overflow:hidden; background:#e8c3a0; height:100%;
     font-family: Georgia, 'Times New Roman', serif; touch-action:none; }
@@ -273,6 +283,45 @@
     #objective { font-size: 15px; max-width: 340px; }
     body.touch #panelBL { bottom: 260px; }
     body.touch #messages { bottom: 262px; }
+  }
+
+  /* ---------- a telephone on its side ----------
+     Wide and very short: the round column ran off the bottom and the panels
+     stacked into the dials. The five round buttons go across the TOP instead,
+     which is the one band a landscape screen has to spare, and the flying
+     controls keep the corners. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #btnBug, #btnMenu, #btnCam, #btnGo, #btnSound {
+      top: calc(6px + env(safe-area-inset-top, 0px));
+      right: auto; left: 50%; }
+    #btnBug   { margin-left: -134px; }
+    #btnMenu  { margin-left: -80px; }
+    #btnCam   { margin-left: -26px; }
+    #btnGo    { margin-left: 28px; }
+    #btnSound { margin-left: 82px; }
+    .tbtn.sm { width: 42px; height: 42px; font-size: 11.5px; }
+    /* the instruments top-left, the trial UNDER the button row on the right,
+       and the gauges in the empty band down the left — the foot of a landscape
+       screen belongs entirely to the flying controls */
+    #panelTL { font-size:10.5px; line-height:1.3; }
+    #panelTR { top: calc(56px + env(safe-area-inset-top, 0px)) !important;
+      right: calc(14px + env(safe-area-inset-right, 0px)); left: auto !important;
+      max-width: 38vw; }
+    #objective { font-size:9.5px; }
+    #panelBL { top: calc(86px + env(safe-area-inset-top, 0px)); bottom: auto;
+      left: calc(16px + env(safe-area-inset-left, 0px)); font-size:10.5px; }
+    #room { top: calc(150px + env(safe-area-inset-top, 0px)) !important; font-size:10px; }
+    .barwrap { width:96px; height:7px; margin:2px 0 5px; }
+    #ballast { font-size:11px; letter-spacing:2px; }
+    #center { top: 30%; }
+    #center.parked #centerBig { font-size:13px; }
+    #center.parked #centerSub { font-size:10px; }
+    /* The flying controls are deliberately NOT moved: SAND, the helm and VENT,
+       and FIX, TRIM and CARB, stay exactly where the hands already know to
+       find them. Only the panels and the round buttons rearrange.
+       top AND bottom both set would stretch the gauges the height of the
+       screen and swallow the controls — they hang from their top edge here. */
+    body.touch #panelBL { bottom: auto; }
   }
 
   /* ---------- small screens (phones, both orientations) ---------- */

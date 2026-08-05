@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#1e160e"/>
+  <g transform="translate(256 250)">
+    <!-- the envelope, thick end first, as the No. 9 flew -->
+    <ellipse cx="0" cy="-6" rx="168" ry="86" fill="#d8bd86"/>
+    <ellipse cx="-96" cy="-6" rx="66" ry="82" fill="#e6cd9b"/>
+    <!-- suspension and the little basket -->
+    <path d="M-64 76 L-44 128 M0 82 L0 128 M64 76 L44 128"
+      stroke="#6b5533" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <rect x="-52" y="126" width="104" height="34" rx="6" fill="#8a6d3b"/>
+    <!-- the screw at the stern -->
+    <g transform="translate(176 -6)">
+      <path d="M0 -44 L0 44" stroke="#6b5533" stroke-width="9" stroke-linecap="round"/>
+      <ellipse cx="0" cy="-26" rx="8" ry="22" fill="#c9a437"/>
+      <ellipse cx="0" cy="26" rx="8" ry="22" fill="#c9a437"/>
+    </g>
+    <!-- the guide rope, trailing -->
+    <path d="M-52 158 q-70 44 -150 58" stroke="#6b5533" stroke-width="6"
+      fill="none" stroke-linecap="round" opacity=".85"/>
+  </g>
+</svg>

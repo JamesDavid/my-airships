@@ -1,0 +1,16 @@
+{
+  "name": "My Airships",
+  "short_name": "My Airships",
+  "description": "Fly Santos-Dumont's dirigibles over 1901 Paris, Monaco and St. Louis.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#e8c3a0",
+  "theme_color": "#1e160e",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
