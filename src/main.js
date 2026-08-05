@@ -565,19 +565,39 @@ function buildMenuButtons() {
       }
       if (tryTravel(id)) toggleMenu(false);
     }, id === currentLocation);
-  locBtn('paris', 'Paris, 1901', 'the Deutsch Prize course');
-  locBtn('monaco', 'Monaco, winter 1902', 'the maritime guide rope');
-  locBtn('stlouis', 'St. Louis, 1904', 'the World’s Fair grand prize');
-  // the ground crew tows the ship by its guide rope (Ch. XXIII)
-  for (const spot of world.towSpots || []) {
-    menuButton(placeDiv, `Tow to ${spot.name}`, 'the men walk her by the rope', () => {
-      if (!ship.landed || race.state !== 'idle') { addMsg('notow', 'Land first — the men cannot catch a flying rope.', 0); return; }
-      const y = ship.restHeight();
-      ship.reset(new THREE.Vector3(spot.pos.x, y, spot.pos.z), ship.yaw);
-      toggleMenu(false);
-      addMsg('tow', `The men walk her out by the guide rope to ${spot.name} — “as stable-boys lead a racehorse.”`, 0);
-    });
+
+  // The three cities are the choice; what you can do once you are there hangs
+  // beneath the one you are in — the ground crew can only walk her to places in
+  // the city she is actually standing in.
+  const PLACES = [
+    ['paris', 'Paris, 1901', 'the Deutsch Prize course'],
+    ['monaco', 'Monaco, winter 1902', 'the maritime guide rope'],
+    ['stlouis', 'St. Louis, 1904', 'the World’s Fair grand prize'],
+  ];
+  for (const [id, label, sub] of PLACES) {
+    locBtn(id, label, sub);
+    if (id !== currentLocation) continue;
+    const spots = world.towSpots || [];
+    if (!spots.length) continue;
+    const nest = document.createElement('div');
+    nest.className = 'subopts';
+    const cap = document.createElement('div');
+    cap.className = 'subcap';
+    cap.textContent = 'the ground crew will walk her by the rope to —';
+    nest.appendChild(cap);
+    for (const spot of spots) {
+      menuButton(nest, spot.name, '', () => {
+        if (!ship.landed || race.state !== 'idle') {
+          addMsg('notow', 'Land first — the men cannot catch a flying rope.', 0); return;
+        }
+        ship.reset(new THREE.Vector3(spot.pos.x, ship.restHeight(), spot.pos.z), ship.yaw);
+        toggleMenu(false);
+        addMsg('tow', `The men walk her out by the guide rope to ${spot.name} — “as stable-boys lead a racehorse.”`, 0);
+      });
+    }
+    placeDiv.appendChild(nest);
   }
+
   // scenarios column
   const scenDiv = document.getElementById('menuScens');
   scenDiv.innerHTML = '';
@@ -689,12 +709,6 @@ function buildMenuButtons() {
       buildMenuButtons();
     } catch { addMsg('tc', 'That code would not decode.', 0); }
   });
-  // the register: every pilot flies under a name, online or not
-  menuButton(optsDiv, `Pilot: ${net.pilotName()}`, 'the name on your ghosts and your times', () => {
-    const name = net.setPilotName(prompt('Sign the register — your pilot name:', net.pilotName()) || '');
-    if (name) addMsg('pn', `The register reads “${name}”.`, 0);
-    buildMenuButtons();
-  });
   menuButton(optsDiv, 'Camera: ' + CAM_NAMES[camMode], 'change view', () => { cycleCamera(); buildMenuButtons(); });
   menuButton(optsDiv, `Photograph mode: ${document.body.classList.contains('photo') ? 'on' : 'off'}`, 'sepia and grain', () => {
     document.body.classList.toggle('photo'); buildMenuButtons();
@@ -709,7 +723,33 @@ function buildMenuButtons() {
   const wKmh = Math.round(Math.hypot(dailyWind.x, dailyWind.z) * 3.6 * 0.42);
   menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
-  menuButton(optsDiv, 'Resume flying', '', () => toggleMenu(false));
+
+  // the register sits with the title: it is who you are, not a setting
+  const who = document.getElementById('menuWho');
+  if (who) {
+    who.innerHTML = `Flying as <b>${escapeHtml(net.pilotName())}</b>`;
+    const b = document.createElement('button');
+    b.textContent = '✎';                  // a pencil, beside the name
+    b.title = 'Sign the register under another name';
+    b.setAttribute('aria-label', 'Change pilot name');
+    b.onclick = () => {
+      const name = net.setPilotName(prompt('Sign the register — your pilot name:', net.pilotName()) || '');
+      if (name) { addMsg('pn', `The register reads “${name}”.`, 0); live.setShip(currentShip); }
+      buildMenuButtons();
+    };
+    who.appendChild(b);
+  }
+
+  // "M. Machuron gave the word: 'Let go all!'" (Ch. III) — the way out of the
+  // menu should be the way she leaves the ground, not a keyboard hint
+  const go = document.getElementById('menuGo');
+  if (go) {
+    go.innerHTML = '';
+    const b = document.createElement('button');
+    b.textContent = '“Let go all!”';
+    b.onclick = () => toggleMenu(false);
+    go.appendChild(b);
+  }
 
   buildTogether();
   buildTabs();

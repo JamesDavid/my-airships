@@ -66,7 +66,10 @@
   /* menu */
   #menu { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.93);
     color:#e9dcc4; padding:26px 34px; border:1px solid #7a6647; min-width:560px; max-height:82vh; overflow:auto; }
-  #menu h2 { margin:0 0 12px; font-weight:normal; font-style:italic; font-size:24px; color:#e8c477; }
+  #menu h2 { margin:0 0 4px; font-weight:normal; font-style:italic; font-size:24px; color:#e8c477; }
+  #menuWho { font-size:13px; color:#a89163; margin:0 0 12px; }
+  #menuWho b { color:#e9dcc4; font-weight:normal; }
+
   #menu h3 { margin:0 0 6px; font-weight:normal; font-size:13px; letter-spacing:.14em; color:#a89163; }
   #menuTabs { display:flex; gap:6px; margin:0 0 14px; border-bottom:1px solid rgba(122,102,71,.45); }
   #menuTabs button { background:transparent; border:1px solid transparent; border-bottom:none;
@@ -86,7 +89,23 @@
   #menu button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
   #menu button.current { border-color:#e8c477; color:#e8c477; }
   #menu button small { opacity:.6; font-style:italic; }
-  #menu .quote { font-style:italic; opacity:.7; margin-top:14px; font-size:12.5px; }
+  /* a quiet pencil beside the name — declared after the generic button rules,
+     which otherwise win on source order and give it a full-width box */
+  #menu #menuWho button { display:inline-block; width:auto; margin:0 0 0 6px; padding:0 4px;
+    font-size:13.5px; line-height:1; border:none; background:none; color:#a89163;
+    vertical-align:baseline; opacity:.8; }
+  #menu #menuWho button:hover { color:#e8c477; opacity:1; background:none; }
+  /* what you can do in the place you are already in, nested under it */
+  .subopts { margin:1px 0 10px 16px; padding-left:12px; border-left:1px solid rgba(122,102,71,.45); }
+  .subopts button { font-size:13px; padding:4px 9px; opacity:.92; }
+  .subcap { font-size:11.5px; letter-spacing:.06em; color:#a89163; font-style:italic; margin:3px 0 4px; }
+  #menu .quote { font-style:italic; opacity:.7; margin-top:10px; font-size:12.5px; }
+  /* the word that sends her up — M. Machuron's cry in Chapter III */
+  #menuGo { margin-top:16px; }
+  #menuGo button { display:block; width:100%; padding:11px 14px; cursor:pointer;
+    background:rgba(232,196,119,.13); border:1px solid #e8c477; color:#e8c477;
+    font-family:inherit; font-size:19px; font-style:italic; letter-spacing:.02em; }
+  #menuGo button:hover { background:rgba(232,196,119,.24); }
   .officeline { font-size:12.5px; color:#c9a437; margin:2px 0 7px; font-style:italic; }
   .officeline b { color:#e8c477; font-weight:normal; font-style:normal; }
   #menu button .wrtag { color:#c9a437; font-style:normal; opacity:.95; }
@@ -289,6 +308,7 @@
 
 <div id="menu" class="hidden">
   <h2>My Airships</h2>
+  <div id="menuWho"></div>
   <div id="menuTabs"></div>
   <div id="menuBody">
     <div class="pane" data-pane="solo">
@@ -308,6 +328,7 @@
       <div class="menu-col"><h3>Options</h3><div id="menuOpts"></div></div>
     </div>
   </div>
+  <div id="menuGo"></div>
   <div class="quote" id="menuQuote">The simulation is paused. Esc resumes.</div>
 </div>
 
