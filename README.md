@@ -38,12 +38,13 @@ public domain).
   a friend to race asynchronously. Dives trade altitude for speed; times are kept per
   ship class. A **track editor** (G drops a gate) lets you build and share circuits, and
   the **wind is seeded by the date** — everyone flies the same sky today.
-- **World records** (optional): point the game at a Supabase project and every
-  personal best is entered in a public ledger — boards per course and ship class, a
-  daily board flown on today's seeded wind, and the record-holder's ghost available to
-  download and chase. Submitted runs are scrutineered against the course geometry and
-  the ship's own physics, on the server, before they reach the ledger. Configure
-  nothing and the feature simply doesn't exist — see [docs/ONLINE.md](docs/ONLINE.md).
+- **World records**: every personal best is entered in a public ledger, and the record
+  to beat is in front of you while you fly — named on the HUD as you start a lap, beside
+  every course in the menu, and announced when you take it. Boards run per course and
+  ship class, with a daily board on today's seeded wind, and the record-holder's ghost
+  can be downloaded and chased. Submitted runs are scrutineered on the server against the
+  course geometry and the ship's own physics before they reach the ledger. It is optional:
+  configure nothing and the feature simply doesn't exist — see [docs/ONLINE.md](docs/ONLINE.md).
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |

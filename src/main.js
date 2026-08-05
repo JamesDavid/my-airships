@@ -150,7 +150,12 @@ function startTrack(t) {
     const sp = trackSpawn(t);
     ship.reset(new THREE.Vector3(sp.x, sp.y, sp.z), sp.yaw);
     ship.landed = false;
-    setCenter(t.name, ghostBest ? `${t.laps} laps — your ghost flies at ${fmt(ghostBest.t)}` : `${t.laps} laps — set the first time`);
+    const wr = worldRecord(t.id, currentShip);
+    let sub = ghostBest ? `${t.laps} laps — your ghost flies at ${fmt(ghostBest.t)}` : `${t.laps} laps — set the first time`;
+    if (wr) sub += ` · the world record is ${fmt(wr.t)}, held by ${wr.pilot}`;
+    else if (net.enabled() && wr === null) sub += ' · no one holds this course yet';
+    setCenter(t.name, sub);
+    fetchRecord(t.id, currentShip);
   }
 }
 
@@ -531,6 +536,13 @@ function buildMenuButtons() {
   // time trials
   const trDiv = document.getElementById('menuTracks');
   trDiv.innerHTML = '';
+  // say plainly whether the world ledger is open, and who you are flying as
+  if (net.enabled()) {
+    const status = document.createElement('div');
+    status.className = 'officeline';
+    status.innerHTML = `<b>The Record Office is open</b> — flying as ${escapeHtml(net.pilotName())}`;
+    trDiv.appendChild(status);
+  }
   for (const t of [...TRACKS, ...loadCustomTracks()]) {
     let best = null;
     try { best = JSON.parse(localStorage.getItem(bestKey(t)) || 'null'); } catch { /* noop */ }
@@ -539,9 +551,17 @@ function buildMenuButtons() {
     const vTop = shipTopSpeed(ship.spec);
     const need = vTop ? courseLength(t) / vTop : 0;
     const thirsty = P.fuel && need > P.fuel * 0.9;
+    // the standing record for this course and class, alongside your own best
+    let wrNote = '';
+    if (net.enabled() && !t.custom) {
+      const wr = worldRecord(t.id, currentShip);
+      if (wr) wrNote = ` · <span class="wrtag">world ${fmt(wr.t)} (${escapeHtml(wr.pilot)})</span>`;
+      else if (wr === null) wrNote = ' · <span class="wrtag">world record unclaimed</span>';
+      else fetchRecord(t.id, currentShip, () => { if (menuOpen) buildMenuButtons(); });
+    }
     menuButton(trDiv, t.name + (best ? ` — ${fmt(best.t)}` : ''),
       (t.custom ? '(custom) ' : '') + (t.sub || `${t.laps} laps`)
-      + (thirsty ? ' · <b>at the limit of her petrol</b>' : ''), () => {
+      + (thirsty ? ' · <b>at the limit of her petrol</b>' : '') + wrNote, () => {
         if (currentLocation !== t.location) loadWorld(t.location);
         startTrack(t);
         toggleMenu(false);
@@ -638,6 +658,30 @@ function buildMenuButtons() {
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
   menuButton(optsDiv, 'Resume flying', '', () => toggleMenu(false));
 }
+
+// ---------------------------------------------------------------- world records
+// The ledger is worth seeing while you fly, not only when you go looking for
+// it: this keeps the standing record for a course-and-class to hand, fetched
+// once and refreshed when it could have changed.
+const wrCache = new Map();          // "track|ship" -> { t, pilot } | null
+const wrPending = new Set();
+function wrKeyFor(trackId, shipId) { return `${trackId}|${shipId}`; }
+function worldRecord(trackId, shipId) { return wrCache.get(wrKeyFor(trackId, shipId)); }
+
+function fetchRecord(trackId, shipId, then) {
+  if (!net.enabled() || !trackId || !shipId) return;
+  const key = wrKeyFor(trackId, shipId);
+  if (wrPending.has(key)) return;
+  wrPending.add(key);
+  net.leaderboard(trackId, shipId, { limit: 1 }).then((res) => {
+    wrPending.delete(key);
+    if (res.ok) {
+      wrCache.set(key, res.rows.length ? { t: res.rows[0].t, pilot: res.rows[0].pilot } : null);
+      then?.();
+    }
+  }).catch(() => wrPending.delete(key));
+}
+function forgetRecord(trackId, shipId) { wrCache.delete(wrKeyFor(trackId, shipId)); }
 
 // ---------------------------------------------------------------- record office
 // Everything below is inert when no Supabase project is configured: the menu
@@ -741,15 +785,25 @@ function escapeHtml(s) {
 async function submitBest(t, run) {
   if (!net.enabled() || t.historic || t.custom) return;
   if (!net.pilotName()) {
-    addMsg('sub', 'Sign the register (menu → Pilot name) to send times to the record office.', 0);
+    addMsg('sub', 'Sign the register (menu → Pilot) to send times to the record office.', 0);
     return;
   }
   const res = await net.submitTime({ trackId: t.id, shipId: currentShip, run });
   if (!res.ok) { addMsg('sub', net.phrase(res.reason), 0); return; }
   const rank = res.rank || await net.rankOf(t.id, currentShip, run.t);
+  const took = rank === 1;
   addMsg('sub', rank
-    ? `Time entered in the ledger — ${ordinal(rank)} in the ${SHIPS[currentShip].name} class.`
+    ? (took ? `The world record is YOURS on ${t.name} — ${fmt(run.t)}.`
+      : `Time entered in the ledger — ${ordinal(rank)} in the ${SHIPS[currentShip].name} class.`)
     : 'Time entered in the ledger.', 0);
+  // the centre notice says where you stand, and the record line updates at once
+  forgetRecord(t.id, currentShip);
+  fetchRecord(t.id, currentShip);
+  if (rank && race.state === 'done' && track && track.id === t.id) {
+    const big = document.getElementById('centerBig').textContent;
+    const sub = document.getElementById('centerSub').textContent;
+    setCenter(big, sub + (took ? ' — and the world record with it!' : ` — ${ordinal(rank)} in the world.`));
+  }
 }
 
 function ordinal(n) {
@@ -1413,9 +1467,14 @@ function updateHUD() {
   el('objective').textContent = obj;
   if (track && !track.historic) {
     el('best').textContent = ghostBest ? `ghost: ${fmt(ghostBest.t)} · ${ship.spec.name}` : `no time set yet · ${ship.spec.name}`;
+    const wr = worldRecord(track.id, currentShip);
+    el('wr').innerHTML = wr
+      ? `world record <b>${fmt(wr.t)}</b> — ${escapeHtml(wr.pilot)}`
+      : (net.enabled() && wr === null ? 'world record: <b>unclaimed</b>' : '');
   } else {
     const limitLabel = `limit ${fmt(world.raceLimit)} (${world.limitNote})`;
     el('best').textContent = race.best ? `best: ${fmt(race.best)} · ${limitLabel}` : limitLabel;
+    el('wr').textContent = '';
   }
 }
 
@@ -1437,7 +1496,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
   get rivals() { return rivals; }, get scenario() { return scenario; },
   get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
   get scene() { return scene; }, get composer() { return composer; },   // force a frame when rAF is asleep
-  updateCamera, pollInput, drawThrottleLever, checkCollisions, hullPoints,
+  updateCamera, pollInput, drawThrottleLever, checkCollisions, hullPoints, updateHUD,
   setCamMode(m) { camMode = m; camera.near = m === 1 ? 0.1 : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
