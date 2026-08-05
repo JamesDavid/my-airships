@@ -502,14 +502,15 @@ function menuButton(parent, label, sub, onClick, current) {
 function buildMenuButtons() {
   const shipsDiv = document.getElementById('menuShips');
   const optsDiv = document.getElementById('menuOpts');
-  shipsDiv.innerHTML = ''; optsDiv.innerHTML = '';
+  const placeDiv = document.getElementById('menuPlaces');
+  shipsDiv.innerHTML = ''; optsDiv.innerHTML = ''; placeDiv.innerHTML = '';
   for (const [id, s] of Object.entries(SHIPS)) {
     if (s.ai) continue;
     menuButton(shipsDiv, s.name, s.sub, () => {
       if (tryChangeShip(id)) toggleMenu(false);
     }, id === currentShip);
   }
-  const locBtn = (id, label, sub) => menuButton(optsDiv, label, sub, () => {
+  const locBtn = (id, label, sub) => menuButton(placeDiv, label, sub, () => {
     if (tryTravel(id)) toggleMenu(false);
   }, id === currentLocation);
   locBtn('paris', 'Paris, 1901', 'the Deutsch Prize course');
@@ -517,7 +518,7 @@ function buildMenuButtons() {
   locBtn('stlouis', 'St. Louis, 1904', 'the World’s Fair grand prize');
   // the ground crew tows the ship by its guide rope (Ch. XXIII)
   for (const spot of world.towSpots || []) {
-    menuButton(optsDiv, `Tow to ${spot.name}`, 'the men walk her by the rope', () => {
+    menuButton(placeDiv, `Tow to ${spot.name}`, 'the men walk her by the rope', () => {
       if (!ship.landed || race.state !== 'idle') { addMsg('notow', 'Land first — the men cannot catch a flying rope.', 0); return; }
       const y = ship.restHeight();
       ship.reset(new THREE.Vector3(spot.pos.x, y, spot.pos.z), ship.yaw);
