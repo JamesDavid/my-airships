@@ -46,7 +46,7 @@ function spawnShip(specId) {
   currentShip = specId;
   if (ship) ship.dispose();
   ship = new Airship(scene, SHIPS[specId]);
-  const y = ship.spec.keel.drop + 1.2;
+  const y = ship.restHeight();
   ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
   setCenter('', '');   // clear any wreck notice from the previous ship
   document.getElementById('helpTitle').textContent = `My Airships — ${ship.spec.name}`;
@@ -514,7 +514,7 @@ function buildMenuButtons() {
   for (const spot of world.towSpots || []) {
     menuButton(optsDiv, `Tow to ${spot.name}`, 'the men walk her by the rope', () => {
       if (!ship.landed || race.state !== 'idle') { addMsg('notow', 'Land first — the men cannot catch a flying rope.', 0); return; }
-      const y = ship.spec.keel.drop + 1.2;
+      const y = ship.restHeight();
       ship.reset(new THREE.Vector3(spot.pos.x, y, spot.pos.z), ship.yaw);
       toggleMenu(false);
       addMsg('tow', `The men walk her out by the guide rope to ${spot.name} — “as stable-boys lead a racehorse.”`, 0);
@@ -758,7 +758,7 @@ function ordinal(n) {
 }
 
 function resetShip() {
-  const y = ship.spec.keel.drop + 1.2;
+  const y = ship.restHeight();
   ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
   endTrack();
   clearRivals();
@@ -976,7 +976,7 @@ function scenCtx() {
     ship, world, addMsg, setCenter,
     place(x, y, z, yaw) {
       ship.reset(new THREE.Vector3(x, y, z), yaw);
-      ship.landed = y <= ship.spec.keel.drop + 2;
+      ship.landed = y <= ship.restHeight() + 0.8;
     },
     // a line of faint hoops marking the way, each fading out as it is passed
     setRoute(points) {
@@ -1062,12 +1062,12 @@ function hullPoints() {
   for (const t of [-1, 0, 1]) {
     const q = ship.pos.clone().addScaledVector(fwdP, kHalf * t);
     q.y -= drop - 0.4;
-    pts.push({ q, r: 1.5, s: kHalf * t });
+    pts.push({ q, r: 1.5, s: kHalf * t, keel: true });
   }
   return pts;
 }
 
-function resolveHit(q, n, pen, s, hard) {
+function resolveHit(q, n, pen, s, hard, keel) {
   ship.pos.addScaledVector(n, pen);
   const vn = ship.vel.dot(n);
   let j = 0;
@@ -1076,14 +1076,33 @@ function resolveHit(q, n, pen, s, hard) {
     ship.vel.addScaledVector(n, -vn * 1.5); // restitution 0.5
     ship.applyImpact(s, n, j);
   }
-  if (hard && j > 8.5) {
+  // A crash has to mean something to the ship doing the crashing. A fixed
+  // 8.5 m/s threshold was faster than half the fleet can fly — the No. 9 tops
+  // 6.5 and so could never break herself on anything. Judge it against her own
+  // best speed, and remember the keel is pine and piano wire while the envelope
+  // is silk that can be brushed along a wall.
+  const top = Math.max(4, shipTopSpeed(ship.spec));
+  const wreckAt = keel ? Math.max(2.4, top * 0.45) : Math.max(4.5, top * 0.75);
+  if (hard && j > wreckAt) {
     ship.wreck('building');
-    setCenter('Wrecked on the housetops!', '“Chimney-pots that threaten to pierce its belly…” (R)');
+    setCenter(keel ? 'The keel smashes against the wall!' : 'Wrecked on the housetops!',
+      '“Chimney-pots that threaten to pierce its belly…” (R)');
     return true;
   }
-  if (hard && j > 1.2) {
-    ship.gas = Math.max(0, ship.gas - Math.min(6, j * 0.9));
-    addMsg('scrape', 'The chimney-pots claw at the envelope! Hydrogen bleeds away…', 8);
+  if (hard && j > (keel ? 0.7 : 1.2)) {
+    if (keel) {
+      // one bite per contact, not one per frame: a graze used to chew the
+      // motor to half in a second of touching
+      const now = performance.now();
+      if (!ship._scrapeAt || now - ship._scrapeAt > 500) {
+        ship._scrapeAt = now;
+        ship.motorHealth = Math.max(0.25, ship.motorHealth - j * 0.06);
+      }
+      addMsg('scrapek', 'The basket grinds along the masonry — something in the keel gives!', 8);
+    } else {
+      ship.gas = Math.max(0, ship.gas - Math.min(6, j * 0.9));
+      addMsg('scrape', 'The chimney-pots claw at the envelope! Hydrogen bleeds away…', 8);
+    }
   }
   return false;
 }
@@ -1127,7 +1146,7 @@ function checkCollisions(dt) {
   // buildings (AABB vs each hull sphere)
   for (const b of world.buildings) {
     if (Math.abs(b.x - ship.pos.x) > 90 || Math.abs(b.z - ship.pos.z) > 90) continue;
-    for (const { q, r, s } of pts) {
+    for (const { q, r, s, keel } of pts) {
       if (q.y > b.top + r) continue;
       const cx = Math.max(b.x - b.w / 2, Math.min(b.x + b.w / 2, q.x));
       const cy = Math.min(b.top, Math.max(0, q.y));
@@ -1137,7 +1156,7 @@ function checkCollisions(dt) {
         const n = d > 0.001
           ? new THREE.Vector3(q.x - cx, q.y - cy, q.z - cz).divideScalar(d)
           : new THREE.Vector3(0, 1, 0);
-        if (resolveHit(q, n, r - d, s, true)) return;
+        if (resolveHit(q, n, r - d, s, true, keel)) return;
       }
     }
   }
@@ -1418,7 +1437,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
   get rivals() { return rivals; }, get scenario() { return scenario; },
   get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
   get scene() { return scene; }, get composer() { return composer; },   // force a frame when rAF is asleep
-  updateCamera, pollInput, drawThrottleLever,
+  updateCamera, pollInput, drawThrottleLever, checkCollisions, hullPoints,
   setCamMode(m) { camMode = m; camera.near = m === 1 ? 0.1 : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 

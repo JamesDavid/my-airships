@@ -581,6 +581,13 @@ export class Airship {
     this.pennant.position.set(this.spec.envelope.length / 2 - 1, this.spec.envelope.diameter / 2 + 0.8, 0);
     this.pitchGroup.add(this.pennant);
 
+    // What is the LOWEST thing on this ship? The Omnibus hangs passenger
+    // baskets three metres under her keel, and a five-metre screw reaches
+    // below the rails — resting her on a fixed keel height buried them in the
+    // turf. Measure the built ship and stand her on that.
+    const hull = new THREE.Box3().setFromObject(this.pitchGroup);
+    this.lowY = hull.min.y;                  // in ship coordinates, envelope centre = 0
+
     // the ship throws a true shadow on the country below
     this.group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   }
@@ -684,6 +691,9 @@ export class Airship {
     }
     return did;
   }
+
+  // where her envelope's centre sits when she is standing on the ground
+  restHeight() { return -(this.lowY ?? this.keelY) + 0.25; }
 
   // ------------------------------------------------------------ controls
   dropBallast() {
@@ -882,7 +892,7 @@ export class Airship {
     this.yaw += this.yawVel * dt;
 
     // ground contact (B9)
-    const keelClear = -this.keelY + 1.2;
+    const keelClear = this.restHeight();
     if (this.pos.y < keelClear) {
       if (this.vel.y < -6) { this.wreck('hardLanding'); return; }
       if (this.vel.y < -2.5) this.events.push('roughLanding');
