@@ -265,17 +265,40 @@ export function buildWorld(scene) {
   scene.add(arcFlag);
 
   // chimney smoke over the rooftops — the city itself shows the wind
-  const smokeMat = new THREE.MeshLambertMaterial({ color: 0xa39c92, transparent: true, opacity: 0.3, depthWrite: false });
+  // A hundred thousand coal fires: the roofs of Paris smoke everywhere, and
+  // every plume leans the same way — the surface wind, drawn across the city.
+  const smokeGeo = new THREE.SphereGeometry(1, 7, 5);
   const plumes = [];
-  for (let i = 20; i < buildings.length && plumes.length < 12; i += 31) {
+  const smokeRand = mulberry32(4711);
+  // stride the WHOLE list, or every plume lands in whichever quarter happened
+  // to be generated first and the rest of Paris sits with cold chimneys
+  // each puff is its own transparent draw call, so a phone gets a thinner city
+  const phone = matchMedia('(pointer: coarse)').matches && innerWidth < 1100;
+  const WANT = phone ? 26 : 54;
+  const stride = Math.max(1, Math.floor(buildings.length / (WANT * 1.6)));
+  for (let i = 3; i < buildings.length && plumes.length < WANT; i += stride) {
     const b = buildings[i];
+    if (b.top < 8) continue;                        // sheds and stalls have no chimneys
+    const sooty = smokeRand() < 0.35;               // some fires burn dirtier than others
+    const mat = new THREE.MeshLambertMaterial({
+      color: sooty ? 0x6f6a63 : 0xb2aba0,
+      transparent: true, opacity: 0.3, depthWrite: false, fog: true });
     const puffs = [];
-    for (let k = 0; k < 4; k++) {
-      const s = new THREE.Mesh(new THREE.SphereGeometry(1, 7, 5), smokeMat.clone());
+    const n = phone ? 4 : 5;
+    for (let k = 0; k < n; k++) {
+      const s = new THREE.Mesh(smokeGeo, mat.clone());
       scene.add(s);
       puffs.push(s);
     }
-    plumes.push({ base: new THREE.Vector3(b.x, b.top + 1, b.z), puffs, ph: (i % 7) / 7 });
+    plumes.push({
+      base: new THREE.Vector3(b.x + (smokeRand() - 0.5) * b.w * 0.5, b.top + 1.2,
+        b.z + (smokeRand() - 0.5) * b.d * 0.5),
+      puffs, n,
+      ph: smokeRand(),
+      rate: 0.075 + smokeRand() * 0.075,            // how fast the plume streams
+      rise: 12 + smokeRand() * 12,                  // how buoyant this fire is
+      op: (sooty ? 0.34 : 0.24) + smokeRand() * 0.1,
+    });
   }
   const tick = (dt, t, wind) => {
     lm.roueWheel.rotation.z += dt * 0.025; // the Grande Roue turns
@@ -283,10 +306,14 @@ export function buildWorld(scene) {
     const wx = wind.x / wLen, wz = wind.z / wLen;
     for (const pl of plumes) {
       pl.puffs.forEach((p, k) => {
-        const u = (t * 0.1 + pl.ph + k / 4) % 1;
-        p.position.set(pl.base.x + wx * u * 34, pl.base.y + u * 16, pl.base.z + wz * u * 34);
-        p.scale.setScalar(0.7 + u * 3.4);
-        p.material.opacity = 0.3 * (1 - u);
+        const u = (t * pl.rate + pl.ph + k / pl.n) % 1;
+        // it leaves the pot straight up, then lies over as the wind takes it
+        const lean = u * u;
+        p.position.set(pl.base.x + wx * lean * 40 * wLen * 0.25,
+          pl.base.y + u * pl.rise,
+          pl.base.z + wz * lean * 40 * wLen * 0.25);
+        p.scale.setScalar(0.9 + u * 5.2);          // it spreads as it cools
+        p.material.opacity = pl.op * (1 - u) * (0.35 + u * 1.6);
       });
     }
   };
@@ -699,7 +726,11 @@ function ribbonGeoXY(pts, width) {
     pos.push(p.x - n.x * width / 2, -(p.z - n.z * width / 2), 0);
     if (i > 0) {
       const a = (i - 1) * 2;
-      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      // wind the triangles so the face normal is +Z: once the ribbon is laid
+      // flat (rotation.x = -90°) that becomes +Y, and the river faces the sky.
+      // Wound the other way the whole Seine was back-facing — culled away, so
+      // what you saw was the stone quay beneath it, and the river looked like dirt.
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -926,18 +957,48 @@ function addTrees(scene) {
     if (distToStreets(x, z) < 13) continue; // keep the carriage roads clear
     pts.push({ x, z, s: 3 + rand() * 3.4, r: rand() });
   }
-  const geo = new THREE.SphereGeometry(1, 7, 5); geo.translate(0, 0.6, 0);
-  const mesh = new THREE.InstancedMesh(geo, windify(new THREE.MeshLambertMaterial({ color: 0xffffff })), pts.length);
-  const m = new THREE.Matrix4(); const col = new THREE.Color();
+  // Three instanced passes make a tree instead of a green ball: a rigid trunk,
+  // the main crown, and a second smaller lobe that breaks the silhouette. Only
+  // the foliage is windified — a trunk does not sway.
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const V = new THREE.Vector3(), S = new THREE.Vector3();
+  const col = new THREE.Color();
+
+  const trunkGeo = new THREE.CylinderGeometry(0.5, 0.75, 1, 5);
+  trunkGeo.translate(0, 0.5, 0);      // stand it on the ground
+  const trunks = new THREE.InstancedMesh(trunkGeo,
+    new THREE.MeshLambertMaterial({ color: 0x5b4a34 }), pts.length);
+
+  const crownGeo = new THREE.SphereGeometry(1, 7, 5); crownGeo.translate(0, 0.6, 0);
+  const foliageMat = windify(new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  const crowns = new THREE.InstancedMesh(crownGeo, foliageMat, pts.length);
+  const lobes = new THREE.InstancedMesh(crownGeo, foliageMat, pts.length);
+
   pts.forEach((p, i) => {
+    // trunk: slim, up into the crown
+    S.set(p.s * 0.13, p.s * 1.0, p.s * 0.13);
+    m.compose(V.set(p.x, 0, p.z), q.identity(), S);
+    trunks.setMatrixAt(i, m);
+
+    // the crown, exactly where it was before (the collision radius depends on it)
     m.makeScale(p.s * 1.25, p.s, p.s * 1.25).setPosition(p.x, p.s * 0.55, p.z);
-    mesh.setMatrixAt(i, m);
-    col.setHSL(0.26 + p.r * 0.05, 0.32, 0.3 + p.r * 0.12);
-    mesh.setColorAt(i, col);
+    crowns.setMatrixAt(i, m);
+
+    // a lesser lobe, leaning off to one side
+    const a = p.r * Math.PI * 2, off = p.s * (0.28 + p.r * 0.16);
+    m.makeScale(p.s * 0.72, p.s * 0.62, p.s * 0.72)
+      .setPosition(p.x + Math.cos(a) * off, p.s * (0.95 + p.r * 0.25), p.z + Math.sin(a) * off);
+    lobes.setMatrixAt(i, m);
+
+    col.setHSL(0.25 + p.r * 0.06, 0.30 + p.r * 0.10, 0.28 + p.r * 0.14);
+    crowns.setColorAt(i, col);
+    col.offsetHSL(0.005, 0, 0.05);     // the sunward lobe sits a shade lighter
+    lobes.setColorAt(i, col);
   });
-  mesh.instanceColor.needsUpdate = true;
-  mesh.castShadow = true;
-  scene.add(mesh);
+  crowns.instanceColor.needsUpdate = true;
+  lobes.instanceColor.needsUpdate = true;
+  crowns.castShadow = lobes.castShadow = trunks.castShadow = true;
+  scene.add(trunks, crowns, lobes);
   return pts; // {x, z, s}: crown center ~ y = s*0.55+0.6*s, radius ~ s*1.1
 }
 
@@ -1034,29 +1095,43 @@ export function makeClouds(scene, windBase) {
   const topMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x4a453c, fog: true });
   const baseMat = new THREE.MeshLambertMaterial({ color: 0xcbc0b0, emissive: 0x38332b, fog: true });
   const shadowMat = new THREE.MeshBasicMaterial({ color: 0x1e1812, transparent: true, opacity: 0.09, depthWrite: false });
-  for (let i = 0; i < 15; i++) {
+  const puffGeo = new THREE.SphereGeometry(1, 10, 8);
+  for (let i = 0; i < 22; i++) {
     const grp = new THREE.Group();
-    const r = 65 + rand() * 95;
-    // shaded base row — flat underside at a common condensation level
-    const nBase = 4 + Math.floor(rand() * 3);
+    const towering = rand() < 0.28;                 // one in four builds upward
+    const r = (58 + rand() * 90) * (towering ? 1.25 : 1);
+    // shaded base row — a flat underside at the condensation level, wider than
+    // the tops so the cloud sits on its own shelf of shadow
+    const nBase = 6 + Math.floor(rand() * 4);
     for (let k = 0; k < nBase; k++) {
-      const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 9, 7), baseMat);
-      const pr = r * (0.3 + rand() * 0.22);
-      puff.scale.set(pr * 1.5, pr * 0.34, pr);
-      puff.position.set((k / (nBase - 1) - 0.5) * r * 1.7 + (rand() - 0.5) * r * 0.2,
-        0, (rand() - 0.5) * r * 0.5);
+      const puff = new THREE.Mesh(puffGeo, baseMat);
+      const u = k / (nBase - 1) - 0.5;
+      const pr = r * (0.26 + rand() * 0.2) * (1 - Math.abs(u) * 0.45);
+      puff.scale.set(pr * 1.6, pr * 0.3, pr * 1.15);
+      puff.position.set(u * r * 1.8 + (rand() - 0.5) * r * 0.18,
+        (rand() - 0.5) * r * 0.03, (rand() - 0.5) * r * 0.55);
       grp.add(puff);
     }
-    // bright tops billowing upward
-    const nTop = 3 + Math.floor(rand() * 3);
-    for (let k = 0; k < nTop; k++) {
-      const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 9, 7), topMat);
-      const pr = r * (0.22 + rand() * 0.24);
-      puff.scale.set(pr * 1.1, pr * 0.75, pr * 0.9);
-      puff.position.set((rand() - 0.5) * r * 1.2, r * (0.1 + rand() * 0.22), (rand() - 0.5) * r * 0.4);
-      grp.add(puff);
+    // cauliflower: lobes stacked in tiers, each tier smaller and higher, so
+    // the silhouette bubbles instead of reading as three loose balls
+    const tiers = towering ? 4 : 3;
+    for (let tier = 0; tier < tiers; tier++) {
+      const f = tier / tiers;
+      const nT = Math.max(2, Math.round((4 - tier) + rand() * 2));
+      for (let k = 0; k < nT; k++) {
+        const puff = new THREE.Mesh(puffGeo, topMat);
+        const pr = r * (0.30 - f * 0.13 + rand() * 0.12);
+        const spread = r * (0.95 - f * 0.6);
+        puff.scale.set(pr * 1.15, pr * (0.8 + rand() * 0.3), pr);
+        puff.position.set((rand() - 0.5) * spread * 2,
+          r * (0.1 + f * (towering ? 0.85 : 0.5)) + rand() * r * 0.07,
+          (rand() - 0.5) * spread);
+        grp.add(puff);
+      }
     }
-    grp.position.set(-1800 + rand() * 3400, 210 + rand() * 130, -1500 + rand() * 3000);
+    grp.rotation.y = rand() * Math.PI * 2;
+    grp.position.set(-1800 + rand() * 3400,
+      (towering ? 190 : 225) + rand() * 150, -1500 + rand() * 3000);
     scene.add(grp);
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 20), shadowMat);
     shadow.rotation.x = -Math.PI / 2;
