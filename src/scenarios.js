@@ -144,11 +144,16 @@ export const SCENARIOS = [
     brief: 'Dawn, and the avenues are empty. Take the little No. 9 across the city at rooftop height and land in the Champs-Élysées at your own door, where the servants wait to catch her.',
     setup(ctx) {
       ctx.place(-450, 14, -140, 0); // towed to Bagatelle overnight
-      ctx.setZone(V(700, 10, -280), 30);
+      // his corner, 180 m down the Champs from the Étoile — on the avenue's
+      // axis where the frontages stand back, not buried in a block
+      ctx.setZone(V(581, 10, -340), 30);
+      // the way he went: over the Bois, across the Seine, round the Arc to the
+      // right "as the law directs", and down the avenue at rooftop height
+      ctx.setRoute([V(-150, 30, -90), V(190, 26, -250), V(420, 20, -455)]);
       ctx.setCenter('June 23rd, 1903, 4 a.m.', 'Your door is on the Champs-Élysées. (green ring — land gently in the avenue)');
     },
     tick(ctx) {
-      const d = Math.hypot(ctx.ship.pos.x - 700, ctx.ship.pos.z + 280);
+      const d = Math.hypot(ctx.ship.pos.x - 581, ctx.ship.pos.z + 340);
       if (ctx.ship.wrecked) return ctx.fail('The chimney-pots claimed her. The avenue next time.');
       if (ctx.ship.landed && d < 30) {
         ctx.complete('Two servants catch and steady the ship while you go up for coffee. “From my round bay window I looked down upon the air-ship.”');

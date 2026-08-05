@@ -30,7 +30,8 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 20
 
 const LOCS = ['paris', 'monaco', 'stlouis'];
 let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
-let rivals = [], scenario = null;
+let rivals = [], scenario = null, scenBeacon = null;
+let routeRings = [];
 let track = null;                       // the active course (historic or time trial)
 let ghostBest = null, ghostMesh = null, ghostRec = [], ghostLastSample = -1;
 let chaseGhost = null;                  // a downloaded record, pinned to its course
@@ -61,6 +62,17 @@ function makeRing(color) {
 }
 
 function clearRivals() { rivals.forEach((r) => r.dispose()); rivals = []; }
+
+// the waypoint hoops of a scenario's route
+function clearRoute() { for (const r of routeRings) scene.remove(r); routeRings = []; }
+function updateRoute() {
+  for (let i = routeRings.length - 1; i >= 0; i--) {
+    const r = routeRings[i];
+    if (ship.pos.distanceTo(r.position) < 45) {     // passed: take it away
+      scene.remove(r); routeRings.splice(i, 1); blip(760);
+    }
+  }
+}
 
 // ---------------------------------------------------------------- tracks
 function historicTrack() {
@@ -194,6 +206,14 @@ function loadWorld(loc) {
   scenRing = makeRing(0x4a9c5f);
   scenRing.rotation.set(Math.PI / 2, 0, 0); // flat ground marker
   scenRing.visible = false;
+  // …and a shaft of light standing in it, so the objective can be found from
+  // the other side of Paris rather than only when you are on top of it
+  scenBeacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(24, 24, 150, 24, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x6fc48a, transparent: true, opacity: 0.13,
+      side: THREE.DoubleSide, depthWrite: false, fog: true }));
+  scenBeacon.visible = false;
+  scene.add(scenBeacon);
   // the daily wind: seeded by the date, so everyone flies the same sky today
   const d = new Date();
   const dr = mulberry32(d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate());
@@ -264,6 +284,7 @@ function clearAfterWreck() {
   if (!ship.wrecked) return;
   endTrack(); clearRivals(); scenario = null; editing = null;
   if (scenRing) scenRing.visible = false;
+  if (scenBeacon) scenBeacon.visible = false;
 }
 function tryChangeShip(id) {
   if (!canLeaveShip()) {
@@ -742,6 +763,8 @@ function resetShip() {
   clearRivals();
   editing = null;
   if (scenRing) scenRing.visible = false;
+  if (scenBeacon) scenBeacon.visible = false;
+  clearRoute();
   setCenter('', '');
   seen.clear();
 }
@@ -792,6 +815,12 @@ function showSplit() {
 
 function updateRace(dt) {
   const s = race.state;
+  // The Deutsch course's rings are rebuilt whenever a track ends, so during a
+  // scenario that is not a race they hung in the sky — the grey hoop by the
+  // Tower with nothing to do with the mission in hand.
+  const freeScenario = !!scenario && !track;
+  for (const r of gateRings) r.visible = !freeScenario;
+  if (freeScenario) startRing.visible = false;
   if (!track) return;
   const gates = track.gates;
   const running = s === 'run';
@@ -922,8 +951,24 @@ function scenCtx() {
       ship.reset(new THREE.Vector3(x, y, z), yaw);
       ship.landed = y <= ship.spec.keel.drop + 2;
     },
-    setZone(pos, r) { scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24); },
-    clearZone() { scenRing.visible = false; },
+    // a line of faint hoops marking the way, each fading out as it is passed
+    setRoute(points) {
+      clearRoute();
+      for (const p of points) {
+        const r = makeRing(0x6fc48a);
+        r.position.copy(p);
+        r.material.opacity = 0.34;
+        r.scale.setScalar(0.75);
+        routeRings.push(r);
+      }
+    },
+    setZone(pos, r) {
+      scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24);
+      scenBeacon.visible = true;
+      scenBeacon.position.set(pos.x, pos.y + 75, pos.z);
+      scenBeacon.scale.set(r / 24, 1, r / 24);
+    },
+    clearZone() { scenRing.visible = false; scenBeacon.visible = false; clearRoute(); },
     startRace() { startTrack(historicTrack()); },
     raceResult: () => (race.state === 'done' ? race.lastResult : null),
     complete: scenComplete,
@@ -933,6 +978,7 @@ function scenCtx() {
 
 function startScenario(def) {
   toggleMenu(false);
+  clearRoute();
   if (currentLocation !== def.location) loadWorld(def.location);
   endTrack();
   editing = null;
@@ -942,6 +988,9 @@ function startScenario(def) {
   scenario = def;
   def._failed = false;
   def.setup(scenCtx());
+  // a scenario that is not a race shows no race rings — hide them at once
+  // rather than waiting for the next frame to notice
+  if (!track) { for (const r of gateRings) r.visible = false; startRing.visible = false; }
   addMsg('brief', def.brief, 0);
 }
 
@@ -950,6 +999,8 @@ function scenComplete(text) {
   done[scenario.id] = true;
   localStorage.setItem('myairships_scen', JSON.stringify(done));
   scenRing.visible = false;
+  if (scenBeacon) scenBeacon.visible = false;
+  clearRoute();
   scenario = null;
   setCenter('Scenario complete', `${text}  (Esc for the menu)`);
 }
@@ -1378,6 +1429,7 @@ function frame(now) {
 
   // active scenario logic
   if (scenario && !scenario._failed) scenario.tick?.(scenCtx(), dt);
+  if (routeRings.length) updateRoute();
 
   // ghost: record this run, and fly the best one alongside
   if (race.state === 'run' && track && !track.historic) {

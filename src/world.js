@@ -277,25 +277,25 @@ export function buildWorld(scene) {
   // sat one on top of the other here)
   const bridgeMat = new THREE.MeshLambertMaterial({ color: 0xa8a094 });
   const wb = new THREE.Group();
-  const roadway = new THREE.Mesh(new THREE.BoxGeometry(13, 2.2, 96), bridgeMat);
+  const roadway = new THREE.Mesh(new THREE.BoxGeometry(96, 2.2, 13), bridgeMat);
   roadway.position.y = 5.4;
   wb.add(roadway);
-  for (const pz of [-30, 0, 30]) {                 // piers, with arches between
-    const pier = new THREE.Mesh(new THREE.BoxGeometry(11, 5.4, 7), bridgeMat);
-    pier.position.set(0, 2.7, pz);
+  for (const px of [-30, 0, 30]) {                 // piers standing in the stream
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(7, 5.4, 11), bridgeMat);
+    pier.position.set(px, 2.7, 0);
     wb.add(pier);
   }
-  for (const pz of [-15, 15]) {
-    const arch = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 12, 12, 1, false, 0, Math.PI),
-      bridgeMat);
-    arch.rotation.z = Math.PI / 2;
-    arch.position.set(0, 4.4, pz);
-    arch.scale.set(0.62, 1, 0.62);
+  for (const px of [-15, 15]) {                    // and the vaults between them
+    const arch = new THREE.Mesh(
+      new THREE.CylinderGeometry(8, 8, 12, 14, 1, false, 0, Math.PI), bridgeMat);
+    arch.rotation.x = -Math.PI / 2;                // axis across the roadway, crown up
+    arch.position.set(px, 4.3, 0);
+    arch.scale.set(0.95, 1, 0.52);
     wb.add(arch);
   }
-  for (const sx of [-1, 1]) {                      // parapets
-    const par = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 96), bridgeMat);
-    par.position.set(sx * 6, 7.2, 0);
+  for (const sz of [-1, 1]) {                      // parapets down both sides
+    const par = new THREE.Mesh(new THREE.BoxGeometry(96, 1.4, 1.1), bridgeMat);
+    par.position.set(0, 7.2, sz * 6);
     wb.add(par);
   }
   wb.position.set(-1986, 0, -250);
@@ -818,14 +818,15 @@ function addBookPlaces(scene, buildings) {
     seg.rotation.z = Math.cos(ang) * 0.5;
     aq.add(seg);
   }
+  // The reach here runs north and south, so the crossing runs east and west:
+  // the deck's long axis is local +x and the group is NOT turned. (Rotating it
+  // a quarter turn laid the whole aqueduct along the water instead of over it.)
   aq.position.set(-1985, 0, 60);
-  aq.rotation.y = Math.PI / 2;                      // it spans the river, west to east
   aq.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(aq);
-  // the piers, placed in world terms (the group is turned, so swap the extents)
-  buildings.length -= 2;
-  for (const pz of [-38, 38]) {
-    buildings.push({ x: -1985, z: 60 + pz, w: 9, d: 9, h: DECK, top: DECK });
+  buildings.length -= 2;                            // re-place the piers in world terms
+  for (const px of [-38, 38]) {
+    buildings.push({ x: -1985 + px, z: 60, w: 9, d: 9, h: DECK, top: DECK });
   }
 
   // ---- M. Henry Deutsch's air-ship house, a bare skeleton "scarcely two
