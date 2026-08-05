@@ -37,6 +37,14 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   still sat on the pad; the Seine being decorative while other waters drowned you; one
   shared "best" across three cities with different limits.
 
+- [x] **A second pass over the book and the period maps** — the St. Louis course rebuilt to
+  his own proposal (equal-sided triangle, three laps, half again the Deutsch pace); the
+  Passerelle de l'Avre, Deutsch's air-ship-house skeleton and its foundation trenches, the
+  Île de Puteaux, Neuilly St James, the Jardin d'Acclimatation's captive balloon, the
+  Moulin de Longchamp, Auteuil and Vaugirard in Paris; Monaco's sea wall with its
+  four-metre drop, the electric tramway, and the escort running the coast; two new
+  scenarios (the chestnut tree, the 14th of July review). See docs/PERIOD_NOTES.md.
+
 ## Future — multiplayer, if it goes further
 
 - [ ] **Live race rooms** — Supabase Realtime *Broadcast* + *Presence* (not the DB):

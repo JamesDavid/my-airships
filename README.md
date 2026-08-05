@@ -22,9 +22,11 @@ public domain).
 - **St. Louis, 1904**: the World's Fair grand prize that never happened — his proposed
   triangular pylon course, flown against rival dirigibles (Deutsch's *La Ville de Paris*
   among them).
-- **Six historical scenarios** (Esc menu): the No. 1's fold and the kite-boys' rescue,
+- **Eight historical scenarios** (Esc menu): the No. 1's fold and the kite-boys' rescue,
   the No. 5's crash onto the Trocadéro roof, the Deutsch Prize run, landing the No. 9 at
-  his own door, Monaco's fatal 14th of February — flown better — and the $100,000 race.
+  his own door, Monaco's fatal 14th of February — flown better — the $100,000 race, the
+  head-wind struggle that ended in Rothschild's tallest chestnut, and the 14th of July
+  review flown over the massed army at Longchamps.
 - **Read the wind like a pilot**: currents veer and strengthen with altitude ("he can
   leave one current for another") — smoke, flags, trees, water, and clouds each show a
   different layer of the sky. The crew will also tow your ship by its guide rope to

@@ -197,4 +197,70 @@ export const SCENARIOS = [
       }
     },
   },
+  {
+    id: 'no5-chestnut',
+    title: 'VII. The Tallest Chestnut (July 13, 1901)',
+    sub: 'No. 5 — the Tower in the tenth minute, and a head wind coming home',
+    location: 'paris', shipId: 'no5',
+    brief: 'The Tower is rounded and the timekeepers are waiting at St. Cloud — but the wind has turned against you and the motor is failing. Get her home over the Bois, or come down in M. Edmond de Rothschild’s park as you really did, standing in your basket at the top of the tallest chestnut with the propeller touching the ground.',
+    setup(ctx) {
+      // homeward from the Tower, into the head wind, motor already sickening
+      ctx.place(-260, 165, 40, Math.PI);
+      ctx.ship.motorHealth = 0.62;
+      ctx.setZone(V(-2065, 12, 0), 120);
+      ctx.setCenter('July 13th, 1901', 'Home to St. Cloud against the wind — the motor is going. (green ring)');
+      this.quit = 34 + Math.random() * 26;    // she stops somewhere over the Bois
+      this.t = 0; this.told = false;
+    },
+    tick(ctx, dt) {
+      this.t += dt;
+      if (!this.told && this.t > this.quit) {
+        this.told = true;
+        ctx.ship.sputtering = true;
+        ctx.addMsg('sc7', 'The capricious motor stops — "the air-ship, bereft of its power, was carried off." Work the levers, or pick your tree.', 0);
+      }
+      const d = Math.hypot(ctx.ship.pos.x + 2065, ctx.ship.pos.z);
+      if (ctx.ship.wrecked) {
+        return ctx.fail('Down hard. The chestnut would have been kinder.');
+      }
+      if (ctx.ship.landed && d < 120) {
+        ctx.complete('Home to the timekeepers in the fortieth minute — "after a terrific struggle with the element."');
+      } else if (ctx.ship.landed && ctx.world.isInBois(ctx.ship.pos.x, ctx.ship.pos.z)) {
+        ctx.complete('You settle into the tree-tops of the park, propeller touching the grass. Princess Isabel sends up your lunch, and a medal of St. Benedict follows by post.');
+      } else if (ctx.ship.landed) {
+        ctx.fail('Down in the open, far from St. Cloud and from any kindly tree.');
+      }
+    },
+  },
+  {
+    id: 'no9-review',
+    title: 'VIII. The Review of the 14th of July (1903)',
+    sub: 'No. 9 — over the massed army at Longchamps, and a salute to the President',
+    location: 'paris', shipId: 'no9',
+    brief: 'You lunched at the Cascade, and the officers marking out the troops asked whether you would come to the review in her. Fly the little No. 9 over the massed army at Longchamps, low and slow, then away to the polo ground. Ten minutes, no more — do not disturb the good order of the review.',
+    setup(ctx) {
+      ctx.place(-980, 22, 300, -0.6);       // the lawn of the Cascade restaurant
+      ctx.setZone(V(-1250, 10, 200), 180);  // the racecourse, full of troops
+      ctx.setCenter('July 14th, 1903', 'Over the review at Longchamps — low, and under ten minutes. (green ring)');
+      this.over = 0; this.saluted = false; this.done = false;
+    },
+    tick(ctx, dt) {
+      if (this.done) return;
+      const p = ctx.ship.pos;
+      const d = Math.hypot(p.x + 1250, p.z - 200);
+      if (ctx.ship.wrecked) return ctx.fail('An air-ship down among the troops. Not the impression intended.');
+      if (d < 180 && p.y > 12 && p.y < 90) {
+        this.over += dt;
+        if (!this.saluted && this.over > 6) {
+          this.saluted = true;
+          ctx.addMsg('sal', 'Opposite the President you fire a salute of twenty-one blank cartridges!', 0);
+        }
+      }
+      if (this.over > 24 && d > 240) {
+        this.done = true;
+        ctx.clearZone();
+        ctx.complete('"It is practical, and will have to be taken account of in war," say the officers. You steer for the polo grounds, where your friends are waiting.');
+      }
+    },
+  },
 ];

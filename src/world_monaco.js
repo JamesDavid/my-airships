@@ -204,7 +204,9 @@ export function buildWorldMonaco(scene) {
   scene.add(hangar);
   buildings.push({ x: -52, z: 0, w: 58, d: 13, h: 18, top: 18 });
 
-  // the landing-stage, on piles out into the surf (built after 12 days' work)
+  // "It will be enough to build a landing-stage on the sea side of the wall at
+  // the level of the boulevard" — twelve days' work, after the first launch
+  // nearly pitched him out of the basket over the wall's four-metre drop
   const stage = new THREE.Mesh(new THREE.BoxGeometry(46, 1.6, 26),
     new THREE.MeshLambertMaterial({ color: 0x9a7d54 }));
   stage.position.set(38, 1.2, 0);
@@ -214,6 +216,37 @@ export function buildWorldMonaco(scene) {
       new THREE.MeshLambertMaterial({ color: 0x6b5236 }));
     pile.position.set(24 + (i % 4) * 10, -0.5, i < 4 ? -11 : 11);
     scene.add(pile);
+  }
+
+  // ---------- the waterfront as the book describes it ----------
+  // "The new aerodrome rose on the Boulevard de la Condamine, just across the
+  // electric tramcar tracks from the sea wall… From the side walk it was only
+  // waist high, but on the other side of it the surf rolled over pebbles from
+  // four to five metres below."
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xbdb3a0 });
+  const seaWall = new THREE.Mesh(new THREE.BoxGeometry(2.2, 6.4, 300), wallMat);
+  seaWall.position.set(SHORE_X - 1, 1.6, 0);      // waist high above the boulevard…
+  seaWall.castShadow = true;
+  scene.add(seaWall);
+  // …and the pebble beach four to five metres below it, on the sea side
+  const pebbles = new THREE.Mesh(new THREE.PlaneGeometry(16, 300),
+    new THREE.MeshLambertMaterial({ color: 0x9b9384 }));
+  pebbles.rotation.x = -Math.PI / 2;
+  pebbles.position.set(SHORE_X + 7, 0.2, 0);
+  scene.add(pebbles);
+
+  // the electric tramway along the Condamine, between hangar and wall
+  const railMat = new THREE.MeshPhongMaterial({ color: 0x6b6459, shininess: 80 });
+  for (const rz of [-0.72, 0.72]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 300), railMat);
+    rail.position.set(SHORE_X - 6 + rz, 0.28, 0);
+    scene.add(rail);
+  }
+  for (let z = -148; z <= 148; z += 4) {
+    const sleeper = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.16, 0.9),
+      new THREE.MeshLambertMaterial({ color: 0x5b4a34 }));
+    sleeper.position.set(SHORE_X - 6, 0.16, z);
+    scene.add(sleeper);
   }
 
   // ---------- yachts in the bay — anchored head-to-wind, a pilot's wind vane ----------
@@ -233,9 +266,29 @@ export function buildWorldMonaco(scene) {
     scene.add(s);
     puffs.push(s);
   }
+  // ---------- the escort ----------
+  // "One steam chaloupe and two petroleum launches, all three of them swift
+  // goers, together with three well-manned row-boats, had been stationed at
+  // intervals down the coast to pick me up in case of accident."
+  const escort = [];
+  for (let i = 0; i < 3; i++) {
+    const boat = makeYacht(0, 0, 0.35 + i * 0.1, 0);
+    boat.userData.leg = 900 + i * 700;            // how far down the coast it runs
+    boat.userData.ph = i * 0.37;
+    boat.userData.speed = 0.055 - i * 0.012;
+    scene.add(boat);
+    escort.push(boat);
+  }
   const tick = (dt, t, wind) => {
     const wLen = Math.hypot(wind.x, wind.z) || 1;
     const wx = wind.x / wLen, wz = wind.z / wLen;
+    // the escort runs up and down the coast, as it did on the 12th of February
+    for (const b of escort) {
+      const u = (t * b.userData.speed + b.userData.ph) % 2;
+      const f = u < 1 ? u : 2 - u;                 // out, then back
+      b.position.set(150 + f * 260, 0.6, 120 - f * b.userData.leg);
+      b.rotation.y = u < 1 ? Math.PI * 0.5 : -Math.PI * 0.5;
+    }
     puffs.forEach((p, i) => {
       const u = ((t * 0.13 + i / 7) % 1);
       p.position.set(smokeBase.x + wx * u * 55, smokeBase.y + u * 20, smokeBase.z + wz * u * 55);
