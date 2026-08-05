@@ -513,7 +513,11 @@ export class Airship {
       for (const sgn of [1, -1]) {
         const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, span, 0.46), bladeMat);
         blade.position.y = sgn * (span / 2 + 0.1);
-        blade.rotation.x = sgn * 0.34;          // the pitch of the blade
+        // pitch is a twist about the blade's OWN span, not about the shaft:
+        // turning it about the shaft just swings the blade out of line with
+        // its opposite number, which is what made the screw look like two
+        // sticks at odd angles instead of one straight two-blader
+        blade.rotation.y = sgn * 0.34;
         holder.add(blade);
       }
       holder.traverse((o) => { if (o.isMesh) o.castShadow = true; });
