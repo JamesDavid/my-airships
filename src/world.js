@@ -338,12 +338,12 @@ export function buildWorld(scene) {
   };
   // the Paris-Versailles road over the Pont de Saint-Cloud: out of the town,
   // across the river, and on into the Bois toward Longchamp
-  road(-2330, 300, -2080, 260, 13);            // through Saint-Cloud to the bridge
-  road(-1908, 260, -1600, 230, 13);            // and away on the Bois bank
-  road(-1600, 230, -1250, 200, 12);            // the allée to the racecourse
-  road(-2330, 300, -2340, 90, 11);             // the village street to the church
-  road(-2080, 260, -2140, 20, 10);             // the lane down to the Aéro-Club field
-  wb.position.set(-1994, 0, 260);   // 250 m (0.5 km at full scale) upstream
+  road(-2330, 440, -2080, 400, 13);            // through Saint-Cloud to the bridge
+  road(-1908, 400, -1600, 330, 13);            // and away on the Bois bank
+  road(-1600, 330, -1250, 200, 12);            // the allée to the racecourse
+  road(-2330, 440, -2340, 90, 11);             // the village street to the church
+  road(-2080, 400, -2150, 150, 10);            // the lane down toward the field gate
+  wb.position.set(-1994, 0, 400);   // 250 m (0.5 km at full scale) upstream
   wb.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(wb);
 
@@ -804,7 +804,7 @@ function makeArc(pos) {
 // ---------------------------------------------------------- the book's places
 // Everything here is named in "My Airships" or stands on the 1900 plans of the
 // ground he flew over. See docs/PERIOD_NOTES.md for the map sources.
-const PUTEAUX = { x: -2050, z: -1030, rx: 130, rz: 38 };  // below the Suresnes bridge   // the island in the reach
+const PUTEAUX = { x: -2050, z: -890, rx: 130, rz: 38 };   // below the Suresnes bridge   // the island in the reach
 
 export function onPuteaux(x, z) {
   const dx = (x - PUTEAUX.x) / PUTEAUX.rx, dz = (z - PUTEAUX.z) / PUTEAUX.rz;
@@ -887,12 +887,12 @@ function addBookPlaces(scene, buildings) {
   // The reach here runs north and south, so the crossing runs east and west:
   // the deck's long axis is local +x and the group is NOT turned. (Rotating it
   // a quarter turn laid the whole aqueduct along the water instead of over it.)
-  aq.position.set(-1985, 0, 10);   // on the homeward line, per the plate
+  aq.position.set(-1985, 0, 150);   // clear of the aerodrome field, which reaches z 120
   aq.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(aq);
   buildings.length -= 2;                            // re-place the piers in world terms
   for (const px of [-38, 38]) {
-    buildings.push({ x: -1985 + px, z: 10, w: 9, d: 9, h: DECK, top: DECK });
+    buildings.push({ x: -1985 + px, z: 150, w: 9, d: 9, h: DECK, top: DECK });
   }
 
   // ---- M. Henry Deutsch's air-ship house, a bare skeleton "scarcely two
@@ -1067,7 +1067,7 @@ function addBookPlaces(scene, buildings) {
     ramp.rotation.z = -sx * slope;
     sur.add(ramp);
   }
-  sur.position.set(-2036, 0, -740);
+  sur.position.set(-2036, 0, -600);
   sur.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(sur);
 
@@ -1109,10 +1109,10 @@ function addBookPlaces(scene, buildings) {
     wall.position.set(wx, 2.5, wz);
     station.add(wall);
   }
-  station.position.set(-1930, 0, -1180);
+  station.position.set(-1930, 0, -1040);
   station.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(station);
-  buildings.push({ x: -1930, z: -1180, w: 40, d: 28, h: 21, top: 25 });
+  buildings.push({ x: -1930, z: -1040, w: 40, d: 28, h: 21, top: 25 });
 
   // ---- the Jardin d'Acclimatation's captive balloon, where the No. 1 was
   // inflated at one franc the cubic metre
