@@ -1748,7 +1748,10 @@ export function makeClouds(scene, windBase) {
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.set(grp.position.x, 0.45, grp.position.z);
     scene.add(shadow);
-    clouds.push({ grp, shadow, r, towering, drift: 0.4 + rand() * 0.5 });
+    // the seeded birthplace is kept: every position after it is measured from
+    // here, so the sky can be computed for any instant rather than stepped to
+    clouds.push({ grp, shadow, r, towering, drift: 0.4 + rand() * 0.5,
+      home: { x: grp.position.x, z: grp.position.z } });
   }
   // cirrus veil, streaked along the prevailing wind
   const windAng = windBase ? Math.atan2(-windBase.z, windBase.x) : 0;
@@ -1785,16 +1788,45 @@ function makeCirrusTexture() {
   return _cirrus;
 }
 
-export function updateClouds(clouds, wind, dt) {
+// ---------------------------------------------------------------- the sky's clock
+// The weather must be a function of the TIME, not of how long a page has been
+// open. Integrating drift frame by frame meant two pilots who loaded the game a
+// minute apart had their clouds a hundred metres apart, different gusts, and
+// different lift — on a leaderboard that is not the same sky at all.
+//
+// UTC, deliberately: a local-date seed puts a pilot in Paris and a pilot in
+// St. Louis under different weather on the same afternoon.
+export function skyTime() {
+  const d = new Date();
+  return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds() + d.getUTCMilliseconds() / 1000;
+}
+export function skyDay() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+export function skyDaySeed() {
+  const d = new Date();
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+}
+
+const CLOUD_SPAN = 5200;                        // they wrap over a 5.2 km field
+function wrapField(v) {
+  return ((v + CLOUD_SPAN / 2) % CLOUD_SPAN + CLOUD_SPAN) % CLOUD_SPAN - CLOUD_SPAN / 2;
+}
+
+/**
+ * Where the clouds are at sky-time `t`. A closed form, not an integration, so
+ * it does not matter when you arrived — and travelling between cities no longer
+ * restarts the clouds while the gusts carry on.
+ *
+ * They ride the day's PREVAILING wind, not the gusting one: cumulus are carried
+ * by the mean current, and it keeps the position a pure function of t.
+ */
+export function updateClouds(clouds, windBase, t) {
   for (const c of clouds) {
-    // cumulus ride the upper current — visibly a different heading than smoke
-    const w = windAt(wind, c.grp.position.y);
-    c.grp.position.x += w.x * c.drift * dt;
-    c.grp.position.z += w.z * c.drift * dt;
-    if (c.grp.position.x > 2600) c.grp.position.x = -2600;
-    if (c.grp.position.x < -2600) c.grp.position.x = 2600;
-    if (c.grp.position.z > 2600) c.grp.position.z = -2600;
-    if (c.grp.position.z < -2600) c.grp.position.z = 2600;
+    const w = windAt(windBase, c.grp.position.y);
+    c.grp.position.x = wrapField(c.home.x + w.x * c.drift * t);
+    c.grp.position.z = wrapField(c.home.z + w.z * c.drift * t);
     c.shadow.position.set(c.grp.position.x, 0.45, c.grp.position.z);
   }
 }

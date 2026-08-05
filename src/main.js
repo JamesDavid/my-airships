@@ -5,7 +5,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt, verticalAir, mulberry32 } from './world.js';
+import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt, verticalAir, mulberry32,
+  skyTime, skyDaySeed } from './world.js';
 import { buildWorldMonaco } from './world_monaco.js';
 import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
@@ -22,6 +23,21 @@ import { courseLength, shipTopSpeed } from './anticheat.js';
 // pilot who cannot save a best time can still fly.
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  /**
+   * Stored JSON that will not parse must never stop a flight. A single corrupt
+   * key used to blank the menu and, because building it was the last thing boot
+   * did, stop the frame loop being reached at all — a salmon screen with the
+   * instruments painted on it. It is thrown away and the default returned.
+   */
+  json(k, fallback) {
+    const raw = this.get(k);
+    if (raw === null) return fallback;
+    try { return JSON.parse(raw); } catch {
+      console.warn(`[store] ${k} would not parse — discarding it`);
+      this.del(k);
+      return fallback;
+    }
+  },
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } },
   del(k) { try { localStorage.removeItem(k); } catch { /* nothing to do */ } },
 };
@@ -63,7 +79,7 @@ let splitUntil = 0;
 let currentLocation = 'paris', currentShip = 'no6';
 const wind = new THREE.Vector3(3.4, 0, 0.7);
 const dailyWind = new THREE.Vector3(3.4, 0, 0.7);
-let windGustT = 0;
+let windGustT = 0;      // seconds since midnight UTC — see skyTime()
 
 /**
  * @param where  null to start from the shed, or a place aloft to take her over
@@ -72,6 +88,7 @@ let windGustT = 0;
  */
 function spawnShip(specId, where = null) {
   currentShip = specId;
+  if (track) seedRace(track.id, specId);   // the caprice is keyed to the class too
   live.setShip(specId);
   if (ship) ship.dispose();
   ship = new Airship(scene, SHIPS[specId]);
@@ -146,7 +163,7 @@ function loadBest(t) {
     return;
   }
   chaseGhost = null;
-  try { ghostBest = JSON.parse(store.get(bestKey(t)) || 'null'); }
+  try { ghostBest = store.json(bestKey(t), null); }
   catch { ghostBest = null; }
   updateGhostMesh();
 }
@@ -170,6 +187,7 @@ function startTrack(t) {
   track = t;
   scenario = null;
   editing = null;
+  seedRace(t.id, currentShip);     // the same motor trouble for everyone, today
   clearRivals();
   buildRings(t.gates, t.historic ? world.startRing : null);
   startRing.visible = !!t.historic;
@@ -254,9 +272,10 @@ function loadWorld(loc) {
       side: THREE.DoubleSide, depthWrite: false, fog: true }));
   scenBeacon.visible = false;
   scene.add(scenBeacon);
-  // the daily wind: seeded by the date, so everyone flies the same sky today
-  const d = new Date();
-  const dr = mulberry32(d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate());
+  // the daily wind: seeded by the UTC date, so everyone flies the same sky today
+  // — a LOCAL date put a pilot in Paris and a pilot in St. Louis under different
+  // weather on the same afternoon, which a shared leaderboard cannot afford
+  const dr = mulberry32(skyDaySeed());
   const rot = (dr() - 0.5) * 0.9, mag = 0.85 + dr() * 0.4;
   const rc = Math.cos(rot), rs = Math.sin(rot);
   dailyWind.set((world.windBase.x * rc + world.windBase.z * rs) * mag, 0,
@@ -651,7 +670,7 @@ function buildMenuButtons() {
   // scenarios column
   const scenDiv = document.getElementById('menuScens');
   scenDiv.innerHTML = '';
-  const doneMap = JSON.parse(store.get('myairships_scen') || '{}');
+  const doneMap = store.json('myairships_scen', {}) || {};
   for (const def of SCENARIOS) {
     menuButton(scenDiv, (doneMap[def.id] ? '✓ ' : '') + def.title, def.sub, () => startScenario(def));
   }
@@ -1456,6 +1475,20 @@ function bestRaceKey() { return `myairships_best_${currentLocation}`; }
     store.del('myairships_best');
   }
 })();
+/**
+ * The motor's caprice, drawn from a seeded book rather than from Math.random.
+ * Keyed on the day, the course and the class of ship, so every pilot flying the
+ * Deutsch in a No. 6 today meets the same faltering at the same points — and a
+ * ghost replays with the motor trouble it actually had.
+ */
+let raceRng = mulberry32(1);
+function seedRace(trackId, shipId) {
+  const key = `${skyDaySeed()}|${trackId}|${shipId}`;
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  raceRng = mulberry32(h >>> 0);
+}
+
 const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult: null,
   best: +(store.get('myairships_best_paris') || 0) };
 
@@ -1587,7 +1620,7 @@ function updateRace(dt) {
               addMsg('lap', `Lap ${race.lap} of ${track.laps} — round again!`, 0);
             } else if (track.historic) {
               addMsg('turn', world.hints.turnMsg, 0);
-              race.sputterAt = race.t + 10 + Math.random() * 18;
+              race.sputterAt = race.t + 10 + raceRng() * 18;
             } else if (race.lap < track.laps) {
               race.lap++; race.gate = 0;
               addMsg('lap', `Lap ${race.lap} of ${track.laps}!`, 0);
@@ -1602,7 +1635,7 @@ function updateRace(dt) {
     }
     if (track.historic && race.sputterAt && race.t > race.sputterAt && !ship.sputtering) {
       ship.sputtering = true; race.sputterAt = 0;
-      addMsg('sputter', 'The capricious motor is stopping! Abandon the wheel — work the levers! (tap F)', 0);
+      addMsg('sputter', 'The capricious motor is stopping! Leave the helm — work the levers! (tap F)', 0);
     }
   }
 }
@@ -1722,7 +1755,7 @@ function startScenario(def) {
 }
 
 function scenComplete(text) {
-  const done = JSON.parse(store.get('myairships_scen') || '{}');
+  const done = store.json('myairships_scen', {}) || {};
   done[scenario.id] = true;
   store.set('myairships_scen', JSON.stringify(done));
   scenRing.visible = false;
@@ -2186,7 +2219,10 @@ function frame(now) {
 
   if (menuOpen || boardOpen() || bugBookOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
 
-  windGustT += dt;
+  // the sky runs on its own clock, not on how long this page has been open:
+  // otherwise two pilots at the same instant get different gusts and different
+  // lift, and "the same sky today" is only true of the prevailing wind
+  windGustT = skyTime();
   wind.x = dailyWind.x + Math.sin(windGustT * 0.13) * 0.7 + Math.sin(windGustT * 0.041 + 2) * 0.9;
   wind.z = dailyWind.z + Math.sin(windGustT * 0.07 + 1) * 0.5;
 
@@ -2268,7 +2304,9 @@ function frame(now) {
       addMsg('replen', 'The aids replenish petroleum and ballast.', 15);
     }
   }
-  updateClouds(world.clouds, wind, dt);
+  // the day's PREVAILING wind and the sky's clock — not the gusting wind and a
+  // frame delta, which made where a cloud sat depend on when you opened the page
+  updateClouds(world.clouds, dailyWind, windGustT);
   updateRace(dt);
   drainEvents();
   ambientQuotes();

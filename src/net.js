@@ -103,10 +103,13 @@ async function req(path, opts = {}) {
   } finally { clearTimeout(timer); }
 }
 
-// today's wind seed, so a board can be read as "on today's sky"
+// Today's wind seed, so a board can be read as "on today's sky". UTC, matching
+// skyDay() in world.js — on a local date, two pilots either side of midnight
+// were filed under different days while flying identical weather, and two in
+// different zones under the same day while flying different weather.
 export function windDay() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 // ---------------------------------------------------------------- reads
