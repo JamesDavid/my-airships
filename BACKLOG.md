@@ -66,8 +66,13 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   the room (every camera works, including standing in their basket), and each gate pass is
   broadcast so the panel shows a running order — deepest into the course first — instead of
   only a finishing list.
-  Still to do: a reconnect path (a dropped socket needs a re-join from the menu), and
-  voice//text chat if rooms ever fill with strangers.
+  A room is a shared sky: everyone flies free in the same city, seeing and bumping each
+  other, until its host calls a race — eight seconds and everyone on a starting grid,
+  spaced abeam in an order the whole room agrees on. The host owns the course and the
+  city; the room follows. Hosting passes to the longest-standing pilot if the host leaves.
+  Still to do: a reconnect path (a dropped socket needs a re-join from the menu); chat if
+  rooms ever fill with strangers; and scenarios are deliberately solo — they are scripted
+  personal stories and do not belong inside a shared race room.
 
 - [ ] **Virtual reality (WebXR / Quest)** — three.js has it built in: `renderer.xr.enabled`,
   an XRButton, and `setAnimationLoop`. It runs in the Quest browser off the same Pages URL,

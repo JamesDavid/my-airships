@@ -556,9 +556,15 @@ function buildMenuButtons() {
       if (tryChangeShip(id)) toggleMenu(false);
     }, id === currentShip);
   }
-  const locBtn = (id, label, sub) => menuButton(placeDiv, label, sub, () => {
-    if (tryTravel(id)) toggleMenu(false);
-  }, id === currentLocation);
+  const inRoomNotHost = live.inRoom() && !live.isHost();
+  const locBtn = (id, label, sub) => menuButton(placeDiv, label,
+    inRoomNotHost ? 'the room flies together — the host chooses' : sub, () => {
+      if (inRoomNotHost) {
+        addMsg('roomplace', 'The room flies together: its host chooses where. Leave the room to travel alone.', 0);
+        return;
+      }
+      if (tryTravel(id)) toggleMenu(false);
+    }, id === currentLocation);
   locBtn('paris', 'Paris, 1901', 'the Deutsch Prize course');
   locBtn('monaco', 'Monaco, winter 1902', 'the maritime guide rope');
   locBtn('stlouis', 'St. Louis, 1904', 'the World’s Fair grand prize');
@@ -755,7 +761,8 @@ function buildTogether() {
   const head = document.createElement('div');
   head.className = 'officeline';
   head.innerHTML = `<b>Room ${info.code}</b> — ${aboard.length} aboard, flying `
-    + `${escapeHtml((TRACKS.find((t) => t.id === info.trackId) || {}).name || info.trackId)}`;
+    + `${escapeHtml((TRACKS.find((t) => t.id === info.trackId) || {}).name || info.trackId)}`
+    + `${live.isHost() ? ' · <b>you hold the room</b>' : ''}`;
   div.appendChild(head);
   for (const r of aboard) {
     const row = document.createElement('div');
@@ -764,6 +771,28 @@ function buildTogether() {
     row.innerHTML = `${escapeHtml(r.pilot)}<span style="opacity:.55"> · `
       + `${r.spectating ? 'watching' : (SHIPS[r.ship] || SHIPS.no6).name.replace('Santos-Dumont ', '')}</span>`;
     div.appendChild(row);
+  }
+  // the host chooses what the room flies, and calls it away
+  if (live.isHost()) {
+    const cur = TRACKS.find((t) => t.id === info.trackId);
+    menuButton(div, `Course: ${cur ? cur.name : info.trackId}`, 'the whole room follows — click to change', () => {
+      const i = TRACKS.findIndex((t) => t.id === info.trackId);
+      const next = TRACKS[(i + 1) % TRACKS.length];
+      live.callCourse(next.id);
+      if (currentLocation !== next.location) loadWorld(next.location);
+      startTrack(next);
+      race.state = 'idle';
+      buildMenuButtons();
+    });
+    menuButton(div, 'Call the race', 'eight seconds, everyone on the grid', () => {
+      toggleMenu(false);
+      tryStartRace();
+    });
+  } else {
+    const line = document.createElement('div');
+    line.className = 'officeline';
+    line.innerHTML = 'Waiting on the host to call the race — fly about until they do.';
+    div.appendChild(line);
   }
   menuButton(div, 'Copy the room code', info.code, () => {
     try { navigator.clipboard.writeText(info.code); addMsg('room', `Room code ${info.code} copied.`, 0); }
@@ -845,6 +874,22 @@ function setSpectate(on) {
   buildMenuButtons();
 }
 
+// Everyone is put on the line, abreast and spaced, in an order the whole room
+// agrees on (their seats, sorted). Without this the pilot who happened to be
+// nearest the first gate when the call came simply won.
+function placeOnGrid(t, grid) {
+  const slot = Array.isArray(grid) ? Math.max(0, grid.indexOf(live.seat())) : live.gridSlot();
+  const sp = trackSpawn(t);
+  const across = new THREE.Vector3(-Math.sin(sp.yaw), 0, -Math.cos(sp.yaw));   // abeam
+  const back = new THREE.Vector3(-Math.cos(sp.yaw), 0, Math.sin(sp.yaw));      // astern
+  const row = Math.floor(slot / 3), col = (slot % 3) - 1;
+  const p = new THREE.Vector3(sp.x, Math.max(14, sp.y), sp.z)
+    .addScaledVector(across, col * 34)
+    .addScaledVector(back, row * 40);
+  ship.reset(p, sp.yaw);
+  ship.landed = false;
+}
+
 async function createOrJoinRoom(trackId, code, hosting) {
   const t = TRACKS.find((x) => x.id === trackId);
   if (!t) return;
@@ -856,10 +901,22 @@ async function createOrJoinRoom(trackId, code, hosting) {
     trackId, code,
     onRoster: (r) => { roomRoster = r; drawRoom(); },
     onStart: (p) => {
+      const called = TRACKS.find((x) => x.id === p.trackId) || t;
       addMsg('roomgo', `${p.by} calls “Let go all!” — away in ${Math.round(p.delay)}…`, 0);
       roomResults = [];
-      startTrack(t);
+      if (currentLocation !== called.location) loadWorld(called.location);
+      startTrack(called);
+      placeOnGrid(called, p.grid);
       race.count = p.delay;
+    },
+    onCourse: (p) => {
+      const to = TRACKS.find((x) => x.id === p.trackId);
+      if (!to) return;
+      addMsg('roomcourse', `${p.by} sets the room to ${to.name}.`, 0);
+      if (currentLocation !== to.location) loadWorld(to.location);
+      startTrack(to);
+      race.state = 'idle';
+      buildMenuButtons();
     },
     onResult: (p) => {
       // keyed by seat: names are user-settable and two pilots may share one
@@ -1069,11 +1126,16 @@ function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
   // in a room, Enter is the call to the whole room, not a private start
   if (live.inRoom() && track && !track.historic) {
-    live.callStart(4);
+    if (!live.isHost()) {
+      addMsg('roomgo', 'The room is called away by its host — wait for their signal.', 4);
+      return;
+    }
     roomResults = [];
+    live.callStart(8, track.id);
     startTrack(track);
-    race.count = 4;
-    addMsg('roomgo', 'You call “Let go all!” — the room is away in four.', 0);
+    placeOnGrid(track, live.gridOrder().map((r) => r.key));
+    race.count = 8;
+    addMsg('roomgo', 'You call “Let go all!” — the room is away in eight.', 0);
     return;
   }
   // in a lap trial, Enter is instant restart

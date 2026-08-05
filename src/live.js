@@ -38,7 +38,7 @@ const SEAT = seatUuid();
 
 let client = null, channel = null, scene = null;
 let lobby = null, hosting = false, onLobby = null;
-let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false };
+let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false, since: 0 };
 let room = null;                   // { trackId, code, topic }
 const remotes = new Map();         // key -> { pilot, ship, buf[], mesh, label, lastSeen }
 let sendAcc = 0;
@@ -153,7 +153,8 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
   if (!cfg) return { ok: false, reason: 'offline' };
   if (channel) leave();
   handlers = { onRoster, onStart, onResult, onNotice };
-  me = { key: SEAT, pilot: net.pilotName() || 'Someone', ship: me.ship };
+  me = { key: SEAT, pilot: net.pilotName() || 'Someone', ship: me.ship,
+    spectating: false, since: Date.now() };
 
   let RealtimeClient;
   try {
@@ -183,6 +184,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
       const r = remotes.get(key) || { buf: [], mesh: null, lastSeen: nowS() };
       r.pilot = m.pilot || 'Someone';
       r.spectating = !!m.spectating;
+      r.since = m.since || 0;
       if (r.spectating && r.mesh) disposeMesh(r);       // a watcher has no ship aloft
       if (r.ship !== m.ship) { disposeMesh(r); r.ship = m.ship || 'no6'; }
       remotes.set(key, r);
@@ -205,6 +207,10 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     if (r.buf.length > 24) r.buf.shift();
   });
 
+  channel.on('broadcast', { event: 'course' }, ({ payload }) => {
+    if (room) { room.trackId = payload.trackId; }
+    handlers.onCourse?.(payload);
+  });
   channel.on('broadcast', { event: 'gate' }, ({ payload }) => {
     const r = remotes.get(payload.k);
     if (r) r.progress = { gate: payload.g, lap: payload.l, t: payload.t };
@@ -223,7 +229,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     const done = (s) => { if (!settled) { settled = true; resolve(s); } };
     channel.subscribe(async (s) => {
       if (s === 'SUBSCRIBED') {
-        await channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating });
+        await channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating, since: me.since });
         done('SUBSCRIBED');
       } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') done(s);
     });
@@ -246,13 +252,13 @@ export function leave() {
 /** Our ship class rides in the presence record, so others draw us correctly. */
 export function setShip(shipId) {
   me.ship = shipId;
-  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating }).catch(() => {});
+  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating, since: me.since }).catch(() => {});
 }
 
 /** Watching rather than flying: no packets go out, and nobody draws a ship. */
 export function setSpectating(on) {
   me.spectating = !!on;
-  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating }).catch(() => {});
+  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating, since: me.since }).catch(() => {});
 }
 export function spectating() { return me.spectating; }
 
@@ -275,10 +281,39 @@ export function sendState(dt, ship) {
   } }).catch?.(() => {});
 }
 
-export function callStart(delay) {
-  channel?.send({ type: 'broadcast', event: 'go', payload: { by: me.pilot, delay } });
+export function callStart(delay, trackId) {
+  channel?.send({ type: 'broadcast', event: 'go',
+    payload: { by: me.pilot, delay, trackId, grid: gridOrder().map((r) => r.key) } });
+}
+
+/** Host only: move the whole room to another trial. */
+export function callCourse(trackId) {
+  if (room) room.trackId = trackId;
+  channel?.send({ type: 'broadcast', event: 'course', payload: { trackId, by: me.pilot } });
+  advertise();
 }
 export function seat() { return SEAT; }
+
+// The room is held by whoever arrived first; if they leave it passes to the
+// next longest-standing pilot, so a room never loses its host.
+export function hostSeat() {
+  let best = { key: SEAT, since: me.since || Infinity };
+  for (const [key, r] of remotes) {
+    const since = r.since || Infinity;
+    if (since < best.since || (since === best.since && key < best.key)) best = { key, since };
+  }
+  return best.key;
+}
+export function isHost() { return inRoom() && hostSeat() === SEAT; }
+
+/** Everyone in the room, in one agreed order — the starting grid. */
+export function gridOrder() {
+  return roster().filter((r) => !r.spectating).sort((a, b) => a.key.localeCompare(b.key));
+}
+export function gridSlot() {
+  const g = gridOrder();
+  return Math.max(0, g.findIndex((r) => r.key === SEAT));
+}
 
 /**
  * TEST HOOK — place a phantom pilot in the room without a network.
