@@ -123,7 +123,7 @@
     top:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
   /* the carburating lever — a throttle you SET, like the brass lever aboard:
      bottom is stopped, top is full chat, and it stays where you leave it */
-  #thrTrack { position:fixed; left:16px; bottom:92px; width:48px; height:150px;
+  #thrTrack { position:fixed; right:16px; bottom:26px; width:48px; height:150px;
     border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
     touch-action:none; z-index:30; }
   #thrFill { position:absolute; left:3px; right:3px; bottom:3px; height:0;
@@ -142,6 +142,11 @@
     background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
     font-size:9.5px; display:flex; align-items:center; justify-content:center;
     left:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
+  /* left hand: sand over the valve, above the helm.
+     right hand: the coaxing lever over the carburettor */
+  #btnSand { left:16px; bottom:172px; }
+  #btnVent { left:16px; bottom:98px; }
+  #btnFix  { right:16px; bottom:186px; }
   body.touch #hintBR { display:none; }
   body.touch #panelTR { right:74px; }
   body.touch #panelBL { bottom:252px; }
@@ -152,12 +157,15 @@
   @media (pointer: coarse) and (min-width: 900px) {
     .tbtn { width: 72px; height: 72px; font-size: 17px; }
     .tbtn.sm { width: 56px; height: 56px; font-size: 14px; }
-    #pitchTrack { width: 56px; height: 230px; right: 96px; }
+    #pitchTrack { width: 56px; height: 230px; right: 110px; }
     #pitchThumb { width: 44px; height: 44px; left: 4px; font-size: 11px; }
     #helmTrack { width: 230px; height: 56px; }
     #helmThumb { width: 44px; height: 44px; top: 4px; font-size: 10px; }
-    #thrTrack { width: 56px; height: 180px; bottom: 100px; }
+    #thrTrack { width: 56px; height: 180px; right: 22px; bottom: 26px; }
     #thrThumb { width: 44px; height: 44px; left: 4px; font-size: 10px; }
+    #btnSand { left: 20px; bottom: 194px; }
+    #btnVent { left: 20px; bottom: 110px; }
+    #btnFix  { right: 22px; bottom: 220px; }
     #menu button { padding: 10px 12px; font-size: 15px; }
     #panelTL { font-size: 16px; }
     #timer { font-size: 34px; }
@@ -288,9 +296,11 @@
     <div id="pitchCenter"></div>
     <div id="pitchThumb">TRIM</div>
   </div>
-  <div class="tbtn" data-key="Space" style="right:152px; bottom:92px">SAND</div>
-  <div class="tbtn" data-key="KeyV" style="right:16px; bottom:92px">VENT</div>
-  <div class="tbtn sm" data-key="KeyF" style="right:16px; bottom:170px">FIX</div>
+  <!-- left hand: the helm, with the sand above the valve; right hand: the two
+       levers (trim and carburettor) with the motor's coaxing lever over it -->
+  <div class="tbtn" id="btnSand" data-key="Space">SAND</div>
+  <div class="tbtn" id="btnVent" data-key="KeyV">VENT</div>
+  <div class="tbtn sm" id="btnFix" data-key="KeyF">FIX</div>
   <div class="tbtn sm" data-key="Escape" style="right:12px; top:60px">☰</div>
   <div class="tbtn sm" data-key="KeyC" style="right:12px; top:122px">CAM</div>
   <div class="tbtn sm" data-key="Enter" style="right:12px; top:184px">GO</div>
