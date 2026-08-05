@@ -312,6 +312,8 @@ export function buildWorld(scene) {
   // ---------- landmarks ----------
   const lm = addLandmarks(scene);
   buildings.push(...lm.lmColliders);
+  // the places the memoir names, and the 1900 maps put on the ground
+  const bookPlaces = addBookPlaces(scene, buildings);
 
   // flags on the Tower and the Arc — wind vanes a pilot can see from afar
   const towerFlag = makeStreamFlag(9, 4.5, 0x2b4a8c);
@@ -359,6 +361,8 @@ export function buildWorld(scene) {
   }
   const tick = (dt, t, wind) => {
     lm.roueWheel.rotation.z += dt * 0.025; // the Grande Roue turns
+    // the old mill answers the wind too — faster when it blows harder
+    if (bookPlaces.sails) bookPlaces.sails.rotation.x += dt * 0.05 * Math.hypot(wind.x, wind.z);
     const wLen = Math.hypot(wind.x, wind.z) || 1;
     const wx = wind.x / wLen, wz = wind.z / wLen;
     for (const pl of plumes) {
@@ -413,7 +417,9 @@ export function buildWorld(scene) {
     // both reaches drown a ship that comes down on them
     // half-widths match the water ribbons exactly (70 m and 64 m wide), so the
     // river is wet right out to the bank you can see
-    isWater: (x, z) => nearPolyline(riverPts, x, z, 35.5) || nearPolyline(westPts, x, z, 32.5),
+    // …but the Île de Puteaux is dry land in the middle of the reach
+    isWater: (x, z) => !onPuteaux(x, z)
+      && (nearPolyline(riverPts, x, z, 35.5) || nearPolyline(westPts, x, z, 32.5)),
     isInBois(x, z) {
       if (x < -1900 || x > -340 || Math.abs(z) > 560) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
@@ -566,8 +572,15 @@ function addLandmarks(scene) {
 
   // Sacre-Coeur on the Montmartre mound (it was rising over Paris in 1901)
   const mont = new THREE.Group();
-  const hill = new THREE.Mesh(new THREE.ConeGeometry(220, 55, 20), new THREE.MeshLambertMaterial({ color: 0x86895f }));
-  hill.position.y = 27; mont.add(hill);
+  // the butte is a truncated cone, not a spike: the basilica needs level
+  // ground to stand on, or its flat floor floats over a sloping point
+  const hill = new THREE.Mesh(new THREE.CylinderGeometry(74, 220, 55, 20, 1),
+    new THREE.MeshLambertMaterial({ color: 0x86895f }));
+  hill.position.y = 27.5; hill.receiveShadow = true; mont.add(hill);
+  // and the crown itself, so the church sits on turf rather than a rim
+  const crown = new THREE.Mesh(new THREE.CircleGeometry(74, 20),
+    new THREE.MeshLambertMaterial({ color: 0x8d9065 }));
+  crown.rotation.x = -Math.PI / 2; crown.position.y = 55.05; mont.add(crown);
   const nave = new THREE.Mesh(new THREE.BoxGeometry(40, 18, 26), white); nave.position.y = 62; mont.add(nave);
   const dome1 = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 9), white); dome1.position.y = 76; dome1.scale.y = 1.35; mont.add(dome1);
   for (const s of [-1, 1]) {
@@ -715,6 +728,232 @@ function makeArc(pos) {
   g.position.copy(pos);
   g.rotation.y = 1.107; // the archway spans the Champs-Élysées axis, as built
   return g;
+}
+
+// ---------------------------------------------------------- the book's places
+// Everything here is named in "My Airships" or stands on the 1900 plans of the
+// ground he flew over. See docs/PERIOD_NOTES.md for the map sources.
+const PUTEAUX = { x: -1985, z: -700, rx: 130, rz: 38 };   // the island in the reach
+
+export function onPuteaux(x, z) {
+  const dx = (x - PUTEAUX.x) / PUTEAUX.rx, dz = (z - PUTEAUX.z) / PUTEAUX.rz;
+  return dx * dx + dz * dz < 1;
+}
+
+function stripedTentTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 8;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 8; i++) {
+    x.fillStyle = i % 2 ? '#b5442f' : '#efe7d6';
+    x.fillRect(i * 16, 0, 16, 8);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(3, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function addBookPlaces(scene, buildings) {
+  const iron = new THREE.MeshLambertMaterial({ color: 0x5d5a52 });
+  const stone = new THREE.MeshLambertMaterial({ color: 0xa8a294 });
+  const wood = new THREE.MeshLambertMaterial({ color: 0x6b5236 });
+
+  // ---- the Passerelle de l'Avre: Eiffel's iron aqueduct over the Seine,
+  // built 1891-93, and the very structure of the plate captioned "Returning to
+  // Aéro Club Grounds above Aqueduct". It crosses the reach beside the start.
+  const aq = new THREE.Group();
+  const SPAN = 150, DECK = 15;
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(SPAN, 2.2, 9), iron);
+  deck.position.y = DECK;
+  aq.add(deck);
+  for (const sz of [-1, 1]) {                       // lattice parapets
+    for (let i = -SPAN / 2; i <= SPAN / 2; i += 7.5) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4.2, 0.5), iron);
+      post.position.set(i, DECK + 3, sz * 4.2);
+      aq.add(post);
+    }
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(SPAN, 0.5, 0.5), iron);
+    rail.position.set(0, DECK + 5, sz * 4.2);
+    aq.add(rail);
+  }
+  // the two river piers, and the shallow bowstring arch between them
+  for (const px of [-38, 38]) {
+    const pier = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 4.4, DECK, 10), stone);
+    pier.position.set(px, DECK / 2, 0);
+    aq.add(pier);
+    buildings.push({ x: PUTEAUX.x * 0 + px, z: 0, w: 9, d: 9, h: DECK, top: DECK });
+  }
+  for (let i = 0; i <= 14; i++) {
+    const u = i / 14, ang = Math.PI * u;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(6, 1.1, 1.1), iron);
+    seg.position.set(-38 + u * 76, DECK - 5.5 + Math.sin(ang) * 5.5, 0);
+    seg.rotation.z = Math.cos(ang) * 0.5;
+    aq.add(seg);
+  }
+  aq.position.set(-1985, 0, 60);
+  aq.rotation.y = Math.PI / 2;                      // it spans the river, west to east
+  aq.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(aq);
+  // the piers, placed in world terms (the group is turned, so swap the extents)
+  buildings.length -= 2;
+  for (const pz of [-38, 38]) {
+    buildings.push({ x: -1985, z: 60 + pz, w: 9, d: 9, h: DECK, top: DECK });
+  }
+
+  // ---- M. Henry Deutsch's air-ship house, a bare skeleton "scarcely two
+  // air-ships' lengths" in front of Santos-Dumont's own doors: the hazard he
+  // complained of, and passed high above coming home from the Tower.
+  const skel = new THREE.Group();
+  const SK_L = 62, SK_W = 16, SK_H = 21;
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i <= 6; i++) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.8, SK_H, 0.8), iron);
+      col.position.set(-SK_L / 2 + (i / 6) * SK_L, SK_H / 2, sx * SK_W / 2);
+      skel.add(col);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(SK_L, 0.8, 0.8), iron);
+    beam.position.set(0, SK_H, sx * SK_W / 2);
+    skel.add(beam);
+  }
+  for (let i = 0; i <= 6; i++) {                    // roof trusses, no cladding
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, SK_W), iron);
+    t.position.set(-SK_L / 2 + (i / 6) * SK_L, SK_H + 0.4, 0);
+    skel.add(t);
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.6, 0.7), iron);
+    ridge.position.set(t.position.x, SK_H + 2.2, 0);
+    skel.add(ridge);
+  }
+  skel.position.set(-2062, 0, -46);
+  skel.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(skel);
+  buildings.push({ x: -2062, z: -46, w: SK_L, d: SK_W, h: SK_H, top: SK_H + 4 });
+
+  // ---- the foundation trenches that "began appearing here and there to the
+  // right of my open doors": a metre deep, and his men forbidden to run across
+  const trenchMat = new THREE.MeshLambertMaterial({ color: 0x4c4433 });
+  const tr = mulberry32(77);
+  for (let i = 0; i < 7; i++) {
+    const len = 18 + tr() * 26;
+    const t = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 2.4), trenchMat);
+    t.position.set(-2115 + tr() * 90, 0.12, -95 + tr() * 60);
+    t.rotation.y = tr() * Math.PI;
+    scene.add(t);
+  }
+
+  // ---- the Île de Puteaux, where the No. 9 caught fire crossing the Seine,
+  // and the far end of the No. 5's morning excursion from Longchamps
+  const isle = new THREE.Mesh(new THREE.CircleGeometry(1, 26),
+    new THREE.MeshLambertMaterial({ color: 0x7b8d55 }));
+  isle.rotation.x = -Math.PI / 2;
+  isle.scale.set(PUTEAUX.rx, PUTEAUX.rz, 1);
+  isle.position.set(PUTEAUX.x, 0.42, PUTEAUX.z);
+  scene.add(isle);
+  const isleTrees = mulberry32(31);
+  for (let i = 0; i < 26; i++) {
+    const a = isleTrees() * Math.PI * 2, rr = Math.sqrt(isleTrees()) * 0.86;
+    const s = 3 + isleTrees() * 2.5;
+    const tree = new THREE.Mesh(new THREE.SphereGeometry(1, 7, 5),
+      new THREE.MeshLambertMaterial({ color: 0x51663a }));
+    tree.scale.set(s * 1.2, s, s * 1.2);
+    tree.position.set(PUTEAUX.x + Math.cos(a) * rr * PUTEAUX.rx,
+      s * 0.9, PUTEAUX.z + Math.sin(a) * rr * PUTEAUX.rz);
+    tree.castShadow = true;
+    scene.add(tree);
+  }
+
+  // ---- Neuilly St James: "the first of the world's air-ship stations" — a
+  // great square tent striped red and white, in a walled lot by the river
+  const station = new THREE.Group();
+  const tent = new THREE.Mesh(new THREE.BoxGeometry(38, 17, 26),
+    new THREE.MeshLambertMaterial({ map: stripedTentTexture() }));
+  tent.position.y = 8.5;
+  station.add(tent);
+  const tentRoof = new THREE.Mesh(new THREE.ConeGeometry(26, 8, 4),
+    new THREE.MeshLambertMaterial({ color: 0xefe7d6 }));
+  tentRoof.rotation.y = Math.PI / 4;
+  tentRoof.position.y = 21;
+  station.add(tentRoof);
+  for (const [wx, wz, ww, wd] of [[0, -34, 92, 1.6], [0, 34, 92, 1.6], [-46, 0, 1.6, 68], [46, 0, 1.6, 68]]) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(ww, 5, wd), stone);   // "my wall"
+    wall.position.set(wx, 2.5, wz);
+    station.add(wall);
+  }
+  station.position.set(-1880, 0, -690);
+  station.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(station);
+  buildings.push({ x: -1880, z: -690, w: 40, d: 28, h: 21, top: 25 });
+
+  // ---- the Jardin d'Acclimatation's captive balloon, where the No. 1 was
+  // inflated at one franc the cubic metre
+  const capt = new THREE.Group();
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 12),
+    new THREE.MeshLambertMaterial({ color: 0xd8c79a }));
+  ball.position.y = 96;
+  capt.add(ball);
+  const basket = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.4, 3, 10), wood);
+  basket.position.y = 78;
+  capt.add(basket);
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 76, 5),
+    new THREE.MeshLambertMaterial({ color: 0x3a2f22 }));
+  cable.position.y = 38;
+  capt.add(cable);
+  capt.position.set(-1560, 0, -470);
+  scene.add(capt);
+
+  // ---- the Moulin de Longchamp: the abbey's old mill, standing on the
+  // racecourse he circled ten times in the No. 5
+  const mill = new THREE.Group();
+  const millTower = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 6, 16, 12), stone);
+  millTower.position.y = 8;
+  mill.add(millTower);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(5.4, 5, 12),
+    new THREE.MeshLambertMaterial({ color: 0x4a3d2c }));
+  cap.position.y = 18;
+  mill.add(cap);
+  const sails = new THREE.Group();
+  for (let i = 0; i < 4; i++) {
+    const sail = new THREE.Mesh(new THREE.BoxGeometry(1.1, 15, 0.4), wood);
+    sail.position.y = 7.5;
+    const arm = new THREE.Group();
+    arm.add(sail);
+    arm.rotation.z = i * Math.PI / 2;
+    sails.add(arm);
+  }
+  sails.position.set(-5.6, 17, 0);
+  mill.add(sails);
+  mill.position.set(-1010, 0, 118);
+  mill.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(mill);
+  buildings.push({ x: -1010, z: 118, w: 12, d: 12, h: 16, top: 23 });
+
+  // ---- the Auteuil racecourse, whose crowd cheered him on the Deutsch run
+  addOval(scene, -870, 430, 190, 120, 0x86a05e, 0.12);
+  const stand = new THREE.Mesh(new THREE.BoxGeometry(70, 12, 18),
+    new THREE.MeshLambertMaterial({ color: 0xcfc4a8 }));
+  stand.position.set(-870, 6, 566);
+  stand.castShadow = true;
+  scene.add(stand);
+  buildings.push({ x: -870, z: 566, w: 70, d: 18, h: 12, top: 14 });
+
+  // ---- the Parc d'Aérostation of Vaugirard: Lachambre's balloon works, where
+  // he made his first ascent and started the Nos. 2 and 3
+  const vg = new THREE.Group();
+  const shed = new THREE.Mesh(new THREE.BoxGeometry(34, 12, 20), stone);
+  shed.position.y = 6;
+  vg.add(shed);
+  const gasHolder = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 16, 14),
+    new THREE.MeshLambertMaterial({ color: 0x6f6a5e }));
+  gasHolder.position.set(32, 8, 8);
+  vg.add(gasHolder);
+  vg.position.set(430, 0, 560);
+  vg.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(vg);
+  buildings.push({ x: 430, z: 560, w: 36, d: 22, h: 12, top: 14 });
+  buildings.push({ x: 462, z: 568, w: 28, d: 28, h: 16, top: 17 });
+
+  return { sails };
 }
 
 // ---------------------------------------------------------------- Seine
@@ -1062,38 +1301,122 @@ function addTrees(scene) {
 }
 
 // ---------------------------------------------------------------- Eiffel Tower
+// The Tower as she stood: four legs on a curve that bows in hard off the
+// ground and straightens as it climbs, laced with cross-braces, four arches at
+// the base, three platforms, the campanile and the lightning conductor he
+// rounded "at a distance of about 50 metres". Every member goes into ONE
+// instanced mesh — some four hundred of them for a single draw call.
+const TOWER_ANCH = [[0, 52], [100, 21], [200, 9.5], [295, 2.4], [305, 2.0]];
+
+// half-offset of a leg's centre line from the axis, at height y
+function legHalf(y) {
+  for (let i = 1; i < TOWER_ANCH.length; i++) {
+    const [y0, r0] = TOWER_ANCH[i - 1], [y1, r1] = TOWER_ANCH[i];
+    if (y <= y1) {
+      const u = Math.max(0, (y - y0) / (y1 - y0));
+      return r0 + (r1 - r0) * Math.pow(u, 0.75);   // bows inward, then straightens
+    }
+  }
+  return 2.0;
+}
+
 function makeTower() {
   const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x3b3128 });
-  const beam = (x1, y1, z1, x2, y2, z2, r) => {
-    const a = new THREE.Vector3(x1, y1, z1), b = new THREE.Vector3(x2, y2, z2);
-    const len = a.distanceTo(b);
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 5), mat);
-    mesh.position.copy(a).add(b).multiplyScalar(0.5);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.sub(a).normalize());
-    g.add(mesh);
+  const members = [];          // {a, b, w} — a girder from a to b, w metres thick
+  const A = new THREE.Vector3(), B = new THREE.Vector3();
+  const put = (x1, y1, z1, x2, y2, z2, w) => members.push({
+    a: new THREE.Vector3(x1, y1, z1), b: new THREE.Vector3(x2, y2, z2), w });
+
+  const corners = [[1, 1], [1, -1], [-1, -1], [-1, 1]];
+  const levels = [];
+  for (let y = 0; y <= 300; y += 6) levels.push(y);
+
+  // ---- the four legs, each a chain following the curve
+  for (const [sx, sz] of corners) {
+    for (let i = 1; i < levels.length; i++) {
+      const y0 = levels[i - 1], y1 = levels[i];
+      const h0 = legHalf(y0), h1 = legHalf(y1);
+      const w = 3.4 - 2.6 * (y0 / 300);
+      put(sx * h0, y0, sz * h0, sx * h1, y1, sz * h1, w);
+    }
+  }
+
+  // ---- ties and cross-bracing on all four faces, between every other level
+  for (let i = 2; i < levels.length; i += 2) {
+    const y0 = levels[i - 2], y1 = levels[i];
+    const h0 = legHalf(y0), h1 = legHalf(y1);
+    const w = 1.0 - 0.55 * (y0 / 300);
+    for (let c = 0; c < 4; c++) {
+      const [ax, az] = corners[c], [bx, bz] = corners[(c + 1) % 4];
+      put(ax * h1, y1, az * h1, bx * h1, y1, bz * h1, w);            // horizontal tie
+      put(ax * h0, y0, az * h0, bx * h1, y1, bz * h1, w * 0.8);      // the X
+      put(bx * h0, y0, bz * h0, ax * h1, y1, az * h1, w * 0.8);
+    }
+  }
+
+  // ---- the four great arches under the first platform
+  for (let c = 0; c < 4; c++) {
+    const [ax, az] = corners[c], [bx, bz] = corners[(c + 1) % 4];
+    const N = 10;
+    for (let i = 0; i < N; i++) {
+      const u0 = i / N, u1 = (i + 1) / N;
+      const pt = (u) => {
+        const h = legHalf(8 + u * 48);
+        const x = (ax + (bx - ax) * u) * h, z = (az + (bz - az) * u) * h;
+        return [x, 14 + Math.sin(Math.PI * u) * 44, z];
+      };
+      const [x0, y0, z0] = pt(u0), [x1, y1, z1] = pt(u1);
+      put(x0, y0, z0, x1, y1, z1, 1.6);
+    }
+  }
+
+  // ---- one instanced mesh for the whole lattice
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  const latMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const lattice = new THREE.InstancedMesh(boxGeo, latMat, members.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color();
+  const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  members.forEach((mem, i) => {
+    dir.copy(mem.b).sub(mem.a);
+    const len = dir.length() || 0.001;
+    q.setFromUnitVectors(up, dir.normalize());
+    A.copy(mem.a).add(mem.b).multiplyScalar(0.5);
+    m.compose(A, q, B.set(mem.w, len, mem.w));
+    lattice.setMatrixAt(i, m);
+    // the real tower was painted in graded shades, darkest at the feet
+    const t = Math.min(1, A.y / 300);
+    col.setHSL(0.078, 0.26 - t * 0.08, 0.17 + t * 0.13);
+    lattice.setColorAt(i, col);
+  });
+  lattice.instanceColor.needsUpdate = true;
+  lattice.castShadow = true;
+  g.add(lattice);
+
+  // ---- platforms, with a railing course around each
+  const deckMat = new THREE.MeshLambertMaterial({ color: 0x4a3f31 });
+  const platRail = new THREE.MeshLambertMaterial({ color: 0x2e2820 });
+  const platform = (y, half, thick) => {
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(half * 2.3, thick, half * 2.3), deckMat);
+    deck.position.y = y; deck.castShadow = true; g.add(deck);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(half * 2.36, 2.4, half * 2.36), platRail);
+    rail.position.y = y + thick / 2 + 1.2; g.add(rail);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(half * 2.1, 3, half * 2.1), deckMat);
+    inner.position.y = y + thick / 2 + 1.2; g.add(inner);   // hollow it with an inset block
   };
-  // stage 1: four legs, 0 -> 100
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    beam(sx * 52, 0, sz * 52, sx * 21, 100, sz * 21, 3.2);
-    beam(sx * 52, 0, 0, sx * 21, 100, 0, 1.2);       // face lattice hint
-    beam(0, 0, sz * 52, 0, 100, sz * 21, 1.2);
-  }
-  // arches
-  for (const s of [-1, 1]) {
-    beam(s * 52, 12, -40, s * 30, 58, 0, 1.4); beam(s * 30, 58, 0, s * 52, 12, 40, 1.4);
-    beam(-40, 12, s * 52, 0, 58, s * 30, 1.4); beam(0, 58, s * 30, 40, 12, s * 52, 1.4);
-  }
-  const plat1 = new THREE.Mesh(new THREE.BoxGeometry(62, 6, 62), mat); plat1.position.y = 100; g.add(plat1);
-  // stage 2: 100 -> 200
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) beam(sx * 21, 100, sz * 21, sx * 9.5, 200, sz * 9.5, 2.2);
-  for (const sx of [-1, 1]) { beam(sx * 21, 100, -21, sx * 9.5, 200, 9.5, 0.9); beam(sx * 21, 100, 21, sx * 9.5, 200, -9.5, 0.9); }
-  const plat2 = new THREE.Mesh(new THREE.BoxGeometry(30, 5, 30), mat); plat2.position.y = 200; g.add(plat2);
-  // stage 3: 200 -> 295
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) beam(sx * 9.5, 200, sz * 9.5, sx * 2.4, 295, sz * 2.4, 1.6);
-  const plat3 = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 12), mat); plat3.position.y = 296; g.add(plat3);
-  const dome = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 6, 8), mat); dome.position.y = 301; g.add(dome);
-  beam(0, 303, 0, 0, 318, 0, 0.5); // lightning conductor — round it at 50 m!
+  platform(100, legHalf(100) + 8, 5);
+  platform(200, legHalf(200) + 5, 4);
+  platform(292, legHalf(292) + 4, 3.4);
+
+  // ---- the campanile, the lantern, and the conductor at the very top
+  const capMat = new THREE.MeshLambertMaterial({ color: 0x5a4d3c });
+  const campanile = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 5.6, 9, 10), capMat);
+  campanile.position.y = 299; campanile.castShadow = true; g.add(campanile);
+  const lantern = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 8),
+    new THREE.MeshLambertMaterial({ color: 0xe8c477, emissive: 0x6b5320 }));
+  lantern.position.y = 306; g.add(lantern);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 14, 6), capMat);
+  mast.position.y = 314; g.add(mast);   // "the Tower's lightning conductor"
+
   g.position.copy(TOWER_POS);
   return g;
 }

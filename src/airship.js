@@ -446,11 +446,43 @@ export class Airship {
     // runs on a cord outboard of the keel rail, clear of the basket
     this.weightMesh.position.set(0, -drop - 0.35, 0.85);
     this.pitchGroup.add(this.weightMesh);
-    const motor = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 0.8), dark);
-    if (K.type === 'basket-long') motor.position.set(-1.05, -drop - 0.35, 0); // slung at the basket (Nos. 1-2)
-    else motor.position.set(K.type === 'minimal' ? -1.6 : 2.2, -drop + 0.15, 0);
-    if (prop === 'none') motor.visible = false; // the "Brazil" carries no motor
-    this.pitchGroup.add(motor);
+    // The motor belongs WITH its screw: a crankcase, cylinders standing up out
+    // of it, the radiator ahead, exhaust stubs, and a shaft running to the hub.
+    // (Before this the screw turned in clear air with the engine amidships.)
+    const P0 = this.spec.physics;
+    const brassM = new THREE.MeshPhongMaterial({ color: 0x8a6b2f, shininess: 60 });
+    const copper = new THREE.MeshPhongMaterial({ color: 0x7d4a2e, shininess: 40 });
+    const mkEngine = (x, facing) => {
+      const e = new THREE.Group();
+      const cyls = prop === 'both' ? 4 : (P0.thrust > 6 ? 4 : 2);   // the big ships got four
+      const crank = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.42, 0.62), dark);
+      e.add(crank);
+      for (let i = 0; i < cyls; i++) {
+        const c = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.13, 0.44, 8), dark);
+        c.position.set(-0.36 + (i / Math.max(1, cyls - 1)) * 0.72, 0.42, 0);
+        e.add(c);
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.1, 6), brassM);
+        head.position.set(c.position.x, 0.66, 0);
+        e.add(head);
+        const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 5), copper);
+        pipe.rotation.x = Math.PI / 2;
+        pipe.position.set(c.position.x, 0.5, 0.2);
+        e.add(pipe);
+      }
+      // the water radiator, hung on the side the airflow meets
+      const rad = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.72), copper);
+      rad.position.set(facing * 0.62, 0.12, 0);
+      e.add(rad);
+      // the shaft, out to the screw's hub
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.0, 6), brassM);
+      shaft.rotation.z = Math.PI / 2;
+      shaft.position.set(-facing * 0.72, 0, 0);
+      e.add(shaft);
+      e.position.set(x, -drop + 0.15, 0);
+      e.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      this.pitchGroup.add(e);
+      return e;
+    };
 
     // suspension wires
     const wirePts = [];
@@ -466,19 +498,32 @@ export class Airship {
     this.wires = new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0x2a2119, transparent: true, opacity: 0.75 }));
     this.pitchGroup.add(this.wires);
 
-    // propeller(s)
+    // propeller(s): two silk-covered blades on a hub, with their motor set
+    // just inboard of them and a shaft between (Fig. 10; the No. 4's screw at
+    // the bow, the No. 7's pair at bow and stern)
     this.props = [];
-    const mkProp = (x) => {
+    const bladeMat = new THREE.MeshLambertMaterial({ color: 0xd8cdb2, side: THREE.DoubleSide });
+    const mkProp = (x, facing) => {
       const holder = new THREE.Group();
       holder.position.set(x, -drop + 0.15, 0);
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.4, 0.5), new THREE.MeshLambertMaterial({ color: 0xd8cdb2 }));
-      holder.add(blade);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.3, 8), dark);
+      hub.rotation.z = Math.PI / 2;
+      holder.add(hub);
+      const span = prop === 'both' ? 2.5 : 2.2;
+      for (const sgn of [1, -1]) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, span, 0.46), bladeMat);
+        blade.position.y = sgn * (span / 2 + 0.1);
+        blade.rotation.x = sgn * 0.34;          // the pitch of the blade
+        holder.add(blade);
+      }
+      holder.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       this.pitchGroup.add(holder);
       this.props.push(holder);
+      mkEngine(x + facing * 1.35, facing);      // her motor, right behind the screw
     };
     const sternX = K.type === 'basket-long' ? -1.95 : -K.length / 2 - 0.8; // Nos. 1-2: prop right at the basket
-    if (prop === 'stern' || prop === 'both') mkProp(sternX);
-    if (prop === 'bow' || prop === 'both') mkProp(K.length / 2 + 0.8);
+    if (prop === 'stern' || prop === 'both') mkProp(sternX, 1);
+    if (prop === 'bow' || prop === 'both') mkProp(K.length / 2 + 0.8, -1);
 
     // rudder — the white triangle of the photographs (the "Brazil" has none)
     this.rudder = null;
@@ -859,7 +904,9 @@ export class Airship {
     // helm to port (positive input) swings the trailing edge to PORT
     if (this.rudder) this.rudder.rotation.y = -this.rudderInput * 0.5;
     this.shadow.position.set(this.pos.x, 0.5, this.pos.z);
-    const so = clamp(0.26 * (1 - this.pos.y / 350), 0, 0.26);
+    // the sun already casts a true shadow; this is only a soft contact hint,
+    // so keep it faint or it reads as a black disc painted on the ground
+    const so = clamp(0.15 * (1 - this.pos.y / 260), 0, 0.15);
     this.shadow.material.opacity = so;
   }
 

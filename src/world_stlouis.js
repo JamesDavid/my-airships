@@ -69,10 +69,17 @@ export function buildWorldStLouis(scene) {
 
   // ---------- Festival Hall on Art Hill, at the basin's head ----------
   const white = new THREE.MeshLambertMaterial({ color: 0xefe9dc });
-  const hill = new THREE.Mesh(new THREE.ConeGeometry(220, 46, 18),
+  // Art Hill is a truncated mound with a level crown — Festival Hall's flat
+  // base needs ground under all of it, not the point of a cone
+  const hill = new THREE.Mesh(new THREE.CylinderGeometry(96, 220, 46, 18, 1),
     new THREE.MeshLambertMaterial({ color: 0x74884f }));
   hill.position.set(620, 23, 0); hill.receiveShadow = true;
   scene.add(hill);
+  const crown = new THREE.Mesh(new THREE.CircleGeometry(96, 18),
+    new THREE.MeshLambertMaterial({ color: 0x7c9055 }));
+  crown.rotation.x = -Math.PI / 2; crown.position.set(620, 46.05, 0);
+  crown.receiveShadow = true;
+  scene.add(crown);
   const fest = new THREE.Group();
   const festBase = new THREE.Mesh(new THREE.CylinderGeometry(42, 46, 26, 16), white);
   festBase.position.y = 13; fest.add(festBase);
