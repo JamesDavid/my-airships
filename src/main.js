@@ -67,7 +67,8 @@ function historicTrack() {
   return {
     id: 'historic_' + currentLocation,
     name: world.name, location: currentLocation,
-    laps: 1, historic: true,
+    // St. Louis is three laps of the triangle, as he proposed it
+    laps: world.raceLaps || 1, historic: true,
     gates: (world.gates || []).map((g) => ({ x: g.x, y: g.y, z: g.z, r: 24 })),
   };
 }
@@ -838,7 +839,11 @@ function updateRace(dt) {
           if (!track.historic) showSplit();
           race.gate++;
           if (race.gate === gates.length) {
-            if (track.historic) {
+            if (track.historic && race.lap < track.laps) {
+              // another circuit of the pylons before the run for home
+              race.lap++; race.gate = 0;
+              addMsg('lap', `Lap ${race.lap} of ${track.laps} — round again!`, 0);
+            } else if (track.historic) {
               addMsg('turn', world.hints.turnMsg, 0);
               race.sputterAt = race.t + 10 + Math.random() * 18;
             } else if (race.lap < track.laps) {
@@ -1285,7 +1290,7 @@ function updateHUD() {
   }
   const s = race.state;
   el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';
-  el('lapline').textContent = (s === 'run' && track && !track.historic && track.laps > 1)
+  el('lapline').textContent = (s === 'run' && track && track.laps > 1)
     ? `LAP ${race.lap} / ${track.laps}` : '';
   if (performance.now() > splitUntil) { el('split').textContent = ''; el('split').className = ''; }
   let obj = '';

@@ -179,9 +179,9 @@ export const SCENARIOS = [
   {
     id: 'no7-stlouis',
     title: 'VI. The Grand Prize (St. Louis, 1904)',
-    sub: 'No. 7 — three pylons, two rivals, $100,000',
+    sub: 'No. 7 — three pylons, three laps, two rivals, $100,000',
     location: 'stlouis', shipId: 'no7',
-    brief: 'The race that never happened: the triangular course you proposed to the Exposition, flown in the racing No. 7 against La Ville de Paris and a No. 6. Beat the clock — and beat them.',
+    brief: 'The race that never happened: the equal-sided triangle you proposed to the Exposition — three laps of it, at half again the Deutsch pace — flown in the racing No. 7 against La Ville de Paris and a No. 6. Beat the clock, and beat them.',
     setup(ctx) {
       ctx.setCenter('St. Louis, 1904', 'The rivals are inflating. Fly to the gold ring and begin (Enter, or GO) — the clock starts then.');
       this.done = false;

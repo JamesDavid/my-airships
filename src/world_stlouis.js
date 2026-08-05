@@ -10,15 +10,22 @@ import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurfac
 
 const PAD = new THREE.Vector3(-900, 2, 60);
 const START = new THREE.Vector3(-820, 55, 60);
-// the three pylons you round (visual towers)…
-const PYLONS = [
-  new THREE.Vector3(-150, 0, -560),
-  new THREE.Vector3(760, 0, -220),
-  new THREE.Vector3(260, 0, 470),
-];
+// "I suggested that three great towers or flagstaffs be erected in the grounds
+// at the corners of an EQUAL-SIDED triangle. The comparatively short course
+// around them — between 10 and 20 miles — would afford a decisive test of
+// dirigibility no matter in what way the wind might blow; while as for speed,
+// the necessary average might be increased 50 per cent. over that fixed for the
+// Deutsch prize" (Ch. XXIV). So: a true equilateral triangle, 500 m to each
+// corner from the centre of the open ground, flown three times — 11.1 miles at
+// full scale — and a limit set by that 50-per-cent-faster average.
+const TRI_C = { x: 230, z: 60 }, TRI_R = 500, TRI_ROT = 0.7;
+const PYLONS = [0, 1, 2].map((i) => {
+  const a = -Math.PI / 2 + TRI_ROT + i * 2 * Math.PI / 3;
+  return new THREE.Vector3(TRI_C.x + Math.cos(a) * TRI_R, 0, TRI_C.z + Math.sin(a) * TRI_R);
+});
 // …and the race gates: rings set ~40 m OUTSIDE each pylon, so flying the
 // hoop naturally rounds the tower (the ring is never on the pole itself)
-const CENTROID = { x: 290, z: -103 };
+const CENTROID = TRI_C;
 const GATES = PYLONS.map((p) => {
   const dx = p.x - CENTROID.x, dz = p.z - CENTROID.z;
   const len = Math.hypot(dx, dz) || 1;
@@ -287,9 +294,9 @@ export function buildWorldStLouis(scene) {
     gates: GATES,
     rivalSpecs: ['villedeparis', 'no6'],
     towSpots: [{ name: 'the Grand Basin plaza', pos: new THREE.Vector3(60, 0, 120) }],
-    limitNote: 'the $100,000 grand prize',
+    limitNote: 'three laps at the pace he asked for — half again the Deutsch',
     windBase: WINDB,
-    raceLimit: 600, raceRecord: 540,
+    raceLimit: 1030, raceRecord: 950, raceLaps: 3,
     vistaPos: new THREE.Vector3(620, 120, 60), // from Festival Hall
     hints: {
       idleNear: 'Press ENTER for the grand prize — three pylons, two rivals. (ships 1-7, 9, 0, B · L travels)',
