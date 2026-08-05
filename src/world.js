@@ -306,16 +306,22 @@ export function buildWorld(scene) {
     abut.position.set(sx * 41, DECKY / 2, 0);
     abut.castShadow = abut.receiveShadow = true;
     wb.add(abut);
-    const ramp = new THREE.Mesh(new THREE.BoxGeometry(RAMP, 2.2, 13),
+    // The ramp must fall AWAY from the bridge. Rotating by +θ on the +x side
+    // lifts the far end instead — which built a pair of takeoff ramps rising
+    // into the air at both ends of the crossing.
+    const slope = Math.atan2(DECKY - 0.6, RAMP);
+    const midY = (DECKY + 0.6) / 2;
+    const midX = sx * (48 + RAMP / 2);
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(RAMP, 2.4, 13),
       new THREE.MeshLambertMaterial({ color: 0x9a9285 }));
-    ramp.position.set(sx * (48 + RAMP / 2 - 2), DECKY / 2 - 0.4, 0);
-    ramp.rotation.z = sx * Math.atan2(DECKY - 1.2, RAMP);   // sloping down to the turf
+    ramp.position.set(midX, midY - 1.2, 0);
+    ramp.rotation.z = -sx * slope;
     ramp.receiveShadow = true;
     wb.add(ramp);
     for (const sz of [-1, 1]) {                   // the ramp keeps its parapets
       const rp = new THREE.Mesh(new THREE.BoxGeometry(RAMP, 1.2, 1.1), bridgeMat);
-      rp.position.set(sx * (48 + RAMP / 2 - 2), DECKY / 2 + 0.7, sz * 6);
-      rp.rotation.z = sx * Math.atan2(DECKY - 1.2, RAMP);
+      rp.position.set(midX, midY + 0.6, sz * 6);
+      rp.rotation.z = -sx * slope;
       wb.add(rp);
     }
   }
@@ -330,11 +336,14 @@ export function buildWorld(scene) {
     strip.receiveShadow = true;
     scene.add(strip);
   };
-  road(-2360, -250, -2072, -250, 13);          // from the village to the bridge
-  road(-1900, -250, -1700, -250, 13);          // and away on the Paris bank
-  road(-2360, -250, -2330, 90, 11);            // up through Saint-Cloud to the church
-  road(-2072, -250, -2140, 0, 11);             // a lane down to the Aéro-Club field
-  wb.position.set(-1986, 0, -250);
+  // the Paris-Versailles road over the Pont de Saint-Cloud: out of the town,
+  // across the river, and on into the Bois toward Longchamp
+  road(-2330, 300, -2080, 260, 13);            // through Saint-Cloud to the bridge
+  road(-1908, 260, -1600, 230, 13);            // and away on the Bois bank
+  road(-1600, 230, -1250, 200, 12);            // the allée to the racecourse
+  road(-2330, 300, -2340, 90, 11);             // the village street to the church
+  road(-2080, 260, -2140, 20, 10);             // the lane down to the Aéro-Club field
+  wb.position.set(-1994, 0, 260);   // 250 m (0.5 km at full scale) upstream
   wb.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(wb);
 
@@ -795,7 +804,7 @@ function makeArc(pos) {
 // ---------------------------------------------------------- the book's places
 // Everything here is named in "My Airships" or stands on the 1900 plans of the
 // ground he flew over. See docs/PERIOD_NOTES.md for the map sources.
-const PUTEAUX = { x: -1985, z: -700, rx: 130, rz: 38 };   // the island in the reach
+const PUTEAUX = { x: -2050, z: -1030, rx: 130, rz: 38 };  // below the Suresnes bridge   // the island in the reach
 
 export function onPuteaux(x, z) {
   const dx = (x - PUTEAUX.x) / PUTEAUX.rx, dz = (z - PUTEAUX.z) / PUTEAUX.rz;
@@ -854,29 +863,36 @@ function addBookPlaces(scene, buildings) {
     seg.rotation.z = Math.cos(ang) * 0.5;
     aq.add(seg);
   }
-  // the ends must land on something: a masonry abutment at each bank, taking
-  // the conduit down to the ground instead of leaving the deck in mid-air
+  // The ends have to land on something. A masonry abutment takes the deck's
+  // weight at each bank, and beyond it an EARTH EMBANKMENT carries the conduit
+  // down into the ground on a continuous slope — two blocks of different
+  // heights just made a flight of stairs out of it.
+  const EMB = 90;
   for (const sx of [-1, 1]) {
-    const abut = new THREE.Mesh(new THREE.BoxGeometry(22, DECK + 1.5, 13), stone);
-    abut.position.set(sx * (SPAN / 2 - 6), (DECK + 1.5) / 2 - 0.5, 0);
+    const abut = new THREE.Mesh(new THREE.BoxGeometry(20, DECK + 1.5, 14), stone);
+    abut.position.set(sx * (SPAN / 2 - 4), (DECK + 1.5) / 2 - 0.6, 0);
     abut.castShadow = abut.receiveShadow = true;
     aq.add(abut);
-    // and a lower shoulder stepping down to the towpath
-    const step = new THREE.Mesh(new THREE.BoxGeometry(16, DECK * 0.55, 11), stone);
-    step.position.set(sx * (SPAN / 2 + 12), DECK * 0.275 - 0.4, 0);
-    step.castShadow = true;
-    aq.add(step);
+    // the bank itself: high at the abutment, running out to nothing
+    const slope = Math.atan2(DECK - 0.5, EMB);
+    const emb = new THREE.Mesh(new THREE.BoxGeometry(EMB, 8, 24),
+      new THREE.MeshLambertMaterial({ color: 0x7b8a54 }));
+    emb.position.set(sx * (SPAN / 2 + EMB / 2 - 6),
+      (DECK - 0.5) / 2 - 3.4, 0);
+    emb.rotation.z = -sx * slope;           // FAR end down: the near end meets the deck
+    emb.receiveShadow = true;
+    aq.add(emb);
   }
 
   // The reach here runs north and south, so the crossing runs east and west:
   // the deck's long axis is local +x and the group is NOT turned. (Rotating it
   // a quarter turn laid the whole aqueduct along the water instead of over it.)
-  aq.position.set(-1985, 0, 60);
+  aq.position.set(-1985, 0, 10);   // on the homeward line, per the plate
   aq.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(aq);
   buildings.length -= 2;                            // re-place the piers in world terms
   for (const px of [-38, 38]) {
-    buildings.push({ x: -1985 + px, z: 60, w: 9, d: 9, h: DECK, top: DECK });
+    buildings.push({ x: -1985 + px, z: 10, w: 9, d: 9, h: DECK, top: DECK });
   }
 
   // ---- M. Henry Deutsch's air-ship house, a bare skeleton "scarcely two
@@ -1024,6 +1040,37 @@ function addBookPlaces(scene, buildings) {
     scene.add(tr2);
   }
 
+  // ---- the Pont de Suresnes, 1.5 km (750 m here) below the Avre passerelle,
+  // where the succession of crossings on the map puts it
+  const sur = new THREE.Group();
+  const surDeck = new THREE.Mesh(new THREE.BoxGeometry(92, 2.2, 12), stone);
+  surDeck.position.y = 6.2; sur.add(surDeck);
+  for (const px of [-28, 0, 28]) {
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(6.5, 6.2, 10), stone);
+    pier.position.set(px, 3.1, 0); sur.add(pier);
+  }
+  for (const px of [-14, 14]) {
+    const arch = new THREE.Mesh(
+      new THREE.CylinderGeometry(7.5, 7.5, 11, 14, 1, false, 0, Math.PI), stone);
+    arch.rotation.x = -Math.PI / 2;
+    arch.position.set(px, 5.2, 0);
+    arch.scale.set(0.95, 1, 0.52);
+    sur.add(arch);
+  }
+  for (const sx of [-1, 1]) {
+    const abut = new THREE.Mesh(new THREE.BoxGeometry(13, 6.2, 12), stone);
+    abut.position.set(sx * 39, 3.1, 0); sur.add(abut);
+    const slope = Math.atan2(5.6, 30);
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(30, 2.2, 12),
+      new THREE.MeshLambertMaterial({ color: 0x9a9285 }));
+    ramp.position.set(sx * 61, 2.4, 0);
+    ramp.rotation.z = -sx * slope;
+    sur.add(ramp);
+  }
+  sur.position.set(-2036, 0, -740);
+  sur.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(sur);
+
   // ---- the Île de Puteaux, where the No. 9 caught fire crossing the Seine,
   // and the far end of the No. 5's morning excursion from Longchamps
   const isle = new THREE.Mesh(new THREE.CircleGeometry(1, 26),
@@ -1062,10 +1109,10 @@ function addBookPlaces(scene, buildings) {
     wall.position.set(wx, 2.5, wz);
     station.add(wall);
   }
-  station.position.set(-1880, 0, -690);
+  station.position.set(-1930, 0, -1180);
   station.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(station);
-  buildings.push({ x: -1880, z: -690, w: 40, d: 28, h: 21, top: 25 });
+  buildings.push({ x: -1930, z: -1180, w: 40, d: 28, h: 21, top: 25 });
 
   // ---- the Jardin d'Acclimatation's captive balloon, where the No. 1 was
   // inflated at one franc the cubic metre

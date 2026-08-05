@@ -42,6 +42,28 @@ choices in `src/world.js` and `src/world_monaco.js`.
   Santos-Dumont's aerodrome on the Boulevard de la Condamine, over the sea wall from
   the pebble beach (book A9/A11).
 
+## The crossings at Saint-Cloud (implemented)
+
+The Seine's western reach carried three structures in a fixed order, and the
+game places them at half scale in that order and spacing:
+
+1. **Pont de Saint-Cloud** — the stone road bridge on the Paris–Versailles road,
+   upstream of the others. Carries the road out of the town, over the river and
+   on into the Bois toward Longchamp.
+2. **Passerelle de l'Avre** — Gustave Eiffel's iron aqueduct-footbridge of 1891,
+   carrying Avre water to Paris "à la lisière du bois de Boulogne". It stands
+   **0.5 km downstream** of the Saint-Cloud crossing (250 m here), which puts it
+   under the homeward line of the Deutsch course — exactly as the book's plate
+   "Returning to Aéro Club Grounds above Aqueduct" shows. No road: a water
+   conduit with a footway, running into an earth embankment at each bank.
+3. **Pont de Suresnes** — **1.5 km downstream** of the Avre passerelle (750 m
+   here), with the Île de Puteaux below it and Neuilly St James beyond.
+
+Sources: fr.wikipedia.org/wiki/Passerelle_de_l'Avre (position in the succession
+of Seine crossings: "Viaduc de Saint-Cloud à 0,5 km amont, Pont de Suresnes à
+1,5 km aval"; Eiffel, inaugurated 1891); structurae.net/en/structures/avre-aqueduct;
+en.wikipedia.org/wiki/Pont_de_Saint-Cloud.
+
 ## Wind-reading (goal: environment as instrument)
 
 Period-plausible wind tells implemented: water surface streams downwind (wave-normal
