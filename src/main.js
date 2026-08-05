@@ -487,6 +487,42 @@ function cycleCamera() {
 // ---------------------------------------------------------------- menu
 const menuEl = document.getElementById('menu');
 let menuOpen = false;
+let menuTab = 'solo';
+
+// The tab rail: what am I doing, then what am I flying, then where. The
+// Together tab exists only when a record office is configured — configure
+// nothing and multiplayer is not merely disabled, it is absent.
+function buildTabs() {
+  const tabs = [['solo', 'Solo'], ['together', 'Together'], ['ship', 'Ship'],
+    ['place', 'Place'], ['options', 'Options']];
+  const rail = document.getElementById('menuTabs');
+  rail.innerHTML = '';
+  for (const [id, label] of tabs) {
+    if (id === 'together' && !net.enabled()) continue;
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (id === 'together' && live.inRoom()) {
+      const pip = document.createElement('span');
+      pip.className = 'pip';
+      pip.textContent = `● ${roomRoster.length || live.roster().length}`;
+      b.appendChild(pip);
+    }
+    if (id === menuTab) b.classList.add('on');
+    b.onclick = () => { menuTab = id; showPane(); };
+    rail.appendChild(b);
+  }
+  showPane();
+}
+function showPane() {
+  if (menuTab === 'together' && !net.enabled()) menuTab = 'solo';
+  for (const p of document.querySelectorAll('#menuBody .pane')) {
+    p.classList.toggle('on', p.dataset.pane === menuTab);
+  }
+  for (const b of document.querySelectorAll('#menuTabs button')) {
+    b.classList.toggle('on', b.textContent.replace(/●.*$/, '').trim()
+      === ({ solo: 'Solo', together: 'Together', ship: 'Ship', place: 'Place', options: 'Options' })[menuTab]);
+  }
+}
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
   menuEl.classList.toggle('hidden', !menuOpen);
@@ -496,6 +532,7 @@ function toggleMenu(force) {
     if (net.enabled()) {
       live.watchLobby((list) => { openRooms = list.filter((r) => !r.mine); if (menuOpen) buildMenuButtons(); });
     }
+    if (live.inRoom() && menuTab === 'solo') menuTab = 'together';   // land where the action is
     buildMenuButtons();
     document.getElementById('help').classList.add('hidden');
     document.getElementById('board').classList.add('hidden');
@@ -634,48 +671,6 @@ function buildMenuButtons() {
         () => { submitBest(track, ghostBest); toggleMenu(false); });
     }
   }
-  // ---- flying together ----
-  if (net.enabled()) {
-    if (!live.inRoom()) {
-      for (const r of openRooms.slice(0, 5)) {
-        const rt = TRACKS.find((x) => x.id === r.trackId);
-        menuButton(trDiv, `Join ${r.host}’s room — ${rt ? rt.name : r.trackId}`,
-          `${r.count} aboard · code ${r.code}`, () => {
-            createOrJoinRoom(r.trackId, r.code, false);
-            toggleMenu(false);
-          });
-      }
-      menuButton(trDiv, 'Fly together — open a room', 'listed for anyone to join', () => {
-        const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
-        createOrJoinRoom(t.id, live.newRoomCode(), true);
-        toggleMenu(false);
-      });
-      menuButton(trDiv, 'Fly together — join a room', 'paste a room code', () => {
-        const code = (prompt('Room code:') || '').trim().toUpperCase();
-        if (!code) return;
-        const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
-        const list = TRACKS.map((x, i) => (i + 1) + '. ' + x.name).join('\n');
-        const which = prompt('Which trial is the room flying?\n' + list, '1');
-        const pick = TRACKS[Math.max(0, Math.min(TRACKS.length - 1, (parseInt(which, 10) || 1) - 1))] || t;
-        createOrJoinRoom(pick.id, code, false);
-        toggleMenu(false);
-      });
-    } else {
-      const info = live.roomInfo();
-      menuButton(trDiv, `Room ${info.code} — ${roomRoster.length} aboard`, 'copy the code for a friend', () => {
-        try { navigator.clipboard.writeText(info.code); addMsg('room', `Room code ${info.code} copied.`, 0); }
-        catch { addMsg('room', `The room code is ${info.code}.`, 0); }
-      });
-      menuButton(trDiv, spectate.on ? 'Take a ship again' : 'Stand down and watch',
-        spectate.on ? 'rejoin the flying' : 'ride with another pilot (X cycles)', () => {
-          setSpectate(!spectate.on);
-        });
-      menuButton(trDiv, 'Leave the room', '', () => {
-        if (spectate.on) setSpectate(false);
-        live.leave(); roomRoster = []; roomResults = []; drawRoom(); buildMenuButtons();
-      });
-    }
-  }
   menuButton(trDiv, 'Load a track code', 'paste a friend’s circuit', () => {
     const code = prompt('Paste the track code:');
     if (!code) return;
@@ -709,6 +704,77 @@ function buildMenuButtons() {
   menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
   menuButton(optsDiv, 'Resume flying', '', () => toggleMenu(false));
+
+  buildTogether();
+  buildTabs();
+}
+
+// ---- the Together pane: the lobby before you are in a room, the room after
+function buildTogether() {
+  const div = document.getElementById('menuTogether');
+  if (!div) return;
+  div.innerHTML = '';
+  if (!net.enabled()) return;
+
+  if (!live.inRoom()) {
+    const head = document.createElement('div');
+    head.className = 'officeline';
+    head.innerHTML = openRooms.length
+      ? `<b>${openRooms.length} room${openRooms.length > 1 ? 's' : ''} open</b> — join one, or start your own`
+      : '<b>No rooms open</b> — start one and it will be listed here';
+    div.appendChild(head);
+
+    for (const r of openRooms.slice(0, 6)) {
+      const rt = TRACKS.find((x) => x.id === r.trackId);
+      menuButton(div, `${escapeHtml(r.host)}’s room`,
+        `${rt ? rt.name : r.trackId} · ${r.count} aboard · code ${r.code}`, () => {
+          createOrJoinRoom(r.trackId, r.code, false);
+          toggleMenu(false);
+        });
+    }
+    menuButton(div, 'Open a room', 'listed for anyone to join', () => {
+      const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
+      createOrJoinRoom(t.id, live.newRoomCode(), true);
+      toggleMenu(false);
+    });
+    menuButton(div, 'Join by code', 'if a friend sent you one', () => {
+      const code = (prompt('Room code:') || '').trim().toUpperCase();
+      if (!code) return;
+      const list = TRACKS.map((x, i) => (i + 1) + '. ' + x.name).join('\n');
+      const which = prompt('Which trial is the room flying?\n' + list, '1');
+      const pick = TRACKS[Math.max(0, Math.min(TRACKS.length - 1, (parseInt(which, 10) || 1) - 1))];
+      createOrJoinRoom(pick.id, code, false);
+      toggleMenu(false);
+    });
+    return;
+  }
+
+  // ---- in a room ----
+  const info = live.roomInfo();
+  const aboard = roomRoster.length ? roomRoster : live.roster();
+  const head = document.createElement('div');
+  head.className = 'officeline';
+  head.innerHTML = `<b>Room ${info.code}</b> — ${aboard.length} aboard, flying `
+    + `${escapeHtml((TRACKS.find((t) => t.id === info.trackId) || {}).name || info.trackId)}`;
+  div.appendChild(head);
+  for (const r of aboard) {
+    const row = document.createElement('div');
+    row.className = 'rrow' + (r.self ? ' rme' : '');
+    row.style.cssText = 'font-size:13px;padding:1px 2px';
+    row.innerHTML = `${escapeHtml(r.pilot)}<span style="opacity:.55"> · `
+      + `${r.spectating ? 'watching' : (SHIPS[r.ship] || SHIPS.no6).name.replace('Santos-Dumont ', '')}</span>`;
+    div.appendChild(row);
+  }
+  menuButton(div, 'Copy the room code', info.code, () => {
+    try { navigator.clipboard.writeText(info.code); addMsg('room', `Room code ${info.code} copied.`, 0); }
+    catch { addMsg('room', `The room code is ${info.code}.`, 0); }
+  });
+  menuButton(div, spectate.on ? 'Take a ship again' : 'Stand down and watch',
+    spectate.on ? 'rejoin the flying' : 'ride with any pilot (X cycles)', () => setSpectate(!spectate.on));
+  menuButton(div, 'Leave the room', '', () => {
+    if (spectate.on) setSpectate(false);
+    live.leave(); roomRoster = []; roomResults = []; drawRoom(); buildMenuButtons();
+  });
 }
 
 // ---------------------------------------------------------------- flying together

@@ -68,7 +68,17 @@
     color:#e9dcc4; padding:26px 34px; border:1px solid #7a6647; min-width:560px; max-height:82vh; overflow:auto; }
   #menu h2 { margin:0 0 12px; font-weight:normal; font-style:italic; font-size:24px; color:#e8c477; }
   #menu h3 { margin:0 0 6px; font-weight:normal; font-size:13px; letter-spacing:.14em; color:#a89163; }
-  #menuBody { display:flex; gap:34px; }
+  #menuTabs { display:flex; gap:6px; margin:0 0 14px; border-bottom:1px solid rgba(122,102,71,.45); }
+  #menuTabs button { background:transparent; border:1px solid transparent; border-bottom:none;
+    color:#a89163; font-family:inherit; font-size:14.5px; letter-spacing:.06em;
+    padding:7px 16px; cursor:pointer; }
+  #menuTabs button:hover { color:#e9dcc4; }
+  #menuTabs button.on { color:#e8c477; border-color:rgba(122,102,71,.55);
+    background:rgba(232,196,119,.10); margin-bottom:-1px; }
+  #menuTabs button .pip { color:#6fc48a; font-size:11px; margin-left:6px; }
+  #menuBody { display:flex; gap:34px; min-height:330px; }
+  .pane { display:none; gap:34px; width:100%; }
+  .pane.on { display:flex; }
   .menu-col { flex:1; min-width:240px; }
   #menu button { display:block; width:100%; text-align:left; margin:3px 0; padding:6px 10px;
     background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
@@ -279,12 +289,24 @@
 
 <div id="menu" class="hidden">
   <h2>My Airships</h2>
+  <div id="menuTabs"></div>
   <div id="menuBody">
-    <div class="menu-col"><h3>The Fleet</h3><div id="menuShips"></div></div>
-    <div class="menu-col"><h3>Scenarios</h3><div id="menuScens"></div>
-      <h3 style="margin-top:12px">Time Trials</h3><div id="menuTracks"></div></div>
-    <div class="menu-col"><h3>Place</h3><div id="menuPlaces"></div>
-      <h3 style="margin-top:14px">Options</h3><div id="menuOpts"></div></div>
+    <div class="pane" data-pane="solo">
+      <div class="menu-col"><h3>Scenarios</h3><div id="menuScens"></div></div>
+      <div class="menu-col"><h3>Time Trials</h3><div id="menuTracks"></div></div>
+    </div>
+    <div class="pane" data-pane="together">
+      <div class="menu-col"><div id="menuTogether"></div></div>
+    </div>
+    <div class="pane" data-pane="ship">
+      <div class="menu-col"><h3>The Fleet</h3><div id="menuShips"></div></div>
+    </div>
+    <div class="pane" data-pane="place">
+      <div class="menu-col"><h3>Where you fly</h3><div id="menuPlaces"></div></div>
+    </div>
+    <div class="pane" data-pane="options">
+      <div class="menu-col"><h3>Options</h3><div id="menuOpts"></div></div>
+    </div>
   </div>
   <div class="quote" id="menuQuote">The simulation is paused. Esc resumes.</div>
 </div>
