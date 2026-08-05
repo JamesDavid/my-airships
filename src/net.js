@@ -190,6 +190,34 @@ export async function submitTime({ trackId, shipId, run }) {
   } catch (e) { return { ok: false, reason: netReason(e) }; }
 }
 
+// ---------------------------------------------------------------- fault reports
+// A pilot's account of what went wrong, with the state of the ship and, if they
+// allow it, a picture of what they were looking at. Like everything else here
+// it is optional: with no keys configured the button never appears at all.
+export const SHOT_LIMIT = 380000;        // ~280 KB of image, base64'd
+
+export async function submitBug({ body, state, shot }) {
+  if (!enabled()) return { ok: false, reason: 'offline' };
+  const text = String(body || '').trim().slice(0, 4000);
+  if (!text) return { ok: false, reason: 'no-account' };
+  // an oversized picture would only be refused by the table's own CHECK, and
+  // the report matters more than the image — send it without rather than lose it
+  const pic = (shot && shot.length <= SHOT_LIMIT) ? shot : null;
+  const entry = {
+    pilot: pilotName() || null, pilot_id: pilotId(),
+    body: text, state: state || null, shot: pic,
+    client_version: CLIENT_VERSION,
+  };
+  try {
+    const r = await req('/rest/v1/bug_reports', {
+      method: 'POST', body: entry, timeout: 20000,
+      headers: { Prefer: 'return=minimal' },
+    });
+    if (r.ok) return { ok: true, dropped: !!shot && !pic };
+    return { ok: false, reason: httpReason(r) };
+  } catch (e) { return { ok: false, reason: netReason(e) }; }
+}
+
 // ---------------------------------------------------------------- plumbing
 function httpReason(r) {
   if (r.status === 404) return 'no-table';

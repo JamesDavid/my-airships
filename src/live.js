@@ -37,9 +37,9 @@ function seatUuid() {
 const SEAT = seatUuid();
 
 let client = null, channel = null, scene = null;
-let lobby = null, hosting = false, onLobby = null;
+let lobby = null, onLobby = null;
 let joining = 0;                   // a join in flight owns the client too
-let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false, since: 0, trackId: '' };
+let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false, since: 0, trackId: '', listed: true };
 let room = null;                   // { trackId, code, topic }
 const remotes = new Map();         // key -> { pilot, ship, buf[], mesh, label, lastSeen }
 let sendAcc = 0;
@@ -51,8 +51,13 @@ export function roster() {
   const out = [{ key: me.key, pilot: me.pilot, ship: me.ship, self: true,
     spectating: me.spectating, progress: myProgress }];
   for (const [key, r] of remotes) {
+    // where she is NOW, as drawn — the roster shows a bearing to each rival,
+    // and the interpolated position is the one the pilot can actually see
+    const last = r.buf.length ? r.buf[r.buf.length - 1] : null;
+    const pos = r.mesh ? r.mesh.pos : (last ? { x: last.x, y: last.y, z: last.z } : null);
     out.push({ key, pilot: r.pilot, ship: r.ship, self: false,
-      spectating: !!r.spectating, progress: r.progress || null });
+      spectating: !!r.spectating, progress: r.progress || null,
+      pos: (pos && !r.spectating) ? { x: pos.x, y: pos.y, z: pos.z } : null });
   }
   return out;
 }
@@ -133,13 +138,14 @@ async function openLobby() {
 }
 
 /**
- * The menu has stopped looking. A host must keep its channel anyway: the
- * announcement IS its presence there, and dropping it takes the room off
- * every other pilot's list the moment its own menu closes.
+ * The menu has stopped looking. Anyone in a room keeps the channel anyway: the
+ * announcement IS its presence there, and dropping it takes the room off every
+ * other pilot's list the moment its own menu closes — and any of them may be
+ * holding the room by then.
  */
 export function stopLobby() {
   onLobby = null;
-  if (hosting) return;
+  if (room) return;
   if (!lobby) return;
   try { lobby.unsubscribe(); } catch { /* going anyway */ }
   lobby = null;
@@ -148,27 +154,36 @@ export function stopLobby() {
 
 function lobbyList() {
   if (!lobby) return [];
-  const out = [];
+  // keyed by code, not by seat: when a host leaves, the pilot taking the room
+  // over starts announcing before the old record has expired, and for that
+  // moment one room would otherwise be listed twice
+  const by = new Map();
   for (const metas of Object.values(lobby.presenceState() || {})) {
     const m = metas[metas.length - 1];
-    if (m && m.code) out.push({ code: m.code, trackId: m.trackId, host: m.pilot, count: m.count || 1, mine: m.seat === SEAT });
+    if (!m || !m.code) continue;
+    const prev = by.get(m.code);
+    if (prev && prev.count >= (m.count || 1)) continue;
+    by.set(m.code, { code: m.code, trackId: m.trackId, host: m.pilot,
+      count: m.count || 1, mine: m.seat === SEAT });
   }
-  return out.sort((a, b) => (b.count - a.count) || a.code.localeCompare(b.code));
+  return [...by.values()].sort((a, b) => (b.count - a.count) || a.code.localeCompare(b.code));
 }
 
-/** Only the pilot who opened the room advertises it, so it is listed once. */
-export function setHosting(on) {
-  hosting = on;
-  // the room is usually opened from the menu, which closes on the same tick and
-  // takes the lobby with it — so open one rather than announce into nothing
-  if (on && !lobby) { openLobby().then(advertise).catch(() => {}); return; }
+/**
+ * Every room is open to anyone: as long as it exists it is on the list. The
+ * pilot HOLDING it announces it — not the one who opened it — so a room that
+ * outlives its founder stays listed under whoever inherits it.
+ */
+export function setHosting() {
+  // the room is opened from the menu, which closes on the same tick and takes
+  // the lobby with it — so open one rather than announce into nothing
+  if (!lobby) { openLobby().then(advertise).catch(() => {}); return; }
   advertise();
-  if (!on) stopLobby();
 }
 
 function advertise() {
   if (!lobby) return;
-  if (hosting && room) {
+  if (room && room.listed && isHost()) {
     lobby.track({ seat: SEAT, code: room.code, trackId: room.trackId,
       pilot: me.pilot, count: 1 + remotes.size }).catch(() => {});
   } else {
@@ -179,6 +194,7 @@ function advertise() {
 // ---------------------------------------------------------------- joining
 export async function join(opts) {
   const { trackId, code } = opts;
+  const listed = opts.listed !== false;      // open to all unless asked otherwise
   const cfg = net.config();
   if (!cfg) return { ok: false, reason: 'offline' };
   if (channel) leave();
@@ -186,7 +202,7 @@ export async function join(opts) {
   // onGate, so the host's course never reached the room and splits never showed
   handlers = opts;
   me = { key: SEAT, pilot: net.pilotName() || 'Someone', ship: me.ship,
-    spectating: false, since: Date.now(), trackId };
+    spectating: false, since: Date.now(), trackId, listed };
 
   joining++;
   try {
@@ -211,7 +227,8 @@ async function connect(trackId, code) {
   // move the whole room to another course mid-session, and a pilot arriving
   // with only a code must land in the same sky either way
   const topic = `airships:room:${code}`;
-  room = { trackId, code, topic };
+  const listed = me.listed;
+  room = { trackId, code, topic, listed };
   channel = client.channel(topic, {
     // presence must be asked for: realtime-js 2.11 leaves it OFF unless
     // enabled, and then reports SUBSCRIBED, tracks "ok", and silently syncs
@@ -231,6 +248,7 @@ async function connect(trackId, code) {
       r.spectating = !!m.spectating;
       r.since = m.since || 0;
       r.trackId = m.trackId || '';
+      r.listed = m.listed !== false;
       if (r.spectating && r.mesh) disposeMesh(r);       // a watcher has no ship aloft
       if (r.ship !== m.ship) { disposeMesh(r); r.ship = m.ship || 'no6'; }
       remotes.set(key, r);
@@ -290,7 +308,7 @@ async function connect(trackId, code) {
 export function leave() {
   try { channel?.untrack(); channel?.unsubscribe(); } catch { /* going anyway */ }
   for (const key of [...remotes.keys()]) drop(key);
-  channel = null; room = null; hosting = false;
+  channel = null; room = null;
   advertise();                         // take the room off the list
   if (!onLobby) stopLobby();           // nobody is reading it any more either
   maybeDisconnect();
@@ -299,7 +317,7 @@ export function leave() {
 
 function myPresence() {
   return { pilot: me.pilot, ship: me.ship, spectating: me.spectating,
-    since: me.since, trackId: me.trackId };
+    since: me.since, trackId: me.trackId, listed: me.listed };
 }
 
 /** Our ship class rides in the presence record, so others draw us correctly. */
@@ -350,20 +368,27 @@ export function callCourse(trackId) {
 export function seat() { return SEAT; }
 
 /**
- * The host's presence record says what the room is flying. A pilot who joined
- * on a code alone has no idea, and a broadcast would only reach whoever was
- * already listening — so read it off the host, every sync, and follow it.
+ * The host's presence record says what the room is flying, and whether it is
+ * on the public list. A pilot who joined on a code alone knows neither, and a
+ * broadcast would only reach whoever was already listening — so read both off
+ * the host, every sync, and follow. That way a private room stays private when
+ * its founder leaves and someone else inherits it.
  */
 function adoptHostCourse() {
   if (!room) return;
   const host = hostSeat();
   if (host === SEAT) return;                 // we ARE the host; ours is the word
-  const t = remotes.get(host)?.trackId;
-  if (!t || t === room.trackId) return;
-  room.trackId = t;
-  me.trackId = t;
+  const h = remotes.get(host);
+  if (!h) return;
+  let changed = false, moved = null;
+  if (h.trackId && h.trackId !== room.trackId) {
+    room.trackId = h.trackId; me.trackId = h.trackId; changed = true; moved = h.trackId;
+  }
+  const listed = h.listed !== false;
+  if (listed !== room.listed) { room.listed = listed; me.listed = listed; changed = true; }
+  if (!changed) return;
   channel?.track(myPresence()).catch(() => {});
-  handlers.onCourse?.({ trackId: t, by: remotes.get(host)?.pilot || 'The host' });
+  if (moved) handlers.onCourse?.({ trackId: moved, by: h.pilot || 'The host' });
 }
 
 // The room is held by whoever arrived first; if they leave it passes to the

@@ -16,6 +16,18 @@ import * as net from './net.js';
 import * as live from './live.js';
 import { courseLength, shipTopSpeed } from './anticheat.js';
 
+// ---------------------------------------------------------------- the fault book
+// Kept from the first line, before anything else can throw: a pilot reporting
+// a fault should not have to reproduce it with the console open.
+const faultLog = [];
+function noteFault(kind, text) {
+  faultLog.push({ kind, text: String(text).slice(0, 300), at: Math.round(performance.now()) });
+  if (faultLog.length > 25) faultLog.shift();
+}
+addEventListener('error', (e) => noteFault('error',
+  `${e.message} — ${String(e.filename || '').split('/').pop()}:${e.lineno}`));
+addEventListener('unhandledrejection', (e) => noteFault('rejection', e.reason && e.reason.message || e.reason));
+
 // ---------------------------------------------------------------- setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -43,13 +55,23 @@ const wind = new THREE.Vector3(3.4, 0, 0.7);
 const dailyWind = new THREE.Vector3(3.4, 0, 0.7);
 let windGustT = 0;
 
-function spawnShip(specId) {
+/**
+ * @param where  null to start from the shed, or a place aloft to take her over
+ *               at — a free-flying pilot changing ships does not fall out of
+ *               the sky while the new one is fetched.
+ */
+function spawnShip(specId, where = null) {
   currentShip = specId;
   live.setShip(specId);
   if (ship) ship.dispose();
   ship = new Airship(scene, SHIPS[specId]);
   const y = ship.restHeight();
-  ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
+  if (where) {
+    ship.reset(new THREE.Vector3(where.x, Math.max(where.y, y), where.z), where.yaw);
+    ship.landed = false;
+  } else {
+    ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
+  }
   setCenter('', '');   // clear any wreck notice from the previous ship
   document.getElementById('helpTitle').textContent = `My Airships — ${ship.spec.name}`;
   addMsg('ship', `${ship.spec.name} — ${ship.spec.sub}`, 0);
@@ -253,9 +275,12 @@ let camMode = 0, muted = false;
 
 addEventListener('keydown', (e) => {
   initAudio();
-  if (e.code === 'Escape') { if (boardOpen()) closeBoard(); else toggleMenu(); return; }
+  if (e.code === 'Escape') {
+    if (bugBookOpen()) closeBugBook(); else if (boardOpen()) closeBoard(); else toggleMenu();
+    return;
+  }
   // while a panel is up the simulation is paused: don't fly the ship behind it
-  if (menuOpen || boardOpen()) return;
+  if (menuOpen || boardOpen() || bugBookOpen()) return;
   keys[e.code] = true;
   if (e.code === 'Space') { ship.dropBallast(); e.preventDefault(); }
   if (e.code === 'KeyF') input.coax = true;
@@ -290,6 +315,15 @@ addEventListener('keydown', (e) => {
 function canLeaveShip() {
   return (ship.landed || ship.wrecked) && (race.state === 'idle' || ship.wrecked);
 }
+/**
+ * Ships may be swapped in mid-air, but only in free flight: a scenario is a
+ * particular ship on a particular day, and a trial is a class of machine
+ * against the clock. Neither survives changing horses halfway.
+ */
+function canChangeShip() {
+  if (ship.wrecked) return true;
+  return !scenario && race.state === 'idle';
+}
 function clearAfterWreck() {
   if (!ship.wrecked) return;
   endTrack(); clearRivals(); scenario = null; editing = null;
@@ -297,12 +331,17 @@ function clearAfterWreck() {
   if (scenBeacon) scenBeacon.visible = false;
 }
 function tryChangeShip(id) {
-  if (!canLeaveShip()) {
-    addMsg('noswitch', 'Land (and finish the trial) to change ships.', 6);
+  if (!canChangeShip()) {
+    addMsg('noswitch', scenario
+      ? 'Not in the middle of a flight of the memoir — finish it, or reset the ship.'
+      : 'Finish the trial before changing ships.', 6);
     return false;
   }
+  const aloft = !ship.landed && !ship.wrecked;
+  const where = aloft ? { x: ship.pos.x, y: ship.pos.y, z: ship.pos.z, yaw: ship.yaw } : null;
   clearAfterWreck();
-  spawnShip(id);
+  spawnShip(id, where);
+  if (aloft) addMsg('swap', 'She is taken over where she flew — trim her before you let go.', 5);
   return true;
 }
 function tryTravel(loc) {
@@ -373,6 +412,7 @@ function wireTouchControls() {
   wireTouchControls._done = true;
   for (const b of document.querySelectorAll('#touchUI .tbtn')) {
     const code = b.dataset.key;
+    if (!code) continue;               // the fault book is a click, not a key
     const down = (e) => {
       e.preventDefault(); e.stopPropagation();
       b.classList.add('on');
@@ -723,6 +763,9 @@ function buildMenuButtons() {
   const wKmh = Math.round(Math.hypot(dailyWind.x, dailyWind.z) * 3.6 * 0.42);
   menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
+  if (net.enabled()) {
+    menuButton(optsDiv, 'Report a fault', 'send the works an account of it, with a picture', openBugBook);
+  }
 
   // the register sits with the title: it is who you are, not a setting
   const who = document.getElementById('menuWho');
@@ -778,17 +821,20 @@ function buildTogether() {
           toggleMenu(false);
         });
     }
-    menuButton(div, 'Open a room', 'listed for anyone to join', () => {
+    const openOne = (listed) => {
       const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
-      createOrJoinRoom(t.id, live.newRoomCode(), true);
+      createOrJoinRoom(t.id, live.newRoomCode(), true, listed);
       toggleMenu(false);
-    });
+    };
+    menuButton(div, 'Open a room', 'listed above for anyone to join', () => openOne(true));
+    menuButton(div, 'Open a private room', 'off the list — only your code lets anyone in',
+      () => openOne(false));
     menuButton(div, 'Join by code', 'if a friend sent you one', () => {
       const code = (prompt('Room code:') || '').trim().toUpperCase();
       if (!code) return;
       // no need to ask what they are flying: the host's word settles the course
       // the moment we are aboard, and we follow it from there
-      createOrJoinRoom(track ? track.id : TRACKS[0].id, code, false);
+      createOrJoinRoom(track ? track.id : TRACKS[0].id, code, false, true);
       toggleMenu(false);
     });
     return;
@@ -796,11 +842,15 @@ function buildTogether() {
 
   // ---- in a room ----
   const info = live.roomInfo();
-  const aboard = roomRoster.length ? roomRoster : live.roster();
+  // live.roster() every time, not the snapshot from the last presence sync:
+  // that one was taken before anybody had sent a position, so the bearings
+  // in it are permanently blank
+  const aboard = live.roster();
   const head = document.createElement('div');
   head.className = 'officeline';
   head.innerHTML = `<b>Room ${info.code}</b> — ${aboard.length} aboard, flying `
     + `${escapeHtml((TRACKS.find((t) => t.id === info.trackId) || {}).name || info.trackId)}`
+    + `${info.listed ? '' : ' · <i>off the list</i>'}`
     + `${live.isHost() ? ' · <b>you hold the room</b>' : ''}`;
   div.appendChild(head);
   for (const r of aboard) {
@@ -851,6 +901,23 @@ function buildTogether() {
 // machine — the ledger is where scrutineered times live.
 let roomRoster = [], roomResults = [], openRooms = [];
 
+/**
+ * Which way to look for a rival, and how far off she is. The same arrow and the
+ * same convention as the wind: it turns with YOUR head, so straight up means
+ * dead ahead — a pilot can follow it out of the window without doing sums.
+ */
+function bearingTag(r) {
+  if (!r || r.self || !r.pos || !ship) return '';
+  const dx = r.pos.x - ship.pos.x, dz = r.pos.z - ship.pos.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 1) return '';
+  const deg = -90 - (Math.atan2(-dz, dx) - ship.yaw) * 180 / Math.PI;
+  const far = d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d / 5) * 5 + ' m';
+  return ` <span class="brg" style="transform:rotate(${deg.toFixed(0)}deg)">➤</span>`
+    + `<span style="opacity:.5"> ${far}</span>`;
+}
+
+let roomTick = 0;
 function drawRoom() {
   const el0 = document.getElementById('room');
   if (!live.inRoom()) { el0.innerHTML = ''; return; }
@@ -858,19 +925,23 @@ function drawRoom() {
   // during a race the panel is a running order: whoever is deepest into the
   // course stands first, so you can see the lead change instead of waiting
   // for the finish
-  const aboard = roomRoster.length ? roomRoster : live.roster();
+  // live.roster() every time, not the snapshot from the last presence sync:
+  // that one was taken before anybody had sent a position, so the bearings
+  // in it are permanently blank
+  const aboard = live.roster();
   const running = race.state === 'run' || live.standings().length > 0;
   const rows = running ? live.standings() : aboard;
   const lines = rows.map((r, i) => {
     const nm = escapeHtml(r.pilot) + (r.self ? '' : '');
     const shipName = (SHIPS[r.ship] || SHIPS.no6).name.replace('Santos-Dumont ', '');
+    const brg = bearingTag(r);
     if (running && r.progress) {
       const nGates = track ? track.gates.length : 6;
-      return `<div class="rrow${r.self ? ' rme' : ''}">${i + 1}. ${nm}` +
+      return `<div class="rrow${r.self ? ' rme' : ''}">${i + 1}. ${nm}${brg}` +
         `<span style="opacity:.6"> · lap ${r.progress.lap} gate ${r.progress.gate}/${nGates}` +
         ` · ${fmt(r.progress.t)}</span></div>`;
     }
-    return `<div class="rrow${r.self ? ' rme' : ''}">${nm}` +
+    return `<div class="rrow${r.self ? ' rme' : ''}">${nm}${brg}` +
       `<span style="opacity:.55"> · ${r.spectating ? 'watching' : shipName}</span></div>`;
   }).join('');
   const watchers = aboard.filter((r) => r.spectating).length;
@@ -929,7 +1000,7 @@ function placeOnGrid(t, grid) {
   ship.landed = false;
 }
 
-async function createOrJoinRoom(trackId, code, hosting) {
+async function createOrJoinRoom(trackId, code, hosting, listed = true) {
   const t = TRACKS.find((x) => x.id === trackId);
   if (!t) return;
   if (currentLocation !== t.location) loadWorld(t.location);
@@ -937,7 +1008,7 @@ async function createOrJoinRoom(trackId, code, hosting) {
   live.setShip(currentShip);
   addMsg('room', `Calling the room ${code}…`, 0);
   const res = await live.join({
-    trackId, code,
+    trackId, code, listed,
     onRoster: (r) => { roomRoster = r; drawRoom(); },
     onStart: (p) => {
       const called = TRACKS.find((x) => x.id === p.trackId) || t;
@@ -972,7 +1043,7 @@ async function createOrJoinRoom(trackId, code, hosting) {
       : `Could not join the room (${res.reason}).`, 0);
     return;
   }
-  live.setHosting(!!hosting);          // the opener advertises it; joiners do not
+  live.setHosting();                   // every room is listed, under whoever holds it
   // by now the room may already have told us what it flies — take THAT, not the
   // course we guessed on the way in, or we would shove the room onto our own
   const settled = TRACKS.find((x) => x.id === live.roomInfo().trackId) || t;
@@ -980,10 +1051,159 @@ async function createOrJoinRoom(trackId, code, hosting) {
   startTrack(settled);
   race.state = 'idle';
   setCenter(`Room ${code}`, hosting
-    ? 'Your room is listed for anyone to join. Press Enter — or GO — when the room is ready to fly.'
+    ? (listed
+      ? `Your room is on the list for anyone to join — the code is ${code}. `
+      : `Your room is off the list: give out the code ${code} and nobody else can find it. `)
+      + 'Press Enter — or GO — when the room is ready to fly.'
     : 'Press Enter — or GO — when the room is ready to fly.');
   drawRoom();
   buildMenuButtons();
+}
+
+// ---------------------------------------------------------------- the fault book
+// A pilot's report goes to the same office as the records, and appears only
+// when that office is reachable: with no keys configured there is nowhere to
+// send it, so the button is never built.
+
+/** Everything worth knowing that a pilot should not have to type out. */
+function faultState() {
+  const info = live.inRoom() ? live.roomInfo() : null;
+  const cfg = net.config();
+  const hud = (id) => (document.getElementById(id) || {}).textContent || null;
+  const st = {
+    page: { href: location.href, ua: navigator.userAgent, lang: navigator.language,
+      w: innerWidth, h: innerHeight, dpr: +Number(devicePixelRatio).toFixed(2),
+      visible: document.visibilityState, touch: 'ontouchstart' in window },
+    instruments: { alt: hud('alt'), speed: hud('spd'), throttle: hud('thr'), wind: hud('wind') },
+    ui: { menu: menuOpen, tab: menuTab, camera: CAM_NAMES[camMode],
+      onScreenControls: document.body.classList.contains('touch'),
+      photograph: document.body.classList.contains('photo'), sound: !muted },
+    course: track ? { id: track.id, name: track.name, laps: track.laps,
+      custom: !!track.custom, historic: !!track.historic } : null,
+    race: { state: race.state, t: +race.t.toFixed(2), gate: race.gate, counting: +race.count.toFixed(1) },
+    scenario: scenario ? scenario.id : null,
+    room: info ? { code: info.code, trial: info.trackId, aboard: live.roster().length,
+      holding: live.isHost(), watching: live.spectating() } : null,
+    office: { url: cfg ? cfg.url : null },
+    faults: faultLog,
+  };
+  if (ship) {
+    st.ship = { id: currentShip, place: currentLocation,
+      x: +ship.pos.x.toFixed(1), y: +ship.pos.y.toFixed(1), z: +ship.pos.z.toFixed(1),
+      yaw: +ship.yaw.toFixed(2), pitch: +ship.pitch.toFixed(2),
+      throttle: +ship.throttle.toFixed(2), gas: Math.round(ship.gas),
+      landed: !!ship.landed, wrecked: !!ship.wrecked };
+  }
+  return st;
+}
+
+/**
+ * A picture of the view. The drawing buffer is not preserved between frames,
+ * so render and read it in the same tick — a moment later it is blank.
+ */
+function viewPicture(maxW = 1280) {
+  try {
+    composer.render();
+    const src = renderer.domElement;
+    const sc = Math.min(1, maxW / src.width);
+    if (sc >= 1) return src.toDataURL('image/jpeg', 0.62);
+    const c = document.createElement('canvas');
+    c.width = Math.round(src.width * sc); c.height = Math.round(src.height * sc);
+    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.62);
+  } catch { return null; }
+}
+
+/**
+ * A picture of the whole window, instruments and all — the browser asks the
+ * pilot which one to share, so nothing is taken without their say-so.
+ */
+async function windowPicture(maxW = 1280) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return null;
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 1 }, audio: false, preferCurrentTab: true,
+    });
+    const v = document.createElement('video');
+    v.srcObject = stream; v.muted = true;
+    await v.play();
+    await new Promise((r) => setTimeout(r, 220));      // let a frame arrive
+    const sc = Math.min(1, maxW / (v.videoWidth || maxW));
+    const c = document.createElement('canvas');
+    c.width = Math.round((v.videoWidth || maxW) * sc);
+    c.height = Math.round((v.videoHeight || 720) * sc);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.62);
+  } catch { return null; } finally {
+    if (stream) for (const t of stream.getTracks()) t.stop();
+  }
+}
+
+let bugShot = null;
+function openBugBook() {
+  if (!net.enabled()) return;
+  const el = document.getElementById('bug');
+  toggleMenu(false);
+  document.getElementById('board').classList.add('hidden');
+  // take the picture NOW, while the pilot is still looking at the fault
+  bugShot = viewPicture();
+  const img = document.getElementById('bugShot');
+  img.src = bugShot || '';
+  img.style.display = bugShot ? 'block' : 'none';
+  document.getElementById('bugNote').textContent = '';
+  document.getElementById('bugSend').disabled = false;
+  el.classList.remove('hidden');
+  document.getElementById('bugBody').focus();
+}
+function closeBugBook() {
+  document.getElementById('bug').classList.add('hidden');
+  document.getElementById('bugBody').value = '';
+  bugShot = null;
+}
+function bugBookOpen() { return !document.getElementById('bug').classList.contains('hidden'); }
+
+function wireBugBook() {
+  if (!net.enabled()) return;
+  const note = document.getElementById('bugNote');
+  const send = document.getElementById('bugSend');
+  const view = document.getElementById('bugShotOn');
+  const win = document.getElementById('bugScreenOn');
+  const img = document.getElementById('bugShot');
+
+  const preview = (url) => { img.src = url || ''; img.style.display = url ? 'block' : 'none'; };
+  view.onchange = () => { if (view.checked) win.checked = false; preview(view.checked ? bugShot : null); };
+  win.onchange = async () => {
+    if (!win.checked) { preview(view.checked ? bugShot : null); return; }
+    view.checked = false;
+    note.textContent = 'waiting on the browser…';
+    const shot = await windowPicture();
+    note.textContent = shot ? '' : 'the browser gave nothing back';
+    if (!shot) { win.checked = false; view.checked = true; preview(bugShot); return; }
+    bugShot = shot;
+    preview(shot);
+  };
+  document.getElementById('bugCancel').onclick = closeBugBook;
+  const round = document.getElementById('btnBug');
+  round.style.display = 'flex';        // an office to write to: show the button
+  round.onclick = () => (bugBookOpen() ? closeBugBook() : openBugBook());
+  send.onclick = async () => {
+    const body = document.getElementById('bugBody').value;
+    if (!body.trim()) { note.textContent = 'a word about it first'; return; }
+    send.disabled = true;
+    note.textContent = 'sending…';
+    const shot = (view.checked || win.checked) ? bugShot : null;
+    const r = await net.submitBug({ body, state: faultState(), shot });
+    if (r.ok) {
+      closeBugBook();
+      addMsg('bug', r.dropped
+        ? 'Your report is filed — the picture was too large to send with it.'
+        : 'Your report is filed. Thank you.', 0);
+    } else {
+      send.disabled = false;
+      note.textContent = net.phrase(r.reason);
+    }
+  };
 }
 
 // ---------------------------------------------------------------- world records
@@ -1843,6 +2063,7 @@ addEventListener('resize', () => {
 });
 
 net.ensurePilotName();   // every pilot is entered in the register on arrival
+wireBugBook();           // no office configured, no fault book — see net_config.js
 loadWorld('paris');
 toggleMenu(true);   // start screen: choose your ship and your sky
 document.getElementById('help').classList.add('hidden');
@@ -1862,7 +2083,7 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  if (menuOpen || boardOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
+  if (menuOpen || boardOpen() || bugBookOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
 
   windGustT += dt;
   wind.x = dailyWind.x + Math.sin(windGustT * 0.13) * 0.7 + Math.sin(windGustT * 0.041 + 2) * 0.9;
@@ -1899,6 +2120,10 @@ function frame(now) {
   if (live.inRoom()) {
     live.sendState(dt, ship);
     live.update(dt);
+    // the bearings in the roster are only useful while they are true: redraw
+    // the panel a few times a second, not only when someone joins or finishes
+    roomTick += dt;
+    if (roomTick >= 0.25) { roomTick = 0; drawRoom(); }
     // silk on silk: she is shoved aside and loses a little gas, never wrecked
     // if the pilot we were watching has gone, ride with someone else
     if (spectate.on) {

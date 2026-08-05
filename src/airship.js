@@ -339,23 +339,41 @@ export class Airship {
     const cream = new THREE.MeshLambertMaterial({ color: 0xf2ead6, emissive: 0x6b6355 });
     const needleMat = new THREE.MeshLambertMaterial({ color: 0x22180f });
 
-    // steering wheel on a raked column, dead ahead at chest height (motored ships)
-    this.wheel = new THREE.Group();
+    // The helm is a tiller: a bar lying athwartships on a pivot at its middle,
+    // with a cord from each end running aft to its own side of the rudder. Push
+    // one end away and pull the other back and the rudder swings — no wheel and
+    // no gearing, only the two cords and what the airflow does to them.
+    this.wheel = new THREE.Group();          // kept as the name the ship steers by
+    this.tillerCords = null;
     if (prop !== 'none') {
-      const colMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 6), dark);
-      colMesh.position.set(bx + 0.72, -drop + 0.0, 0);
-      colMesh.rotation.z = -0.5;
-      this.pitchGroup.add(colMesh);
-      const wheelRing = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.022, 6, 18), wood);
-      this.wheel.add(wheelRing);
-      for (let i = 0; i < 4; i++) {
-        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.32, 4), wood);
-        spoke.rotation.z = (i * Math.PI) / 4;
-        this.wheel.add(spoke);
+      // waist height, and no higher: a bar across the eye-line would hide the
+      // horizon, and the horizon is how an air-ship is flown
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.26, 6), dark);
+      post.position.set(bx + 0.74, -drop + 0.13, 0);
+      this.pitchGroup.add(post);
+
+      const HALF = 0.27;                     // to each hand from the pivot
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, HALF * 2, 6), wood);
+      bar.rotation.x = Math.PI / 2;          // lying across the ship, along Z
+      this.wheel.add(bar);
+      for (const sz of [-1, 1]) {            // a turned grip at either end
+        const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.1, 6), wood);
+        grip.rotation.x = Math.PI / 2;
+        grip.position.z = sz * (HALF - 0.05);
+        this.wheel.add(grip);
       }
-      this.wheel.position.set(bx + 0.82, -drop + 0.17, 0);
-      this.wheel.rotation.y = Math.PI / 2; // face the navigator
+      this.wheel.position.set(bx + 0.74, -drop + 0.26, 0);
       this.pitchGroup.add(this.wheel);
+      this.tillerHalf = HALF;
+
+      // the two cords, laid out afresh each frame: both ends move, and so does
+      // the rudder they pull on
+      const cordMat = new THREE.LineBasicMaterial({ color: 0x2a1f14, transparent: true, opacity: 0.75 });
+      this.tillerCords = new THREE.LineSegments(
+        new THREE.BufferGeometry().setAttribute('position',
+          new THREE.BufferAttribute(new Float32Array(12), 3)), cordMat);
+      this.tillerCords.frustumCulled = false;
+      this.pitchGroup.add(this.tillerCords);
     }
 
     // each dial stands on its own small post at the fore rim
@@ -928,8 +946,10 @@ export class Airship {
     this.pitchGroup.rotation.x = this.roll;
 
     // ---- cockpit instruments ----
-    this.wheelA = (this.wheelA || 0) + ((this.rudderInput * 2.2) - (this.wheelA || 0)) * Math.min(1, 5 * dt);
-    this.wheel.rotation.x = this.wheelA;                     // wheel spins with the rudder
+    // the tiller lies over the way the rudder goes: helm to port swings the bar
+    this.wheelA = (this.wheelA || 0) + ((this.rudderInput * 0.62) - (this.wheelA || 0)) * Math.min(1, 6 * dt);
+    this.wheel.rotation.y = this.wheelA;
+    this.updateTiller();
     this.carbLever.rotation.z = -0.55 + this.throttle * 0.9; // carburating lever = throttle
     this.sparkT = Math.max(0, (this.sparkT || 0) - dt);
     this.sparkLever.rotation.z = 0.35 - (this.sparkT > 0 ? Math.sin(this.sparkT * 18) * 0.4 : 0);
@@ -953,6 +973,30 @@ export class Airship {
     // so keep it faint or it reads as a black disc painted on the ground
     const so = clamp(0.15 * (1 - this.pos.y / 260), 0, 0.15);
     this.shadow.material.opacity = so;
+  }
+
+  /**
+   * Two cords, each from one end of the tiller to its own side of the rudder's
+   * leading edge. Both ends of every cord move, so they are laid out afresh
+   * rather than parented to anything.
+   */
+  updateTiller() {
+    if (!this.tillerCords || !this.rudder) return;
+    const h = this.tillerHalf, a = this.wheel.rotation.y;
+    const w = this.wheel.position;
+    const rp = this.rudder.position, ra = this.rudder.rotation.y;
+    const ARM = 0.34;                      // where the cords take hold, off the rudder post
+    const p = this.tillerCords.geometry.attributes.position.array;
+    let i = 0;
+    for (const side of [-1, 1]) {
+      p[i++] = w.x - Math.sin(a) * h * side;      // the tiller end, pivoting at its middle
+      p[i++] = w.y;
+      p[i++] = w.z + Math.cos(a) * h * side;
+      p[i++] = rp.x - Math.sin(ra) * ARM * side;  // its own side of the rudder
+      p[i++] = rp.y;
+      p[i++] = rp.z + Math.cos(ra) * ARM * side;
+    }
+    this.tillerCords.geometry.attributes.position.needsUpdate = true;
   }
 
   wreck(reason) {

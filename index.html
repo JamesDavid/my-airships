@@ -28,6 +28,9 @@
   #room .rhead { font-size:11.5px; letter-spacing:.12em; opacity:.7; }
   #room .rme { color:#6b4a1e; font-weight:bold; }
   #room .rrow { line-height:1.45; }
+  /* which way to look for a rival — the same arrow as the wind, turning with
+     your own head, so straight up is dead ahead */
+  #room .brg { display:inline-block; opacity:.8; }
   #wr b { font-weight:normal; color:#e8c477; }
 
   #panelBL { bottom:16px; left:16px; font-size:13px; }
@@ -132,6 +135,28 @@
     font-family:inherit; font-size:13px; padding:6px 12px; cursor:pointer; }
   #boardBtns button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
 
+  /* the fault book — only ever built when the record office is reachable */
+  #bug { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.95);
+    color:#e9dcc4; padding:22px 28px; border:1px solid #7a6647; width:576px; max-width:92vw;
+    max-height:86vh; overflow-y:auto; overflow-x:hidden; box-sizing:border-box; z-index:60; }
+  #bug h2 { margin:0 0 4px; font-weight:normal; font-style:italic; font-size:22px; color:#e8c477; }
+  #bug .officeline { margin-bottom:12px; }
+  #bug textarea { width:100%; box-sizing:border-box; height:120px; resize:vertical;
+    background:rgba(0,0,0,.28); border:1px solid rgba(122,102,71,.55); color:#f2ead6;
+    font-family:inherit; font-size:13.5px; line-height:1.45; padding:8px 10px; }
+  #bug textarea:focus { outline:none; border-color:#e8c477; }
+  #bug label { display:block; font-size:12.5px; margin-top:10px; cursor:pointer; opacity:.85; }
+  #bug label input { margin-right:7px; vertical-align:-1px; }
+  #bug label small { display:block; margin-left:22px; opacity:.6; font-style:italic; font-size:11.5px; }
+  #bugShot { margin-top:10px; border:1px solid rgba(122,102,71,.4); width:100%;
+    box-sizing:border-box; display:none; }
+  #bugBtns { margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  #bugBtns button { background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
+    font-family:inherit; font-size:13px; padding:6px 12px; cursor:pointer; }
+  #bugBtns button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
+  #bugBtns button[disabled] { opacity:.4; cursor:default; }
+  #bugNote { font-size:12px; font-style:italic; opacity:.7; margin-left:auto; }
+
   /* Photo mode */
   #grain, #vignette { position:fixed; inset:0; pointer-events:none; display:none; }
   #vignette { background:radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(30,18,8,.55) 100%); }
@@ -150,6 +175,10 @@
     user-select:none; -webkit-user-select:none; touch-action:none; z-index:30; }
   .tbtn.sm { width:46px; height:46px; font-size:13px; }
   .tbtn.on { background:rgba(232,196,119,.5); border-color:#e8c477; }
+  /* built into the page, but shown only when net.js has an office to write to */
+  #btnBug { display:none; cursor:pointer; }
+  #btnBug svg { width:24px; height:24px; opacity:.85; }
+  #btnBug:hover svg { opacity:1; }
   /* pitch trim slider — the shifting weights stay where you haul them */
   #pitchTrack { position:fixed; right:84px; bottom:26px; width:48px; height:196px;
     border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
@@ -333,6 +362,22 @@
 </div>
 
 <!-- world records: only ever shown when an online record office is configured -->
+<div id="bug" class="hidden">
+  <h2>The fault book</h2>
+  <div class="officeline">Tell the works what went wrong — what you did, and what she did instead.</div>
+  <textarea id="bugBody" maxlength="4000" placeholder="The rudder jammed hard over after I…"></textarea>
+  <label><input type="checkbox" id="bugShotOn" checked>Send a picture of the view
+    <small>what the camera sees — not the instruments or this menu</small></label>
+  <label><input type="checkbox" id="bugScreenOn">Send a picture of the whole window instead
+    <small>your browser will ask which window or tab to share — this one shows the instruments too</small></label>
+  <img id="bugShot" alt="">
+  <div id="bugBtns">
+    <button id="bugSend">Send it in</button>
+    <button id="bugCancel">Never mind</button>
+    <span id="bugNote"></span>
+  </div>
+</div>
+
 <div id="board" class="hidden">
   <h2 id="boardTitle">The Record Office</h2>
   <div id="boardSub">…</div>
@@ -358,9 +403,24 @@
   <div class="tbtn" id="btnSand" data-key="Space">SAND</div>
   <div class="tbtn" id="btnVent" data-key="KeyV">VENT</div>
   <div class="tbtn sm" id="btnFix" data-key="KeyF">FIX</div>
-  <div class="tbtn sm" data-key="Escape" style="right:12px; top:60px">☰</div>
-  <div class="tbtn sm" data-key="KeyC" style="right:12px; top:122px">CAM</div>
-  <div class="tbtn sm" data-key="Enter" style="right:12px; top:184px">GO</div>
+  <!-- the fault book sits above the menu; main.js only shows it when there is
+       a record office to send a report to -->
+  <div class="tbtn sm" id="btnBug" title="Report a fault" style="right:12px; top:12px">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none">
+        <path d="M9.6 4.6 8.2 2.6M14.4 4.6 15.8 2.6"/>
+        <path d="M6.9 10.4 4.2 9.2M17.1 10.4l2.7-1.2"/>
+        <path d="M6.5 14.4H4M17.5 14.4H20"/>
+        <path d="M7.4 17.8 5.2 19.8M16.6 17.8l2.2 2"/>
+      </g>
+      <ellipse cx="12" cy="14" rx="5" ry="6.4" fill="currentColor"/>
+      <circle cx="12" cy="6.6" r="2.5" fill="currentColor"/>
+      <path d="M12 8.6v11.4" stroke="rgba(30,22,14,.85)" stroke-width="1.2"/>
+    </svg>
+  </div>
+  <div class="tbtn sm" data-key="Escape" style="right:12px; top:74px">☰</div>
+  <div class="tbtn sm" data-key="KeyC" style="right:12px; top:136px">CAM</div>
+  <div class="tbtn sm" data-key="Enter" style="right:12px; top:198px">GO</div>
 </div>
 
 <div class="hud" id="room"></div>

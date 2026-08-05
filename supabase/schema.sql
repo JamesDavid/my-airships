@@ -83,3 +83,49 @@ create trigger times_keep_best_trg before update on public.times
 --
 -- To clear the boards later:
 --   delete from public.times where track_id = 'gymkhana';
+
+
+-- ---------------------------------------------------------------------------
+-- The fault book: what pilots report when something goes wrong.
+--
+-- Optional, like everything else here. Without this table the "Report a fault"
+-- button still appears (the office is reachable) but the insert answers 404 and
+-- the pilot is told the office has no ledger for it. Create it and reports land.
+create table if not exists public.bug_reports (
+  id             bigint generated always as identity primary key,
+  created_at     timestamptz not null default now(),
+  pilot          text,
+  pilot_id       uuid,
+  body           text not null,
+  state          jsonb,                       -- ship, course, room, browser, recent errors
+  shot           text,                        -- a data: URL, or null
+  client_version text,
+  handled        boolean not null default false,
+  constraint bug_body_len  check (char_length(body) between 1 and 4000),
+  constraint bug_shot_len  check (shot is null or char_length(shot) <= 400000),
+  constraint bug_state_len check (state is null or pg_column_size(state) <= 60000)
+);
+
+create index if not exists bug_reports_new on public.bug_reports (created_at desc)
+  where not handled;
+
+alter table public.bug_reports enable row level security;
+
+-- Anyone may file one. Nobody may read them back: a report carries whatever the
+-- pilot typed and a picture of their screen, and that is for the works alone.
+-- Read them in the Supabase dashboard, or with the service role.
+drop policy if exists bug_insert_anon on public.bug_reports;
+create policy bug_insert_anon on public.bug_reports
+  for insert to anon with check (
+    char_length(body) between 1 and 4000
+    and (shot is null or char_length(shot) <= 400000)
+  );
+
+-- To read the unhandled ones (dashboard SQL editor):
+--   select id, created_at, pilot, body, state->'page'->>'ua' as browser,
+--          state->'faults' as errors
+--     from public.bug_reports where not handled order by created_at desc;
+--
+-- The picture, if any, is in `shot` as a data: URL — paste it into a browser
+-- address bar to look at it. To close one off:
+--   update public.bug_reports set handled = true where id = 42;
