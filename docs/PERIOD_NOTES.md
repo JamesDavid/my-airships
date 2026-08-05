@@ -112,25 +112,65 @@ Port Hercule.
   plan), AGS Library Digital Map Collection (UWM)
 
 
-## An open question: the helm
+## The helm: a bar, not a wheel
 
-The game shows the helm as a **tiller** — a bar lying athwartships on a pivot at its
-middle, with a cord from each end running aft to its own side of the rudder, pushed and
-pulled rather than turned. Earlier builds showed a ship's wheel on a raked column.
+The game shows the helm as a **bar** lying athwartships on a pivot at its middle, with a
+cord from each end running aft to its own side of the rudder. Earlier builds showed a
+ship's wheel on a raked column, on the strength of one line in the English memoir.
 
-The memoir's translation is against the tiller on the one occasion it names the control.
-In the Deutsch run (B7 in docs/BOOK_REFERENCE.md) the text reads:
+**That line is the translator's, not Santos-Dumont's.** The 1904 English text says, of the
+Deutsch run:
 
 > "It was to abandon the **steering wheel** for a moment, at the risk of drifting from my
 > course, in order to devote my attention to the carburating lever and the lever
-> controlling the electric spark."
+> controlling the electric spark." (Ch. XVIII)
 
-That is a 1904 English translation of a French original, and "steering wheel" there may be
-the translator's word for whatever the pilot's hands were on rather than a description of
-its shape. It has not been checked against the French text or against basket photographs
-of any particular ship, and the ships did not all steer alike — a bar on the No. 9's little
-basket and a wheel on the No. 7 would both be unsurprising.
+The French original — *Dans l'air*, [Internet Archive `danslair00santgoog`](https://archive.org/details/danslair00santgoog),
+also at [Gallica](https://gallica.bnf.fr/ark:/12148/bpt6k932715h) — reads:
 
-Recorded here so the discrepancy is not lost: the game currently contradicts the one
-passage that names the thing. Settling it wants the French edition and a photograph of the
-basket of whichever ship is being drawn.
+> "Au risque de dévier, j'abandonnai momentanément **le gouvernail**, pour concentrer mon
+> attention sur la manette du carburateur et le levier commandant l'étincelle électrique."
+
+*Le gouvernail* is the rudder, or the steering generally. There is no wheel in it. The word
+**volant** — French for a steering wheel — appears nowhere in the book in that sense; every
+*roue* in the text belongs to the ox-cart argument of his Brazilian boyhood.
+
+What the French does say, describing the No. 4:
+
+> "Pour conduire, mes mains reposaient sur **le guidon de la bicyclette, relié au
+> gouvernail**." (Ch. XI)
+
+— rendered in the English as "my hands reposed on the bicycle handle-bars connected with my
+rudder". A handlebar: a bar across the pilot, pivoted at its centre, worked by pushing one
+hand and pulling the other.
+
+And the rudder was worked by **cords**, not by any gearing:
+
+> "Les **cordes commandant le gouvernail**, le moteur, le water-ballast, les poids
+> déplaçables, fonctionnent-elles librement?" (his pre-flight checklist, Ch. XXI)
+
+> "une des **cordes manœuvrant le gouvernail** se rompit" — the broken rudder cord that
+> forced the No. 5 down into the Trocadéro gardens (Ch. XV)
+
+> "d'autres, notamment celles du gouvernail, s'accrochaient au propulseur" — the rudder
+> cords fouling the screw (Ch. XX)
+
+At Monaco he calls it **la barre** — the ordinary French for a tiller — three times in two
+pages: *"Je donnai un coup de barre à bâbord, la main serrée sur le gouvernail"*; *"je
+poussai la barre"*; *"donnai vivement un coup de barre"*. The English renders all three as
+"helm".
+
+### What is still open: which way the cords run
+
+A bar and two cords can be rigged two ways, and the book does not say which.
+
+- **Straight** (port end → port side of the rudder): pushing the port hand forward tautens
+  the port cord, draws the port side of the rudder forward, and swings her trailing edge to
+  port — she turns to port. Direct, like an aeroplane's rudder bar.
+- **Crossed**: the same push turns her to starboard — like a bicycle's handlebar, which
+  goes left by bringing the left grip *back*. Santos-Dumont was a keen cyclist and called
+  the No. 4's control a *guidon*, so this is not far-fetched.
+
+The game uses the **straight** rig: helm to port sends the port end ahead. It is the sense
+that reads correctly to a player pressing left, and the drawn linkage is consistent with
+it — the cord that goes taut is the one that hauls the rudder the way it is seen to go.

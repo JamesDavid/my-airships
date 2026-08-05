@@ -946,8 +946,12 @@ export class Airship {
     this.pitchGroup.rotation.x = this.roll;
 
     // ---- cockpit instruments ----
-    // the tiller lies over the way the rudder goes: helm to port swings the bar
-    this.wheelA = (this.wheelA || 0) + ((this.rudderInput * 0.62) - (this.wheelA || 0)) * Math.min(1, 6 * dt);
+    // A rudder bar, not a boat's tiller: the cord that goes taut is the one whose
+    // end is PUSHED away, so the hand on the side you are turning toward goes
+    // forward — helm to port (positive input) sends the port end ahead, which
+    // hauls the port side of the rudder round and swings her trailing edge to
+    // port. Driving it the other way would have the bar fighting the rudder.
+    this.wheelA = (this.wheelA || 0) + ((-this.rudderInput * 0.62) - (this.wheelA || 0)) * Math.min(1, 6 * dt);
     this.wheel.rotation.y = this.wheelA;
     this.updateTiller();
     this.carbLever.rotation.z = -0.55 + this.throttle * 0.9; // carburating lever = throttle
@@ -988,11 +992,14 @@ export class Airship {
     const ARM = 0.34;                      // where the cords take hold, off the rudder post
     const p = this.tillerCords.geometry.attributes.position.array;
     let i = 0;
+    // a point at local (0, 0, d) carried round by rotation.y = t lands at
+    // (d·sin t, 0, d·cos t) — the sine is POSITIVE, and negating it hung both
+    // cords off points mirrored fore-and-aft of the ends they belong to
     for (const side of [-1, 1]) {
-      p[i++] = w.x - Math.sin(a) * h * side;      // the tiller end, pivoting at its middle
+      p[i++] = w.x + Math.sin(a) * h * side;      // the tiller end, pivoting at its middle
       p[i++] = w.y;
       p[i++] = w.z + Math.cos(a) * h * side;
-      p[i++] = rp.x - Math.sin(ra) * ARM * side;  // its own side of the rudder
+      p[i++] = rp.x + Math.sin(ra) * ARM * side;  // its own side of the rudder
       p[i++] = rp.y;
       p[i++] = rp.z + Math.cos(ra) * ARM * side;
     }

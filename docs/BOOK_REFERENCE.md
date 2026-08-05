@@ -258,6 +258,10 @@ it justifies.
 > steering wheel for a moment, at the risk of drifting from my course, in order to devote
 > my attention to the carburating lever and the lever controlling the electric spark."
 
+  NOTE: "steering wheel" is the 1904 translator's word. The French has *"j'abandonnai
+  momentanément **le gouvernail**"* — the rudder, no wheel. The helm is drawn as a bar
+  worked by cords; see the helm section of docs/PERIOD_NOTES.md for the evidence.
+
 > "There are sounds in its spitting rumble that are intelligible only to the
 > long-experienced ear."
 

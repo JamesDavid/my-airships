@@ -84,9 +84,12 @@ public domain).
 - **"To descend without sacrificing gas and to mount without sacrificing ballast."**
   Hydrogen and sand are permanent spends; the skilled way to climb and dive is the
   *shifting weights* plus the propeller — free diagonal flight.
-- **The helm is a tiller**, not a wheel: a bar lying across the basket on a pivot at its
-  middle, a cord from each end running aft to its own side of the rudder. Push one hand
-  away and pull the other back and she comes round.
+- **The helm is a bar, not a wheel**: pivoted at its middle, a cord from each end running
+  aft to its own side of the rudder. Push one hand away and pull the other back and she
+  comes round. The English memoir says "steering wheel" once; the French says *le
+  gouvernail*, describes the No. 4's control as "le guidon de la bicyclette, relié au
+  gouvernail", and has the rudder worked by cords throughout — see
+  [docs/PERIOD_NOTES.md](docs/PERIOD_NOTES.md).
 - **The guide rope** trails beneath you: fly low and it grounds itself, automatically
   steadying your altitude (over water it is perfect). It also drags like a brake, drapes
   over rooftops, and snags.
