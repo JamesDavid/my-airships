@@ -38,7 +38,8 @@ const SEAT = seatUuid();
 
 let client = null, channel = null, scene = null;
 let lobby = null, hosting = false, onLobby = null;
-let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false, since: 0 };
+let joining = 0;                   // a join in flight owns the client too
+let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false, since: 0, trackId: '' };
 let room = null;                   // { trackId, code, topic }
 const remotes = new Map();         // key -> { pilot, ship, buf[], mesh, label, lastSeen }
 let sendAcc = 0;
@@ -90,7 +91,9 @@ async function ensureClient() {
   return client;
 }
 function maybeDisconnect() {
-  if (!channel && !lobby && client) { try { client.disconnect(); } catch { /* going anyway */ } client = null; }
+  if (channel || lobby || joining || !client) return;
+  try { client.disconnect(); } catch { /* going anyway */ }
+  client = null;
 }
 
 // ---------------------------------------------------------------- the lobby
@@ -101,26 +104,45 @@ const LOBBY_TOPIC = 'airships:lobby';
 
 export async function watchLobby(cb) {
   onLobby = cb;
-  if (lobby) { cb(lobbyList()); return { ok: true }; }
-  if (!net.config()) return { ok: false, reason: 'offline' };
-  try {
-    await ensureClient();
-  } catch { return { ok: false, reason: 'no-realtime' }; }
-  lobby = client.channel(LOBBY_TOPIC, {
-    config: { presence: { key: SEAT, enabled: true }, broadcast: { self: false } },
-  });
-  lobby.on('presence', { event: 'sync' }, () => onLobby?.(lobbyList()));
-  await new Promise((res) => {
-    lobby.subscribe((st) => { if (st === 'SUBSCRIBED') { advertise(); res(st); } else if (st !== 'SUBSCRIBED') res(st); });
-    setTimeout(res, 8000);
-  });
-  return { ok: true };
+  const r = await openLobby();
+  if (r.ok) cb(lobbyList());
+  return r;
 }
 
+let opening = null;
+async function openLobby() {
+  if (lobby) return { ok: true };
+  if (opening) return opening;                  // two callers, one subscription
+  if (!net.config()) return { ok: false, reason: 'offline' };
+  opening = (async () => {
+    try {
+      await ensureClient();
+    } catch { return { ok: false, reason: 'no-realtime' }; }
+    const ch = client.channel(LOBBY_TOPIC, {
+      config: { presence: { key: SEAT, enabled: true }, broadcast: { self: false } },
+    });
+    ch.on('presence', { event: 'sync' }, () => onLobby?.(lobbyList()));
+    lobby = ch;
+    await new Promise((res) => {
+      ch.subscribe((st) => { if (st === 'SUBSCRIBED') advertise(); res(st); });
+      setTimeout(res, 8000);
+    });
+    return { ok: true };
+  })();
+  try { return await opening; } finally { opening = null; }
+}
+
+/**
+ * The menu has stopped looking. A host must keep its channel anyway: the
+ * announcement IS its presence there, and dropping it takes the room off
+ * every other pilot's list the moment its own menu closes.
+ */
 export function stopLobby() {
+  onLobby = null;
+  if (hosting) return;
   if (!lobby) return;
   try { lobby.unsubscribe(); } catch { /* going anyway */ }
-  lobby = null; onLobby = null;
+  lobby = null;
   maybeDisconnect();
 }
 
@@ -135,7 +157,14 @@ function lobbyList() {
 }
 
 /** Only the pilot who opened the room advertises it, so it is listed once. */
-export function setHosting(on) { hosting = on; advertise(); }
+export function setHosting(on) {
+  hosting = on;
+  // the room is usually opened from the menu, which closes on the same tick and
+  // takes the lobby with it — so open one rather than announce into nothing
+  if (on && !lobby) { openLobby().then(advertise).catch(() => {}); return; }
+  advertise();
+  if (!on) stopLobby();
+}
 
 function advertise() {
   if (!lobby) return;
@@ -148,14 +177,27 @@ function advertise() {
 }
 
 // ---------------------------------------------------------------- joining
-export async function join({ trackId, code, onRoster, onStart, onResult, onNotice }) {
+export async function join(opts) {
+  const { trackId, code } = opts;
   const cfg = net.config();
   if (!cfg) return { ok: false, reason: 'offline' };
   if (channel) leave();
-  handlers = { onRoster, onStart, onResult, onNotice };
+  // keep the whole set: naming them one by one quietly dropped onCourse and
+  // onGate, so the host's course never reached the room and splits never showed
+  handlers = opts;
   me = { key: SEAT, pilot: net.pilotName() || 'Someone', ship: me.ship,
-    spectating: false, since: Date.now() };
+    spectating: false, since: Date.now(), trackId };
 
+  joining++;
+  try {
+    return await connect(trackId, code);
+  } finally {
+    joining--;
+    maybeDisconnect();
+  }
+}
+
+async function connect(trackId, code) {
   let RealtimeClient;
   try {
     ({ RealtimeClient } = await import(/* @vite-ignore */ REALTIME_ESM));
@@ -165,7 +207,10 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
 
   await ensureClient();
 
-  const topic = `airships:${trackId}:${code}`;
+  // the code IS the room. The trial is not part of the address: the host can
+  // move the whole room to another course mid-session, and a pilot arriving
+  // with only a code must land in the same sky either way
+  const topic = `airships:room:${code}`;
   room = { trackId, code, topic };
   channel = client.channel(topic, {
     // presence must be asked for: realtime-js 2.11 leaves it OFF unless
@@ -185,11 +230,13 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
       r.pilot = m.pilot || 'Someone';
       r.spectating = !!m.spectating;
       r.since = m.since || 0;
+      r.trackId = m.trackId || '';
       if (r.spectating && r.mesh) disposeMesh(r);       // a watcher has no ship aloft
       if (r.ship !== m.ship) { disposeMesh(r); r.ship = m.ship || 'no6'; }
       remotes.set(key, r);
     }
     for (const key of [...remotes.keys()]) if (!seen.has(key)) drop(key);
+    adoptHostCourse();                 // an arrival flies whatever the room flies
     handlers.onRoster?.(roster());
     advertise();                       // the lobby shows how many are aboard
   });
@@ -229,7 +276,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     const done = (s) => { if (!settled) { settled = true; resolve(s); } };
     channel.subscribe(async (s) => {
       if (s === 'SUBSCRIBED') {
-        await channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating, since: me.since });
+        await channel.track(myPresence());
         done('SUBSCRIBED');
       } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') done(s);
     });
@@ -245,20 +292,26 @@ export function leave() {
   for (const key of [...remotes.keys()]) drop(key);
   channel = null; room = null; hosting = false;
   advertise();                         // take the room off the list
+  if (!onLobby) stopLobby();           // nobody is reading it any more either
   maybeDisconnect();
   handlers.onRoster?.([]);
+}
+
+function myPresence() {
+  return { pilot: me.pilot, ship: me.ship, spectating: me.spectating,
+    since: me.since, trackId: me.trackId };
 }
 
 /** Our ship class rides in the presence record, so others draw us correctly. */
 export function setShip(shipId) {
   me.ship = shipId;
-  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating, since: me.since }).catch(() => {});
+  if (channel) channel.track(myPresence()).catch(() => {});
 }
 
 /** Watching rather than flying: no packets go out, and nobody draws a ship. */
 export function setSpectating(on) {
   me.spectating = !!on;
-  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating, since: me.since }).catch(() => {});
+  if (channel) channel.track(myPresence()).catch(() => {});
 }
 export function spectating() { return me.spectating; }
 
@@ -289,10 +342,29 @@ export function callStart(delay, trackId) {
 /** Host only: move the whole room to another trial. */
 export function callCourse(trackId) {
   if (room) room.trackId = trackId;
+  me.trackId = trackId;
+  channel?.track(myPresence()).catch(() => {});
   channel?.send({ type: 'broadcast', event: 'course', payload: { trackId, by: me.pilot } });
   advertise();
 }
 export function seat() { return SEAT; }
+
+/**
+ * The host's presence record says what the room is flying. A pilot who joined
+ * on a code alone has no idea, and a broadcast would only reach whoever was
+ * already listening — so read it off the host, every sync, and follow it.
+ */
+function adoptHostCourse() {
+  if (!room) return;
+  const host = hostSeat();
+  if (host === SEAT) return;                 // we ARE the host; ours is the word
+  const t = remotes.get(host)?.trackId;
+  if (!t || t === room.trackId) return;
+  room.trackId = t;
+  me.trackId = t;
+  channel?.track(myPresence()).catch(() => {});
+  handlers.onCourse?.({ trackId: t, by: remotes.get(host)?.pilot || 'The host' });
+}
 
 // The room is held by whoever arrived first; if they leave it passes to the
 // next longest-standing pilot, so a room never loses its host.
@@ -442,13 +514,12 @@ function buildMesh(r) {
   const spec = SHIPS[r.ship] || SHIPS.no6;
   r.mesh = new Airship(scene, spec);
   r.mesh.reset(new THREE.Vector3(r.buf[0].x, r.buf[0].y, r.buf[0].z), r.buf[0].yaw);
-  // a rival's ship, not yours: tinted and slightly transparent so the two
-  // never read as the same machine in a close finish
+  // a rival's ship, not yours: tinted so the two never read as the same machine
+  // in a close finish. Solid, though — she is a real airship over there, and a
+  // see-through one reads as a replay ghost rather than a pilot you can bump.
   r.mesh.group.traverse((o) => {
     if (o.isMesh && o.material) {
       o.material = o.material.clone();
-      o.material.transparent = true;
-      o.material.opacity = 0.9;
       if (o.material.color) o.material.color.lerp(new THREE.Color(0x6fa8c4), 0.35);
     }
   });

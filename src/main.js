@@ -786,10 +786,9 @@ function buildTogether() {
     menuButton(div, 'Join by code', 'if a friend sent you one', () => {
       const code = (prompt('Room code:') || '').trim().toUpperCase();
       if (!code) return;
-      const list = TRACKS.map((x, i) => (i + 1) + '. ' + x.name).join('\n');
-      const which = prompt('Which trial is the room flying?\n' + list, '1');
-      const pick = TRACKS[Math.max(0, Math.min(TRACKS.length - 1, (parseInt(which, 10) || 1) - 1))];
-      createOrJoinRoom(pick.id, code, false);
+      // no need to ask what they are flying: the host's word settles the course
+      // the moment we are aboard, and we follow it from there
+      createOrJoinRoom(track ? track.id : TRACKS[0].id, code, false);
       toggleMenu(false);
     });
     return;
@@ -974,7 +973,11 @@ async function createOrJoinRoom(trackId, code, hosting) {
     return;
   }
   live.setHosting(!!hosting);          // the opener advertises it; joiners do not
-  startTrack(t);
+  // by now the room may already have told us what it flies — take THAT, not the
+  // course we guessed on the way in, or we would shove the room onto our own
+  const settled = TRACKS.find((x) => x.id === live.roomInfo().trackId) || t;
+  if (currentLocation !== settled.location) loadWorld(settled.location);
+  startTrack(settled);
   race.state = 'idle';
   setCenter(`Room ${code}`, hosting
     ? 'Your room is listed for anyone to join. Press Enter — or GO — when the room is ready to fly.'
