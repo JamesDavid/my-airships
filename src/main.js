@@ -489,7 +489,12 @@ let menuOpen = false;
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
   menuEl.classList.toggle('hidden', !menuOpen);
+  if (!menuOpen && !live.inRoom()) live.stopLobby();
   if (menuOpen) {
+    // the list of open rooms is live only while the menu is showing
+    if (net.enabled()) {
+      live.watchLobby((list) => { openRooms = list.filter((r) => !r.mine); if (menuOpen) buildMenuButtons(); });
+    }
     buildMenuButtons();
     document.getElementById('help').classList.add('hidden');
     document.getElementById('board').classList.add('hidden');
@@ -631,9 +636,17 @@ function buildMenuButtons() {
   // ---- flying together ----
   if (net.enabled()) {
     if (!live.inRoom()) {
-      menuButton(trDiv, 'Fly together — open a room', 'others join with the code', () => {
+      for (const r of openRooms.slice(0, 5)) {
+        const rt = TRACKS.find((x) => x.id === r.trackId);
+        menuButton(trDiv, `Join ${r.host}’s room — ${rt ? rt.name : r.trackId}`,
+          `${r.count} aboard · code ${r.code}`, () => {
+            createOrJoinRoom(r.trackId, r.code, false);
+            toggleMenu(false);
+          });
+      }
+      menuButton(trDiv, 'Fly together — open a room', 'listed for anyone to join', () => {
         const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
-        createOrJoinRoom(t.id, live.newRoomCode());
+        createOrJoinRoom(t.id, live.newRoomCode(), true);
         toggleMenu(false);
       });
       menuButton(trDiv, 'Fly together — join a room', 'paste a room code', () => {
@@ -643,7 +656,7 @@ function buildMenuButtons() {
         const list = TRACKS.map((x, i) => (i + 1) + '. ' + x.name).join('\n');
         const which = prompt('Which trial is the room flying?\n' + list, '1');
         const pick = TRACKS[Math.max(0, Math.min(TRACKS.length - 1, (parseInt(which, 10) || 1) - 1))] || t;
-        createOrJoinRoom(pick.id, code);
+        createOrJoinRoom(pick.id, code, false);
         toggleMenu(false);
       });
     } else {
@@ -696,7 +709,7 @@ function buildMenuButtons() {
 // A live room: everyone in it flies the same trial, sees the others where they
 // actually are, and starts on one call. Scoring stays on each pilot's own
 // machine — the ledger is where scrutineered times live.
-let roomRoster = [], roomResults = [];
+let roomRoster = [], roomResults = [], openRooms = [];
 
 function drawRoom() {
   const el0 = document.getElementById('room');
@@ -712,7 +725,7 @@ function drawRoom() {
   el0.innerHTML = `<div class="rhead">ROOM ${info.code} · ${roomRoster.length} aboard</div>${lines}${res}`;
 }
 
-async function createOrJoinRoom(trackId, code) {
+async function createOrJoinRoom(trackId, code, hosting) {
   const t = TRACKS.find((x) => x.id === trackId);
   if (!t) return;
   if (currentLocation !== t.location) loadWorld(t.location);
@@ -742,9 +755,12 @@ async function createOrJoinRoom(trackId, code) {
       : `Could not join the room (${res.reason}).`, 0);
     return;
   }
+  live.setHosting(!!hosting);          // the opener advertises it; joiners do not
   startTrack(t);
   race.state = 'idle';
-  setCenter(`Room ${code}`, 'Others may join with this code. Press Enter — or GO — when the room is ready to fly.');
+  setCenter(`Room ${code}`, hosting
+    ? 'Your room is listed for anyone to join. Press Enter — or GO — when the room is ready to fly.'
+    : 'Press Enter — or GO — when the room is ready to fly.');
   drawRoom();
   buildMenuButtons();
 }
@@ -1652,6 +1668,12 @@ function frame(now) {
   if (live.inRoom()) {
     live.sendState(dt, ship);
     live.update(dt);
+    // silk on silk: she is shoved aside and loses a little gas, never wrecked
+    const rub = live.bump(ship, dt);
+    if (rub > 0.6) {
+      ship.gas = Math.max(0, ship.gas - Math.min(2.5, rub * 0.3));
+      addMsg('bump', 'You foul the other ship — silk grinds on silk and the gas hisses away!', 6);
+    }
   }
 
   // ghost: record this run, and fly the best one alongside

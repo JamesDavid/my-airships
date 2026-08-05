@@ -55,14 +55,16 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 
 ## Future — multiplayer, if it goes further
 
-- [~] **Live race rooms** — IN BUILD. Supabase Realtime *Broadcast* + *Presence* (never
-  the DB): 8 Hz position packets, no ship-to-ship collision, host-elected countdown,
-  remote ships drawn from their own ship class. Airships at 40 km/h tolerate the
-  200–300 ms this costs, which is why the cheap transport is the right one here. Kept
-  behind a `src/live.js` seam so PartyKit or a dedicated relay can replace it.
-  Watch: Realtime's free-tier message budget (a 4-pilot 5-minute race is ~10k messages),
-  and that Broadcast is a hosted relay rather than edge-stateful rooms — hundreds of
-  concurrent public rooms would want PartyKit.
+- [x] **Live race rooms** — Supabase Realtime *Presence* + *Broadcast*, never the DB.
+  8 Hz packets carrying position, heading, throttle, rudder, gas and wreck state; remote
+  ships drawn as their own class, a quarter-second in the past and interpolated. Public
+  rooms announce themselves by presence on one shared lobby channel — no table, no
+  heartbeat rows, no cleanup, and a room vanishes when its host's page closes. Air-to-air
+  bumping is always on, resolved so each pilot pushes only their OWN ship: latency can
+  never shove anyone else about, and contact costs way and gas but never wrecks.
+  Still to do: spectate mode for a pilot waiting out a race; live gate splits so you can
+  see who leads mid-race rather than only at the finish; and a reconnect path — a dropped
+  socket currently needs a re-join from the menu.
 
 - [ ] **Virtual reality (WebXR / Quest)** — three.js has it built in: `renderer.xr.enabled`,
   an XRButton, and `setAnimationLoop`. It runs in the Quest browser off the same Pages URL,

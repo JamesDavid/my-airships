@@ -37,6 +37,7 @@ function seatUuid() {
 const SEAT = seatUuid();
 
 let client = null, channel = null, scene = null;
+let lobby = null, hosting = false, onLobby = null;
 let me = { key: SEAT, pilot: '', ship: 'no6' };
 let room = null;                   // { trackId, code, topic }
 const remotes = new Map();         // key -> { pilot, ship, buf[], mesh, label, lastSeen }
@@ -64,6 +65,74 @@ export function attach(newScene) {
   for (const r of remotes.values()) { r.mesh = null; }   // rebuilt on the next frame
 }
 
+async function ensureClient() {
+  if (client) return client;
+  const cfg = net.config();
+  const { RealtimeClient } = await import(/* @vite-ignore */ REALTIME_ESM);
+  client = new RealtimeClient(cfg.url.replace(/^http/, 'ws') + '/realtime/v1', {
+    params: { apikey: cfg.key, eventsPerSecond: 12 },
+  });
+  client.connect();
+  return client;
+}
+function maybeDisconnect() {
+  if (!channel && !lobby && client) { try { client.disconnect(); } catch { /* going anyway */ } client = null; }
+}
+
+// ---------------------------------------------------------------- the lobby
+// Open rooms announce themselves by PRESENCE on one shared channel. No table,
+// no heartbeat rows, no cleanup: a room appears when its host arrives and is
+// gone the moment their page closes, which is exactly the lifetime we want.
+const LOBBY_TOPIC = 'airships:lobby';
+
+export async function watchLobby(cb) {
+  onLobby = cb;
+  if (lobby) { cb(lobbyList()); return { ok: true }; }
+  if (!net.config()) return { ok: false, reason: 'offline' };
+  try {
+    await ensureClient();
+  } catch { return { ok: false, reason: 'no-realtime' }; }
+  lobby = client.channel(LOBBY_TOPIC, {
+    config: { presence: { key: SEAT, enabled: true }, broadcast: { self: false } },
+  });
+  lobby.on('presence', { event: 'sync' }, () => onLobby?.(lobbyList()));
+  await new Promise((res) => {
+    lobby.subscribe((st) => { if (st === 'SUBSCRIBED') { advertise(); res(st); } else if (st !== 'SUBSCRIBED') res(st); });
+    setTimeout(res, 8000);
+  });
+  return { ok: true };
+}
+
+export function stopLobby() {
+  if (!lobby) return;
+  try { lobby.unsubscribe(); } catch { /* going anyway */ }
+  lobby = null; onLobby = null;
+  maybeDisconnect();
+}
+
+function lobbyList() {
+  if (!lobby) return [];
+  const out = [];
+  for (const metas of Object.values(lobby.presenceState() || {})) {
+    const m = metas[metas.length - 1];
+    if (m && m.code) out.push({ code: m.code, trackId: m.trackId, host: m.pilot, count: m.count || 1, mine: m.seat === SEAT });
+  }
+  return out.sort((a, b) => (b.count - a.count) || a.code.localeCompare(b.code));
+}
+
+/** Only the pilot who opened the room advertises it, so it is listed once. */
+export function setHosting(on) { hosting = on; advertise(); }
+
+function advertise() {
+  if (!lobby) return;
+  if (hosting && room) {
+    lobby.track({ seat: SEAT, code: room.code, trackId: room.trackId,
+      pilot: me.pilot, count: 1 + remotes.size }).catch(() => {});
+  } else {
+    lobby.untrack().catch(() => {});
+  }
+}
+
 // ---------------------------------------------------------------- joining
 export async function join({ trackId, code, onRoster, onStart, onResult, onNotice }) {
   const cfg = net.config();
@@ -79,10 +148,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     return { ok: false, reason: 'no-realtime' };
   }
 
-  client = new RealtimeClient(cfg.url.replace(/^http/, 'ws') + '/realtime/v1', {
-    params: { apikey: cfg.key, eventsPerSecond: 12 },
-  });
-  client.connect();
+  await ensureClient();
 
   const topic = `airships:${trackId}:${code}`;
   room = { trackId, code, topic };
@@ -107,6 +173,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     }
     for (const key of [...remotes.keys()]) if (!seen.has(key)) drop(key);
     handlers.onRoster?.(roster());
+    advertise();                       // the lobby shows how many are aboard
   });
 
   channel.on('broadcast', { event: 'pos' }, ({ payload }) => {
@@ -144,9 +211,10 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
 
 export function leave() {
   try { channel?.untrack(); channel?.unsubscribe(); } catch { /* going anyway */ }
-  try { client?.disconnect(); } catch { /* ditto */ }
   for (const key of [...remotes.keys()]) drop(key);
-  channel = null; client = null; room = null;
+  channel = null; room = null; hosting = false;
+  advertise();                         // take the room off the list
+  maybeDisconnect();
   handlers.onRoster?.([]);
 }
 
@@ -180,6 +248,21 @@ export function callStart(delay) {
 }
 export function seat() { return SEAT; }
 
+/**
+ * TEST HOOK — place a phantom pilot in the room without a network.
+ * Browsers throttle timers in hidden tabs, so two tabs cannot stream to each
+ * other while one of them renders; this makes the drawing, interpolation and
+ * bumping testable from a single page. Not used by the game itself.
+ */
+export function _debugAddRemote({ pilot = 'Phantom', ship = 'no6', x = 0, y = 60, z = 0, yaw = 0, throttle = 0 }) {
+  if (!scene) return null;
+  const key = 'phantom-' + Math.random().toString(36).slice(2);
+  const r = { pilot, ship, buf: [], mesh: null, lastSeen: nowS(), throttle, rudder: 0, gas: 100, wrecked: false };
+  for (let i = 0; i < 3; i++) r.buf.push({ t: nowS() - 0.4 + i * 0.15, x, y, z, yaw, pitch: 0 });
+  remotes.set(key, r);
+  return key;
+}
+
 /** The remote ships as drawn — for inspection and tests. */
 export function remoteShips() {
   return [...remotes.values()].filter((r) => r.mesh)
@@ -192,6 +275,50 @@ export function callResult(t, place) {
 }
 export function say(text) {
   channel?.send({ type: 'broadcast', event: 'said', payload: { pilot: me.pilot, text } });
+}
+
+// ---------------------------------------------------------------- bumping
+// Air-to-air contact, resolved so that latency can never be unjust: each pilot
+// pushes ONLY THEIR OWN ship away from where they see the others. No shared
+// authority, nobody's machine yanked about by someone else's packets. Two
+// pilots may disagree by a metre or two about where they touched, which on
+// craft this size and this slow is invisible.
+//
+// It bumps, it never wrecks. A hull-on-hull graze at these speeds costs way
+// and a little gas — being knocked out of a race by another man's lag is not
+// a thing this game should do.
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3();
+
+export function bump(ship, dt) {
+  if (!channel || !ship || ship.wrecked) return 0;
+  const myR = ship.spec.envelope.diameter / 2, myHalf = ship.spec.envelope.length / 2;
+  const myFwd = _n.set(Math.cos(ship.yaw), 0, -Math.sin(ship.yaw)).clone();
+  let worst = 0;
+  for (const r of remotes.values()) {
+    const o = r.mesh;
+    if (!o) continue;
+    const oR = o.spec.envelope.diameter / 2, oHalf = o.spec.envelope.length / 2;
+    const oFwd = new THREE.Vector3(Math.cos(o.yaw), 0, -Math.sin(o.yaw));
+    // three stations along each hull is plenty for two cigars in slow motion
+    for (const u of [-0.62, 0, 0.62]) {
+      _a.copy(ship.pos).addScaledVector(myFwd, myHalf * u);
+      for (const v of [-0.62, 0, 0.62]) {
+        _b.copy(o.pos).addScaledVector(oFwd, oHalf * v);
+        const d = _a.distanceTo(_b);
+        const touch = myR + oR;
+        if (d >= touch || d < 0.001) continue;
+        const n = _a.clone().sub(_b).divideScalar(d);
+        ship.pos.addScaledVector(n, (touch - d) * Math.min(1, dt * 12));
+        const vn = ship.vel.dot(n);
+        if (vn < 0) {
+          ship.vel.addScaledVector(n, -vn * 1.25);      // shove apart, keep some way
+          ship.applyImpact(myHalf * u, n, -vn * 0.5);   // and swing her round a little
+          worst = Math.max(worst, -vn);
+        }
+      }
+    }
+  }
+  return worst;
 }
 
 // ---------------------------------------------------------------- drawing

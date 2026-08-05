@@ -45,6 +45,11 @@ public domain).
   can be downloaded and chased. Submitted runs are scrutineered on the server against the
   course geometry and the ship's own physics before they reach the ledger. It is optional:
   configure nothing and the feature simply doesn't exist — see [docs/ONLINE.md](docs/ONLINE.md).
+- **Fly together**: open a room and it is listed for anyone to join, or take a friend's
+  code. Everyone flies the same trial, sees the others where they actually are — their own
+  ship class, their screw turning at their throttle, their rudder over as they turn — and
+  the whole room is called away on one countdown. Ships bump: silk grinds on silk and the
+  gas hisses away, but nobody is wrecked by another pilot's lag.
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |
