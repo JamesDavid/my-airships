@@ -592,6 +592,23 @@ function showPane() {
       === ({ solo: 'Solo', together: 'Together', ship: 'Ship', place: 'Place', options: 'Options' })[menuTab]);
   }
 }
+/**
+ * A parked notice must sit BELOW the instruments and the trial, and no constant
+ * can promise that: the trial's line wraps to six or seven rows on a telephone
+ * and to one on a desk. So it is measured. Only on narrow screens — on a wide
+ * one the corners are nowhere near the middle.
+ */
+function parkClearOfCorners() {
+  const c = document.getElementById('center');
+  if (innerWidth > 900) { c.style.top = ''; return; }
+  const low = Math.max(document.getElementById('panelTL').getBoundingClientRect().bottom,
+    document.getElementById('panelTR').getBoundingClientRect().bottom);
+  c.style.top = Math.round(low + 10) + 'px';
+}
+addEventListener('resize', () => {
+  if (document.getElementById('center').classList.contains('parked')) parkClearOfCorners();
+});
+
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
   menuEl.classList.toggle('hidden', !menuOpen);
@@ -1935,7 +1952,9 @@ let centerSetAt = 0;
 function setCenter(big, sub) {
   document.getElementById('centerBig').textContent = big;
   document.getElementById('centerSub').textContent = sub;
-  document.getElementById('center').classList.remove('parked');
+  const c = document.getElementById('center');
+  c.classList.remove('parked');
+  c.style.top = '';               // hand the position back to the stylesheet
   centerSetAt = performance.now();
 }
 
@@ -2120,6 +2139,7 @@ function updateHUD() {
   // (countdown numbers refresh the timer each frame, so they stay centered)
   if (el('centerBig').textContent && performance.now() - centerSetAt > 3500) {
     document.getElementById('center').classList.add('parked');
+    parkClearOfCorners();
   }
   const s = race.state;
   el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';

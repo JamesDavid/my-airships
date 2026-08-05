@@ -37,7 +37,9 @@ public domain).
   times, and a **ghost** of your best run to race against — copy its code and send it to
   a friend to race asynchronously. Dives trade altitude for speed; times are kept per
   ship class. A **track editor** (G drops a gate) lets you build and share circuits, and
-  the **wind is seeded by the date** — everyone flies the same sky today.
+  the **weather is the same for everyone, everywhere, at the same moment** — the
+  day's wind, where every cloud sits, the gusts, the thermals and the motor's own caprice
+  are all functions of the clock (UTC), not of when you opened the page.
 - **World records**: every personal best is entered in a public ledger, and the record
   to beat is in front of you while you fly — named on the HUD as you start a lap, beside
   every course in the menu, and announced when you take it. Boards run per course and

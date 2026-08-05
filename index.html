@@ -12,9 +12,11 @@
   canvas { display:block; }
 
   .hud { position:fixed; color:#3a2c1e; text-shadow:0 1px 0 rgba(255,255,255,.35); user-select:none; pointer-events:none; }
-  #panelTL { top:14px; left:16px; font-size:15px; line-height:1.5; }
+  #panelTL { top:calc(14px + env(safe-area-inset-top, 0px));
+    left:calc(16px + env(safe-area-inset-left, 0px)); font-size:15px; line-height:1.5; }
   #panelTL b { font-size:13px; letter-spacing:.12em; opacity:.65; }
-  #panelTR { top:14px; right:18px; text-align:right; }
+  #panelTR { top:calc(14px + env(safe-area-inset-top, 0px));
+    right:calc(18px + env(safe-area-inset-right, 0px)); text-align:right; }
   #timer { font-size:30px; font-variant-numeric:tabular-nums; }
   #lapline { font-size:15px; letter-spacing:.08em; }
   #split { font-size:17px; font-variant-numeric:tabular-nums; min-height:20px; }
@@ -23,7 +25,8 @@
   #objective { font-size:14px; font-style:italic; opacity:.85; max-width:300px; }
   #best { font-size:12px; opacity:.6; }
   #wr { font-size:12.5px; color:#c9a437; opacity:.9; min-height:15px; }
-  #room { position:fixed; top:120px; left:16px; font-size:13px; color:#3a2c1e;
+  #room { position:fixed; top:calc(120px + env(safe-area-inset-top, 0px));
+    left:calc(16px + env(safe-area-inset-left, 0px)); font-size:13px; color:#3a2c1e;
     text-shadow:0 1px 0 rgba(255,255,255,.35); pointer-events:none; }
   #room .rhead { font-size:11.5px; letter-spacing:.12em; opacity:.7; }
   #room .rme { color:#6b4a1e; font-weight:bold; }
@@ -33,7 +36,8 @@
   #room .brg { display:inline-block; opacity:.8; }
   #wr b { font-weight:normal; color:#e8c477; }
 
-  #panelBL { bottom:16px; left:16px; font-size:13px; }
+  #panelBL { bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+    left:calc(16px + env(safe-area-inset-left, 0px)); font-size:13px; }
   .barwrap { width:190px; height:10px; background:rgba(58,44,30,.25); border:1px solid rgba(58,44,30,.5); margin:3px 0 8px; }
   .bar { height:100%; background:#8a6d3b; }
   #gasBar { background:#b08d3f; }
@@ -186,6 +190,15 @@
     user-select:none; -webkit-user-select:none; touch-action:none; z-index:30; }
   .tbtn.sm { width:46px; height:46px; font-size:13px; }
   .tbtn.on { background:rgba(232,196,119,.5); border-color:#e8c477; }
+  :root { --rtop: calc(12px + env(safe-area-inset-top, 0px)); }
+  /* The right-hand column, positioned here rather than inline so the phone
+     layout can push it clear of the notch. --rtop is the top of the column. */
+  #btnBug, #btnMenu, #btnCam, #btnGo { right: calc(12px + env(safe-area-inset-right, 0px)); }
+  #btnBug { top: var(--rtop); }
+  #btnMenu { top: calc(var(--rtop) + 62px); }
+  #btnCam { top: calc(var(--rtop) + 124px); }
+  #btnGo { top: calc(var(--rtop) + 186px); }
+
   /* built into the page, but shown only when net.js has an office to write to */
   #btnBug { display:none; cursor:pointer; }
   #btnBug svg { width:24px; height:24px; opacity:.85; }
@@ -257,13 +270,30 @@
 
   /* ---------- small screens (phones, both orientations) ---------- */
   @media (max-width: 900px), (max-height: 520px) {
-    #panelTL { font-size:11.5px; line-height:1.35; top:8px; left:10px; }
+    /* On a telephone the top of the screen is the whole of the top of the
+       screen. Three things were laid over each other there — the instruments,
+       the trial and its record, and whatever notice had parked itself — and the
+       result was unreadable. They get separate lanes: instruments hard left,
+       the trial to their right but INSIDE the button column, and any parked
+       notice below both rather than across them. */
+    #panelTL { font-size:11.5px; line-height:1.35;
+      top:calc(8px + env(safe-area-inset-top, 0px)); left:calc(10px + env(safe-area-inset-left, 0px)); }
     #timer { font-size:20px; }
-    #objective { font-size:11px; max-width:190px; }
-    #best { font-size:9.5px; }
-    #centerBig { font-size:28px; }
-    #centerSub { font-size:13px; }
-    #center { top:22%; }
+    /* clear of the round buttons: 46 px of button, 12 px of margin, 10 px of air */
+    #panelTR { top:calc(8px + env(safe-area-inset-top, 0px));
+      right:calc(72px + env(safe-area-inset-right, 0px)); max-width:44vw; }
+    #objective { font-size:10.5px; max-width:100%; line-height:1.3; }
+    #best, #wr { font-size:9.5px; }
+    #centerBig { font-size:26px; }
+    #centerSub { font-size:12.5px; padding:0 14px; }
+    /* centred between the left edge and the button column, not under it */
+    #center { top:26%; left:calc(8px + env(safe-area-inset-left, 0px));
+      right:calc(72px + env(safe-area-inset-right, 0px)); }
+    /* parked, it must sit UNDER both corners, not on them */
+    #center.parked { top:calc(84px + env(safe-area-inset-top, 0px)); }
+    #center.parked #centerBig { font-size:16px; }
+    #center.parked #centerSub { font-size:11px; }
+    #room { top:calc(96px + env(safe-area-inset-top, 0px)); }
     #help { max-width:94vw; max-height:86vh; overflow:auto; font-size:11.5px;
       line-height:1.5; padding:12px 16px; }
     #help h2 { font-size:16px; }
@@ -531,7 +561,7 @@
   <div class="tbtn sm" id="btnFix" data-key="KeyF">FIX</div>
   <!-- the fault book sits above the menu; main.js only shows it when there is
        a record office to send a report to -->
-  <div class="tbtn sm" id="btnBug" title="Report a fault" style="right:12px; top:12px">
+  <div class="tbtn sm" id="btnBug" title="Report a fault">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none">
         <path d="M9.6 4.6 8.2 2.6M14.4 4.6 15.8 2.6"/>
@@ -544,9 +574,9 @@
       <path d="M12 8.6v11.4" stroke="rgba(30,22,14,.85)" stroke-width="1.2"/>
     </svg>
   </div>
-  <div class="tbtn sm" data-key="Escape" style="right:12px; top:74px">☰</div>
-  <div class="tbtn sm" data-key="KeyC" style="right:12px; top:136px">CAM</div>
-  <div class="tbtn sm" data-key="Enter" style="right:12px; top:198px">GO</div>
+  <div class="tbtn sm" id="btnMenu" data-key="Escape">☰</div>
+  <div class="tbtn sm" id="btnCam" data-key="KeyC">CAM</div>
+  <div class="tbtn sm" id="btnGo" data-key="Enter">GO</div>
 </div>
 
 <div class="hud" id="room"></div>
