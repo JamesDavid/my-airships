@@ -729,7 +729,8 @@ async function createOrJoinRoom(trackId, code) {
       race.count = p.delay;
     },
     onResult: (p) => {
-      roomResults = [...roomResults.filter((x) => x.pilot !== p.pilot), p].sort((a, b) => a.t - b.t);
+      // keyed by seat: names are user-settable and two pilots may share one
+      roomResults = [...roomResults.filter((x) => x.k !== p.k), p].sort((a, b) => a.t - b.t);
       addMsg('roomdone', `${p.pilot} crosses the line at ${fmt(p.t)}.`, 0);
       drawRoom();
     },
@@ -1113,15 +1114,15 @@ function finishRace() {
   }
   if (live.inRoom()) {
     live.callResult(t);
-    roomResults = [...roomResults.filter((x) => x.pilot !== net.pilotName()), { pilot: net.pilotName(), t }]
-      .sort((a, b) => a.t - b.t);
+    roomResults = [...roomResults.filter((x) => x.k !== live.seat()),
+      { k: live.seat(), pilot: net.pilotName(), t }].sort((a, b) => a.t - b.t);
     drawRoom();
   }
   let sub = improved
     ? (prev ? `New best — ${(prev.t - t).toFixed(1)}s faster! (Enter: again)` : 'First time set — your ghost now flies this course. (Enter: again)')
     : `+${(t - prev.t).toFixed(1)}s off your best of ${fmt(prev.t)}. (Enter: again)`;
   if (live.inRoom() && roomResults.length > 1) {
-    const place = roomResults.findIndex((x) => x.pilot === net.pilotName()) + 1;
+    const place = roomResults.findIndex((x) => x.k === live.seat()) + 1;
     sub = `${ordinal(place)} of ${roomResults.length} home. ` + sub;
   }
   if (rival) {

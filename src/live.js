@@ -24,8 +24,20 @@ const SEND_HZ = 8;                 // position packets per second
 const RENDER_DELAY = 0.25;         // seconds behind live, so we interpolate
 const STALE_AFTER = 6;             // drop a pilot who has said nothing for this long
 
+// A presence key must identify this SEAT, not this pilot. The pilot id lives in
+// localStorage and is therefore shared by every tab of the same browser — using
+// it meant two tabs presented as one person, so each saw an empty room and no
+// ship. This is per page, and dies with it.
+function seatUuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const h = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0'));
+  return `${h.slice(0, 4).join('')}-${h.slice(4, 6).join('')}-4${h.slice(6, 8).join('').slice(1)}` +
+    `-a${h.slice(8, 10).join('').slice(1)}-${h.slice(10, 16).join('')}`;
+}
+const SEAT = seatUuid();
+
 let client = null, channel = null, scene = null;
-let me = { key: '', pilot: '', ship: 'no6' };
+let me = { key: SEAT, pilot: '', ship: 'no6' };
 let room = null;                   // { trackId, code, topic }
 const remotes = new Map();         // key -> { pilot, ship, buf[], mesh, label, lastSeen }
 let sendAcc = 0;
@@ -58,7 +70,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
   if (!cfg) return { ok: false, reason: 'offline' };
   if (channel) leave();
   handlers = { onRoster, onStart, onResult, onNotice };
-  me = { key: net.pilotId(), pilot: net.pilotName() || 'Someone', ship: me.ship };
+  me = { key: SEAT, pilot: net.pilotName() || 'Someone', ship: me.ship };
 
   let RealtimeClient;
   try {
@@ -146,7 +158,7 @@ export function sendState(dt, pos, yaw, pitch) {
   if (sendAcc < 1 / SEND_HZ) return;
   sendAcc = 0;
   channel.send({ type: 'broadcast', event: 'pos', payload: {
-    k: me.key,
+    k: me.key,          // the seat, matching the presence key
     x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1),
     a: +yaw.toFixed(2), p: +pitch.toFixed(2),
   } }).catch?.(() => {});
@@ -155,8 +167,11 @@ export function sendState(dt, pos, yaw, pitch) {
 export function callStart(delay) {
   channel?.send({ type: 'broadcast', event: 'go', payload: { by: me.pilot, delay } });
 }
+export function seat() { return SEAT; }
+
 export function callResult(t, place) {
-  channel?.send({ type: 'broadcast', event: 'done', payload: { pilot: me.pilot, t, place } });
+  // the seat identifies the entry; the name is only what we print
+  channel?.send({ type: 'broadcast', event: 'done', payload: { k: me.key, pilot: me.pilot, t, place } });
 }
 export function say(text) {
   channel?.send({ type: 'broadcast', event: 'said', payload: { pilot: me.pilot, text } });
