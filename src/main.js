@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt, mulberry32 } from './world.js';
+import { buildWorld, updateClouds, underCloud, towerRadiusAt, windMats, windAt, verticalAir, mulberry32 } from './world.js';
 import { buildWorldMonaco } from './world_monaco.js';
 import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
@@ -1354,7 +1354,11 @@ function frame(now) {
     underCloud: underCloud(world.clouds, ship.pos.x, ship.pos.z),
     inBois: world.isInBois(ship.pos.x, ship.pos.z),
     buildings: world.buildings,
+    airY: verticalAir(world, ship.pos.x, ship.pos.y, ship.pos.z, windGustT),
   };
+  // the air itself is worth remarking on when it takes hold of the ship
+  if (env.airY > 0.75) addMsg('updraft', 'The air itself is lifting you — a column of it, rising to build the cloud above.', 26);
+  else if (env.airY < -0.55) addMsg('downdraft', 'The air is settling here: cool ground below, and the ship goes down with it.', 26);
   ship.update(dt, input, wind, env);
   checkCollisions(dt);
 
@@ -1413,9 +1417,12 @@ function frame(now) {
   }
 
   // the world shows the wind: swaying foliage, streaming flags, drifting smoke
+  // foliage answers the wind AT TREETOP HEIGHT, not the reference vector: down
+  // here the air is slower and veered, and that is precisely what a pilot reads
+  const wLow = windAt(wind, 9);
   for (const m of windMats) {
     const sh = m.userData.shader;
-    if (sh) { sh.uniforms.uWind.value.set(wind.x, wind.z); sh.uniforms.uTime.value = windGustT; }
+    if (sh) { sh.uniforms.uWind.value.set(wLow.x, wLow.z); sh.uniforms.uTime.value = windGustT; }
   }
   const flagAng = Math.atan2(-wind.z, wind.x);
   for (const f of world.flags || []) f.rotation.y = flagAng + Math.sin(windGustT * 3.1) * 0.14;

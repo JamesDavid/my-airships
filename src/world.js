@@ -81,6 +81,48 @@ export function windAt(wind, y) {
     (-wind.x * s + wind.z * c) * mag);
 }
 
+// ---------------------------------------------------------------- vertical air
+// The air does not only move sideways. Sun-warmed stone and dry ground send it
+// up; water and the cool green of the Bois let it down; and a fair-weather
+// cumulus is the visible top of a rising column — "I was being lifted by an
+// enormous column of air rushing upward. While I fell in it I rose rapidly
+// higher with it" (Ch. VIII, the Nice storm, at its gentler everyday strength).
+//
+// Returns metres per second, positive upward. The ship feels it through its own
+// vertical drag, so a strong column will carry it up even with the valve open.
+export function verticalAir(world, x, y, z, t) {
+  if (y < 2) return 0;
+  let v = 0;
+
+  // the ground below decides whether air rises or settles
+  if (world.isWater(x, z)) v -= 0.55;                       // cool water: subsidence
+  else if (world.isInBois && world.isInBois(x, z)) v -= 0.40; // "the cool air from the trees"
+  else v += 0.42;                                            // sunlit stone and dust
+
+  // clouds: sinking in the shade under the cloud, lifting in the sunlit collar
+  // just outside it, where the thermal that feeds the cloud actually climbs
+  for (const c of world.clouds || []) {
+    const g = c.grp;
+    const dx = x - g.position.x, dz = z - g.position.z;
+    const d = Math.hypot(dx, dz);
+    const r = c.r;
+    if (d > r * 2.1) continue;
+    const strength = c.towering ? 1.9 : 1.0;
+    if (d < r * 0.95) v -= 0.5 * strength * (1 - d / (r * 0.95));
+    else {
+      const u = (d - r * 0.95) / (r * 1.15);                // 0 at the rim, 1 far out
+      v += 1.15 * strength * Math.sin(Math.PI * Math.min(1, u));
+    }
+  }
+
+  // it is strongest in the middle air: nothing at the grass, fading out above
+  // where the cumulus tops off
+  const prof = Math.min(1, Math.max(0, (y - 8) / 70)) * Math.min(1, Math.max(0, (520 - y) / 200));
+  // and it breathes, so no column is a steady lift you can simply park in
+  const breathe = 0.72 + 0.28 * Math.sin(t * 0.31 + x * 0.0016 + z * 0.0021);
+  return v * prof * breathe;
+}
+
 // Materials whose vertices sway with the wind (trees, scrub). main.js feeds the
 // uniforms each frame so a pilot can READ the wind in the foliage (A9/B1).
 export const windMats = [];
@@ -92,10 +134,23 @@ export function windify(mat) {
       .replace('#include <common>', '#include <common>\nuniform vec2 uWind; uniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         {
-          float swayPh = uTime * 1.9 + position.x * 2.3 + position.z * 1.7;
-          float sway = 0.55 + 0.45 * sin(swayPh);
-          transformed.x += uWind.x * max(transformed.y, 0.0) * 0.055 * sway;
-          transformed.z += uWind.y * max(transformed.y, 0.0) * 0.055 * sway;
+          // where this tree stands (instanced foliage carries it in its matrix)
+          #ifdef USE_INSTANCING
+            vec2 wpos = vec2(instanceMatrix[3].x, instanceMatrix[3].z);
+          #else
+            vec2 wpos = vec2(0.0);
+          #endif
+          float mag = length(uWind);
+          vec2 dir = mag > 0.001 ? uWind / mag : vec2(0.0);
+          // gusts travel DOWNWIND across the wood: the phase lags with distance
+          // along the wind, so a pilot sees the ripple sweep the way the air goes
+          float gustPh = uTime * 1.15 - dot(wpos, dir) * 0.013;
+          float gust = 0.62 + 0.38 * sin(gustPh);
+          // each tree keeps its own quicker rustle on top of the travelling gust
+          float rustle = 0.72 + 0.28 * sin(uTime * 2.4 + wpos.x * 0.7 + wpos.y * 0.5
+                                           + position.x * 2.3 + position.z * 1.7);
+          transformed.x += uWind.x * max(transformed.y, 0.0) * 0.13 * gust * rustle;
+          transformed.z += uWind.y * max(transformed.y, 0.0) * 0.13 * gust * rustle;
         }`);
     mat.userData.shader = shader;
   };
@@ -210,7 +265,9 @@ export function buildWorld(scene) {
     new THREE.Vector3(-2020, 0, 700),
     new THREE.Vector3(-2130, 0, 1600),
   ]).getPoints(100);
-  scene.add(makeRibbon(westPts, 86, 0xa39a86, 0.18));
+  // out here the Seine has grass banks and a towpath, not the cut-stone quays
+  // of the city reaches — those read as a wide brown shelf beside the water
+  scene.add(makeRibbon(westPts, 88, 0x6d7a4d, 0.16, true));
   const seineW = makeWaterSurface(ribbonGeoXY(westPts, 64), sunDir, 0x24405a);
   seineW.rotation.x = -Math.PI / 2;
   seineW.position.y = 0.3;
@@ -692,7 +749,7 @@ function seinePoints() {
   return curve.getPoints(140);
 }
 
-function makeRibbon(pts, width, color, y) {
+function makeRibbon(pts, width, color, y, dull) {
   const pos = [], idx = [];
   const up = new THREE.Vector3(0, 1, 0);
   for (let i = 0; i < pts.length; i++) {
@@ -710,7 +767,9 @@ function makeRibbon(pts, width, color, y) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  return new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color, shininess: 90, specular: 0xffe6c0 }));
+  return new THREE.Mesh(geo, dull
+    ? new THREE.MeshLambertMaterial({ color })
+    : new THREE.MeshPhongMaterial({ color, shininess: 90, specular: 0xffe6c0 }));
 }
 
 // ribbon built in the XY plane (x, -z) so Water's reflector plane is correct
@@ -1137,7 +1196,7 @@ export function makeClouds(scene, windBase) {
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.set(grp.position.x, 0.45, grp.position.z);
     scene.add(shadow);
-    clouds.push({ grp, shadow, r, drift: 0.4 + rand() * 0.5 });
+    clouds.push({ grp, shadow, r, towering, drift: 0.4 + rand() * 0.5 });
   }
   // cirrus veil, streaked along the prevailing wind
   const windAng = windBase ? Math.atan2(-windBase.z, windBase.x) : 0;

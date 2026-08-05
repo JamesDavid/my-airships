@@ -669,6 +669,11 @@ export class Airship {
 
     // pressure (B6): fullness x heat x altitude expansion, + tail suction with speed
     const airspeedV = this.vel.clone().sub(windAt(wind, this.pos.y));
+    // the air rises and settles as well as blowing: subtracting it here means
+    // every vertical force below — drag, the dive exchange — is reckoned against
+    // the moving air, so a column lifts the ship whatever the valve is doing
+    this.airY = env.airY || 0;
+    airspeedV.y -= this.airY;
     const airspeed = Math.hypot(airspeedV.x, airspeedV.z);
     const fullness = (this.gas / 100) * this.heat;
     const pressure = fullness * (1 + this.pos.y / 1600) + P.speedPressure * (airspeed / 18);
