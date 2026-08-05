@@ -110,3 +110,27 @@ Port Hercule.
 - 1904 World's Fair ground plans: Library of Congress (loc.gov/item/2007633932,
   Pharus-map loc.gov/item/99466762), Missouri Digital Heritage (official ground
   plan), AGS Library Digital Map Collection (UWM)
+
+
+## An open question: the helm
+
+The game shows the helm as a **tiller** — a bar lying athwartships on a pivot at its
+middle, with a cord from each end running aft to its own side of the rudder, pushed and
+pulled rather than turned. Earlier builds showed a ship's wheel on a raked column.
+
+The memoir's translation is against the tiller on the one occasion it names the control.
+In the Deutsch run (B7 in docs/BOOK_REFERENCE.md) the text reads:
+
+> "It was to abandon the **steering wheel** for a moment, at the risk of drifting from my
+> course, in order to devote my attention to the carburating lever and the lever
+> controlling the electric spark."
+
+That is a 1904 English translation of a French original, and "steering wheel" there may be
+the translator's word for whatever the pilot's hands were on rather than a description of
+its shape. It has not been checked against the French text or against basket photographs
+of any particular ship, and the ships did not all steer alike — a bar on the No. 9's little
+basket and a wheel on the No. 7 would both be unsurprising.
+
+Recorded here so the discrepancy is not lost: the game currently contradicts the one
+passage that names the thing. Settling it wants the French edition and a photograph of the
+basket of whichever ship is being drawn.

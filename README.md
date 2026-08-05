@@ -45,13 +45,24 @@ public domain).
   can be downloaded and chased. Submitted runs are scrutineered on the server against the
   course geometry and the ship's own physics before they reach the ledger. It is optional:
   configure nothing and the feature simply doesn't exist — see [docs/ONLINE.md](docs/ONLINE.md).
-- **Fly together**: open a room and it is listed for anyone to join, or take a friend's
-  code. Everyone flies the same trial, sees the others where they actually are — their own
-  ship class, their screw turning at their throttle, their rudder over as they turn — and
-  the whole room is called away on one countdown. Every gate pass is called, so the panel
-  keeps a running order and you can watch the lead change. Ships bump: silk grinds on silk
-  and the gas hisses away, but nobody is wrecked by another pilot's lag. Not flying? Stand
-  down and ride with any pilot in the room — chase, postcard, or standing in their basket.
+- **Report a fault**: the beetle button above the menu sends the works an account of what
+  went wrong, with a picture of the view — or of the whole window, if you let the browser
+  ask you which to share — and the state you were flying in: ship, place, course, room,
+  instruments, and anything the page threw. Part of the same optional wiring: with no
+  Supabase project configured there is nowhere to send one, so the button is never built.
+- **Fly together**: a room is a shared sky. Open one and it is listed for anyone to join —
+  or open a **private** one, which stays off the list and lets in only the code you hand
+  out. Either way the code is the whole address: give it to a friend and they land in your
+  sky without being asked which trial you are flying. Everyone flies free in the same city,
+  seeing the others where they actually are — their own ship class, their screw turning at
+  their throttle, their rudder over as they turn — with an **arrow and a range** to each
+  rival in the roster, turning with your own head so straight up is dead ahead. The host
+  sets the course and calls the room away on one countdown, everyone abeam on a starting
+  grid; if the host leaves, the room passes to the longest-standing pilot and stays as it
+  was — listed or private. Every gate pass is called, so the panel keeps a running order
+  and you can watch the lead change. Ships bump: silk grinds on silk and the gas hisses
+  away, but nobody is wrecked by another pilot's lag. Not flying? Stand down and ride with
+  any pilot in the room — chase, postcard, or standing in their basket.
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |
@@ -73,6 +84,9 @@ public domain).
 - **"To descend without sacrificing gas and to mount without sacrificing ballast."**
   Hydrogen and sand are permanent spends; the skilled way to climb and dive is the
   *shifting weights* plus the propeller — free diagonal flight.
+- **The helm is a tiller**, not a wheel: a bar lying across the basket on a pivot at its
+  middle, a cord from each end running aft to its own side of the rudder. Push one hand
+  away and pull the other back and she comes round.
 - **The guide rope** trails beneath you: fly low and it grounds itself, automatically
   steadying your altitude (over water it is perfect). It also drags like a brake, drapes
   over rooftops, and snags.
@@ -93,6 +107,7 @@ Press **Esc** for the menu (choose ship and location), **H** for the key referen
 | SPACE | drop a ballast sack · V (hold) vent hydrogen · F coax the motor |
 | ENTER | start the timed trial, near the gold ring |
 | C | camera: chase / **aboard the basket** / postcard / vista |
+| 1–7, 9, 0, B | change ships — **in the air** in free flight (she is taken over where she flew); land first during a scenario or trial |
 | P | photograph mode (sepia + grain) · M sound · R reset |
 
 ## Run locally

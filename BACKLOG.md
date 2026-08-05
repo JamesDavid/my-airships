@@ -57,9 +57,16 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 
 - [x] **Live race rooms** — Supabase Realtime *Presence* + *Broadcast*, never the DB.
   8 Hz packets carrying position, heading, throttle, rudder, gas and wreck state; remote
-  ships drawn as their own class, a quarter-second in the past and interpolated. Public
-  rooms announce themselves by presence on one shared lobby channel — no table, no
-  heartbeat rows, no cleanup, and a room vanishes when its host's page closes. Air-to-air
+  ships drawn as their own class, a quarter-second in the past and interpolated. Rooms
+  announce themselves by presence on one shared lobby channel — no table, no heartbeat
+  rows, no cleanup, and a room vanishes when the last pilot in it leaves. The announcement
+  is made by whoever HOLDS the room rather than whoever opened it, so a room outliving its
+  founder stays listed; a private room is simply one that makes no announcement, and that
+  fact rides in the host's presence record so an inherited room stays private. The room's
+  topic is its code alone — the trial is not part of the address, since the host may move
+  the whole room to another course mid-session and a pilot arriving on a code has no way
+  to guess. Each rival carries an arrow and a range in the roster panel, on the same
+  convention as the wind arrow: it turns with your own head, so up is dead ahead. Air-to-air
   bumping is always on, resolved so each pilot pushes only their OWN ship: latency can
   never shove anyone else about, and contact costs way and gas but never wrecks.
   Spectating and live gate splits are in: a pilot can stand down and ride with anyone in
@@ -70,9 +77,23 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   other, until its host calls a race — eight seconds and everyone on a starting grid,
   spaced abeam in an order the whole room agrees on. The host owns the course and the
   city; the room follows. Hosting passes to the longest-standing pilot if the host leaves.
+  Ships may be swapped in mid-air in free flight — she is taken over where she flew — but
+  not inside a scenario or a running trial.
   Still to do: a reconnect path (a dropped socket needs a re-join from the menu); chat if
   rooms ever fill with strangers; and scenarios are deliberately solo — they are scripted
   personal stories and do not belong inside a shared race room.
+
+- [x] **A fault book** — pilots report what went wrong from inside the game: the round
+  beetle button above the menu, and an Options entry. A report carries what they typed, a
+  picture (the rendered view by default — read in the same tick as the render, since the
+  drawing buffer is gone by the next one — or the whole window through `getDisplayMedia`,
+  which makes the browser ask them what to share), and the state they were flying in:
+  ship, place, course, race, room, instruments, viewport, user-agent, and the last 25
+  errors thrown. That ring buffer is installed on the first line of `main.js`, before
+  anything else can throw, so nobody has to reproduce a fault with the console open.
+  `bug_reports` is insert-only for `anon` and readable by nobody. Like everything else
+  online it degrades to nothing: unconfigured, the button is never built. See
+  docs/ONLINE.md.
 
 - [ ] **Virtual reality (WebXR / Quest)** — three.js has it built in: `renderer.xr.enabled`,
   an XRButton, and `setAnimationLoop`. It runs in the Quest browser off the same Pages URL,
@@ -82,7 +103,7 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   it is one to two weeks, because VR deletes the screen-space UI. The HUD, menu, record
   office and slider overlay are all DOM and would have to move into the world — which suits
   us, since the barometer, compass and levers are already physical objects — and the natural
-  control is grabbing the actual wheel and hauling the actual trim line. Performance wants a
+  control is putting both hands on the actual tiller and hauling the actual trim line. Performance wants a
   look too: a Quest renders twice at 72–90 Hz, so the bloom pass and the Water shader would
   need a lower-quality path. Worth a stereo-only proof first (headset view, keyboard control,
   HUD suppressed) to see whether the sensation lands.
