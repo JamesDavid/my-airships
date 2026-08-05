@@ -55,11 +55,27 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 
 ## Future — multiplayer, if it goes further
 
-- [ ] **Live race rooms** — Supabase Realtime *Broadcast* + *Presence* (not the DB):
-  8–10 Hz position packets, no ship-to-ship collision, host-elected countdown, remote
-  ships drawn with the existing ghost/rival meshes. Airships at 40 km/h tolerate the
-  200–300 ms this costs, which is why the cheap transport is the right one here. Keep it
-  behind a `src/net.js`-shaped seam so PartyKit or a dedicated relay can replace it.
+- [~] **Live race rooms** — IN BUILD. Supabase Realtime *Broadcast* + *Presence* (never
+  the DB): 8 Hz position packets, no ship-to-ship collision, host-elected countdown,
+  remote ships drawn from their own ship class. Airships at 40 km/h tolerate the
+  200–300 ms this costs, which is why the cheap transport is the right one here. Kept
+  behind a `src/live.js` seam so PartyKit or a dedicated relay can replace it.
+  Watch: Realtime's free-tier message budget (a 4-pilot 5-minute race is ~10k messages),
+  and that Broadcast is a hosted relay rather than edge-stateful rooms — hundreds of
+  concurrent public rooms would want PartyKit.
+
+- [ ] **Virtual reality (WebXR / Quest)** — three.js has it built in: `renderer.xr.enabled`,
+  an XRButton, and `setAnimationLoop`. It runs in the Quest browser off the same Pages URL,
+  no store. The game suits it unusually well: you sit still in a detailed cockpit while the
+  world moves, with no strafing, no snap-turns, gentle accelerations and a fixed basket as
+  an anchor — the usual nausea triggers are absent. The rendering is a day; the game around
+  it is one to two weeks, because VR deletes the screen-space UI. The HUD, menu, record
+  office and slider overlay are all DOM and would have to move into the world — which suits
+  us, since the barometer, compass and levers are already physical objects — and the natural
+  control is grabbing the actual wheel and hauling the actual trim line. Performance wants a
+  look too: a Quest renders twice at 72–90 Hz, so the bloom pass and the Water shader would
+  need a lower-quality path. Worth a stereo-only proof first (headset view, keyboard control,
+  HUD suppressed) to see whether the sensation lands.
 - [ ] **Spectator / press box** — watch a live room from the Trocadéro terrace.
 - [ ] **Rooms for the historic courses** — needs a server-side notion of the aerodrome
   finish radius before those times can be trusted online.

@@ -23,6 +23,11 @@
   #objective { font-size:14px; font-style:italic; opacity:.85; max-width:300px; }
   #best { font-size:12px; opacity:.6; }
   #wr { font-size:12.5px; color:#c9a437; opacity:.9; min-height:15px; }
+  #room { position:fixed; top:120px; left:16px; font-size:13px; color:#3a2c1e;
+    text-shadow:0 1px 0 rgba(255,255,255,.35); pointer-events:none; }
+  #room .rhead { font-size:11.5px; letter-spacing:.12em; opacity:.7; }
+  #room .rme { color:#6b4a1e; font-weight:bold; }
+  #room .rrow { line-height:1.45; }
   #wr b { font-weight:normal; color:#e8c477; }
 
   #panelBL { bottom:16px; left:16px; font-size:13px; }
@@ -315,6 +320,7 @@
   <div class="tbtn sm" data-key="Enter" style="right:12px; top:184px">GO</div>
 </div>
 
+<div class="hud" id="room"></div>
 <div id="vignette"></div><div id="grain"></div>
 <script type="module" src="./src/main.js"></script>
 </body>

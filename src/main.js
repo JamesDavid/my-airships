@@ -13,6 +13,7 @@ import { SHIPS, SHIP_KEYS } from './ships.js';
 import { SCENARIOS, Rival } from './scenarios.js';
 import { TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 import * as net from './net.js';
+import * as live from './live.js';
 import { courseLength, shipTopSpeed } from './anticheat.js';
 
 // ---------------------------------------------------------------- setup
@@ -44,6 +45,7 @@ let windGustT = 0;
 
 function spawnShip(specId) {
   currentShip = specId;
+  live.setShip(specId);
   if (ship) ship.dispose();
   ship = new Airship(scene, SHIPS[specId]);
   const y = ship.restHeight();
@@ -240,6 +242,7 @@ function loadWorld(loc) {
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.7, 0.86));
   composer.addPass(new OutputPass());
   disposeWorld(oldScene, oldComposer);
+  live.attach(scene);
   addMsg('loc', world.name, 0);
 }
 
@@ -625,6 +628,35 @@ function buildMenuButtons() {
         () => { submitBest(track, ghostBest); toggleMenu(false); });
     }
   }
+  // ---- flying together ----
+  if (net.enabled()) {
+    if (!live.inRoom()) {
+      menuButton(trDiv, 'Fly together — open a room', 'others join with the code', () => {
+        const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
+        createOrJoinRoom(t.id, live.newRoomCode());
+        toggleMenu(false);
+      });
+      menuButton(trDiv, 'Fly together — join a room', 'paste a room code', () => {
+        const code = (prompt('Room code:') || '').trim().toUpperCase();
+        if (!code) return;
+        const t = (track && !track.historic && !track.custom) ? track : TRACKS[0];
+        const list = TRACKS.map((x, i) => (i + 1) + '. ' + x.name).join('\n');
+        const which = prompt('Which trial is the room flying?\n' + list, '1');
+        const pick = TRACKS[Math.max(0, Math.min(TRACKS.length - 1, (parseInt(which, 10) || 1) - 1))] || t;
+        createOrJoinRoom(pick.id, code);
+        toggleMenu(false);
+      });
+    } else {
+      const info = live.roomInfo();
+      menuButton(trDiv, `Room ${info.code} — ${roomRoster.length} aboard`, 'copy the code for a friend', () => {
+        try { navigator.clipboard.writeText(info.code); addMsg('room', `Room code ${info.code} copied.`, 0); }
+        catch { addMsg('room', `The room code is ${info.code}.`, 0); }
+      });
+      menuButton(trDiv, 'Leave the room', '', () => {
+        live.leave(); roomRoster = []; roomResults = []; drawRoom(); buildMenuButtons();
+      });
+    }
+  }
   menuButton(trDiv, 'Load a track code', 'paste a friend’s circuit', () => {
     const code = prompt('Paste the track code:');
     if (!code) return;
@@ -658,6 +690,62 @@ function buildMenuButtons() {
   menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
   menuButton(optsDiv, 'Resume flying', '', () => toggleMenu(false));
+}
+
+// ---------------------------------------------------------------- flying together
+// A live room: everyone in it flies the same trial, sees the others where they
+// actually are, and starts on one call. Scoring stays on each pilot's own
+// machine — the ledger is where scrutineered times live.
+let roomRoster = [], roomResults = [];
+
+function drawRoom() {
+  const el0 = document.getElementById('room');
+  if (!live.inRoom()) { el0.innerHTML = ''; return; }
+  const info = live.roomInfo();
+  const lines = roomRoster.map((r) =>
+    `<div class="rrow${r.self ? ' rme' : ''}">${escapeHtml(r.pilot)}` +
+    `<span style="opacity:.55"> · ${(SHIPS[r.ship] || SHIPS.no6).name.replace('Santos-Dumont ', '')}</span></div>`).join('');
+  const res = roomResults.length
+    ? '<div class="rhead" style="margin-top:6px">FINISHED</div>' + roomResults
+      .map((r) => `<div class="rrow">${escapeHtml(r.pilot)} — ${fmt(r.t)}</div>`).join('')
+    : '';
+  el0.innerHTML = `<div class="rhead">ROOM ${info.code} · ${roomRoster.length} aboard</div>${lines}${res}`;
+}
+
+async function createOrJoinRoom(trackId, code) {
+  const t = TRACKS.find((x) => x.id === trackId);
+  if (!t) return;
+  if (currentLocation !== t.location) loadWorld(t.location);
+  live.attach(scene);
+  live.setShip(currentShip);
+  addMsg('room', `Calling the room ${code}…`, 0);
+  const res = await live.join({
+    trackId, code,
+    onRoster: (r) => { roomRoster = r; drawRoom(); },
+    onStart: (p) => {
+      addMsg('roomgo', `${p.by} calls “Let go all!” — away in ${Math.round(p.delay)}…`, 0);
+      roomResults = [];
+      startTrack(t);
+      race.count = p.delay;
+    },
+    onResult: (p) => {
+      roomResults = [...roomResults.filter((x) => x.pilot !== p.pilot), p].sort((a, b) => a.t - b.t);
+      addMsg('roomdone', `${p.pilot} crosses the line at ${fmt(p.t)}.`, 0);
+      drawRoom();
+    },
+    onNotice: (p) => addMsg('roomsay', `${p.pilot}: ${p.text}`, 0),
+  });
+  if (!res.ok) {
+    addMsg('room', res.reason === 'no-realtime'
+      ? 'The telegraph line to the other pilots could not be opened.'
+      : `Could not join the room (${res.reason}).`, 0);
+    return;
+  }
+  startTrack(t);
+  race.state = 'idle';
+  setCenter(`Room ${code}`, 'Others may join with this code. Press Enter — or GO — when the room is ready to fly.');
+  drawRoom();
+  buildMenuButtons();
 }
 
 // ---------------------------------------------------------------- world records
@@ -841,6 +929,15 @@ const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult:
 
 function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
+  // in a room, Enter is the call to the whole room, not a private start
+  if (live.inRoom() && track && !track.historic) {
+    live.callStart(4);
+    roomResults = [];
+    startTrack(track);
+    race.count = 4;
+    addMsg('roomgo', 'You call “Let go all!” — the room is away in four.', 0);
+    return;
+  }
   // in a lap trial, Enter is instant restart
   if (track && !track.historic && race.state !== 'idle') { startTrack(track); return; }
   if (race.state !== 'idle' || ship.wrecked) return;
@@ -1014,9 +1111,19 @@ function finishRace() {
     if (!rival) { ghostBest = run; updateGhostMesh(); }
     submitBest(track, run);            // fire and forget; failures are toasts
   }
+  if (live.inRoom()) {
+    live.callResult(t);
+    roomResults = [...roomResults.filter((x) => x.pilot !== net.pilotName()), { pilot: net.pilotName(), t }]
+      .sort((a, b) => a.t - b.t);
+    drawRoom();
+  }
   let sub = improved
     ? (prev ? `New best — ${(prev.t - t).toFixed(1)}s faster! (Enter: again)` : 'First time set — your ghost now flies this course. (Enter: again)')
     : `+${(t - prev.t).toFixed(1)}s off your best of ${fmt(prev.t)}. (Enter: again)`;
+  if (live.inRoom() && roomResults.length > 1) {
+    const place = roomResults.findIndex((x) => x.pilot === net.pilotName()) + 1;
+    sub = `${ordinal(place)} of ${roomResults.length} home. ` + sub;
+  }
   if (rival) {
     sub = t < rival.t
       ? `You have beaten ${rival.pilot || 'the record-holder'} by ${(rival.t - t).toFixed(1)}s! ` + sub
@@ -1539,6 +1646,12 @@ function frame(now) {
   // active scenario logic
   if (scenario && !scenario._failed) scenario.tick?.(scenCtx(), dt);
   if (routeRings.length) updateRoute();
+
+  // the room: tell the others where we are, and put them where they say they are
+  if (live.inRoom()) {
+    live.sendState(dt, ship.pos, ship.yaw, ship.pitch);
+    live.update(dt);
+  }
 
   // ghost: record this run, and fly the best one alongside
   if (race.state === 'run' && track && !track.historic) {
