@@ -111,6 +111,20 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 - [ ] **Rooms for the historic courses** — needs a server-side notion of the aerodrome
   finish radius before those times can be trusted online.
 
+## Maybe
+
+- [ ] **The helm rigged the bicycle way** — the bar has a cord to each side of the rudder,
+  and the book never says whether those cords ran straight or crossed. The game rigs them
+  **straight**: push the port hand forward, turn to port, like a rudder bar. Crossed would
+  reverse it and give a *bicycle's* feel — a handlebar goes left by bringing the left grip
+  BACK — which is arguable, since he was a keen cyclist, rented the Parc des Princes track
+  for his experiments, sat the No. 4 on an actual bicycle frame, started its motor with
+  pedals, and called its control a *guidon*. One sign flip on `wheelA` in
+  `Airship.updateTransforms`. Against it: the straight rig is what a player pressing left
+  expects, and the drawn linkage currently agrees with itself. Wants a photograph of a
+  basket showing the cord routing, or the French edition's *épures*, before it is worth
+  doing. See docs/HELM.md §5.
+
 ## Future — systems
 
 - [ ] **Weather days** (menu-selectable): rain (wet envelope heavy, gusts — the No. 2's

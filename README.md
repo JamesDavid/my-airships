@@ -88,8 +88,8 @@ public domain).
   aft to its own side of the rudder. Push one hand away and pull the other back and she
   comes round. The English memoir says "steering wheel" once; the French says *le
   gouvernail*, describes the No. 4's control as "le guidon de la bicyclette, relié au
-  gouvernail", and has the rudder worked by cords throughout — see
-  [docs/PERIOD_NOTES.md](docs/PERIOD_NOTES.md).
+  gouvernail", and has the rudder worked by cords throughout — the evidence is set out in
+  [docs/HELM.md](docs/HELM.md).
 - **The guide rope** trails beneath you: fly low and it grounds itself, automatically
   steadying your altitude (over water it is perfect). It also drags like a brake, drapes
   over rooftops, and snags.
