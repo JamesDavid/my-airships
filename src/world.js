@@ -723,7 +723,12 @@ function addLandmarks(scene) {
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 74, 16, 1, false, 0, Math.PI),
     new THREE.MeshPhongMaterial({ color: 0xbcd4d2, shininess: 140, specular: 0xfff2cc,
       transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
-  glass.rotation.z = Math.PI / 2; glass.rotation.y = Math.PI / 2;
+  // The nave runs the LENGTH of the palace. rotation.z alone lays the cylinder's
+  // axis along X: 74 m of vault down a 78 m base, 40 m across a 44 m depth — the
+  // two spare metres either way are what the numbers were chosen for. The extra
+  // rotation.y that used to follow turned it a quarter round, so the vault lay
+  // ACROSS the building, overhanging the ends by 15 m and covering half its length.
+  glass.rotation.z = Math.PI / 2;
   glass.position.y = 18; glass.scale.y = 0.94; gp.add(glass);
   gp.position.set(560, 0, -310);
   gp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
