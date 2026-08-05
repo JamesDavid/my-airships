@@ -1650,7 +1650,7 @@ function frame(now) {
 
   // the room: tell the others where we are, and put them where they say they are
   if (live.inRoom()) {
-    live.sendState(dt, ship.pos, ship.yaw, ship.pitch);
+    live.sendState(dt, ship);
     live.update(dt);
   }
 

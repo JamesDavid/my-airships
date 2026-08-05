@@ -113,7 +113,12 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     const r = remotes.get(payload.k);
     if (!r) return;
     r.lastSeen = nowS();
-    r.buf.push({ t: nowS(), x: payload.x, y: payload.y, z: payload.z, yaw: payload.a, pitch: payload.p || 0 });
+    r.buf.push({ t: nowS(), x: payload.x, y: payload.y, z: payload.z,
+      yaw: payload.a, pitch: payload.p || 0 });
+    r.throttle = payload.t || 0;
+    r.rudder = payload.r || 0;
+    r.gas = payload.g ?? 100;
+    r.wrecked = !!payload.w;
     if (r.buf.length > 24) r.buf.shift();
   });
 
@@ -152,15 +157,21 @@ export function setShip(shipId) {
 }
 
 // ---------------------------------------------------------------- talking
-export function sendState(dt, pos, yaw, pitch) {
+export function sendState(dt, ship) {
   if (!channel) return;
   sendAcc += dt;
   if (sendAcc < 1 / SEND_HZ) return;
   sendAcc = 0;
   channel.send({ type: 'broadcast', event: 'pos', payload: {
     k: me.key,          // the seat, matching the presence key
-    x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1),
-    a: +yaw.toFixed(2), p: +pitch.toFixed(2),
+    x: +ship.pos.x.toFixed(1), y: +ship.pos.y.toFixed(1), z: +ship.pos.z.toFixed(1),
+    a: +ship.yaw.toFixed(2), p: +ship.pitch.toFixed(2),
+    // the working state a watcher can SEE: an idling ship must not appear to
+    // be driving her screw flat out, and her rudder should be over when she turns
+    t: +(ship.throttle || 0).toFixed(2),
+    r: +(ship.rudderInput || 0).toFixed(2),
+    g: Math.round(ship.gas ?? 100),
+    w: ship.wrecked ? 1 : 0,
   } }).catch?.(() => {});
 }
 
@@ -168,6 +179,12 @@ export function callStart(delay) {
   channel?.send({ type: 'broadcast', event: 'go', payload: { by: me.pilot, delay } });
 }
 export function seat() { return SEAT; }
+
+/** The remote ships as drawn — for inspection and tests. */
+export function remoteShips() {
+  return [...remotes.values()].filter((r) => r.mesh)
+    .map((r) => ({ pilot: r.pilot, ship: r.ship, mesh: r.mesh, throttle: r.throttle }));
+}
 
 export function callResult(t, place) {
   // the seat identifies the entry; the name is only what we print
@@ -204,7 +221,15 @@ export function update(dt) {
     while (dyaw < -Math.PI) dyaw += Math.PI * 2;
     s.yaw = a.yaw + dyaw * f;
     s.pitch = a.pitch + (b.pitch - a.pitch) * f;
-    s.propAngle += dt * 22;
+    // her working state, so the screw turns at HER throttle and the rudder lies
+    // where she has put it — updateTransforms does the rest from these
+    s.throttle = r.throttle || 0;
+    s.motorOn = !!s.spec.physics.thrust && s.throttle > 0 && !r.wrecked;
+    s.rudderInput = r.rudder || 0;
+    s.gas = r.gas ?? 100;
+    s.fullness = (s.gas / 100);
+    s.wrecked = !!r.wrecked;
+    s.deformEnvelope();
     s.updateTransforms(dt);
     if (r.label) {
       r.label.position.set(s.pos.x, s.pos.y + s.spec.envelope.diameter * 0.9 + 4, s.pos.z);
