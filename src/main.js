@@ -1222,8 +1222,7 @@ function updateCamera(dt) {
   } else if (camMode === 1) {
     // first person, standing in the basket (B3: the diagonal intoxication)
     desired = new THREE.Vector3();
-    ship.basketMesh.getWorldPosition(desired);
-    desired.y += 1.0;
+    (ship.eyePoint || ship.basketMesh).getWorldPosition(desired);
     desired.addScaledVector(fwd, 0.1);
     const cp = Math.cos(ship.pitch), sp = Math.sin(ship.pitch);
     const fwdP = new THREE.Vector3(fwd.x * cp, sp, fwd.z * cp);

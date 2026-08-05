@@ -272,6 +272,19 @@ export class Airship {
       addRail(-drop, -0.7, K.length, r);
       addRail(-drop, 0.7, K.length, r);
       addRail(-drop + 1.1, 0, K.length, r);
+    } else if (K.type === 'minimal') {
+      // the No. 9's little frame — "the keel barely longer than the basket" —
+      // a light pair of rails with cross-pieces, carrying basket and motor.
+      // Without them her gear hung in mid-air under the egg.
+      addRail(-drop, -0.5, K.length, 0.05);
+      addRail(-drop, 0.5, K.length, 0.05);
+      addRail(-drop + 0.55, 0, K.length * 0.8, 0.04);
+      for (const t of [-0.42, 0, 0.42]) {
+        const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.05, 4), wood);
+        cross.rotation.x = Math.PI / 2;
+        cross.position.set(t * K.length, -drop, 0);
+        this.pitchGroup.add(cross);
+      }
     } else if (K.type === 'pole') {
       // No. 3's bamboo pole, slung close beneath the balloon
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, K.length, 6),
@@ -426,6 +439,14 @@ export class Airship {
     }
     this.sparkT = 0;
 
+    // The pilot's eye: one explicit point for every ship, just behind and a
+    // little above the dials. Deriving it from the basket put the No. 4's eye
+    // a metre high, because her "basket" is a bicycle saddle mounted well up
+    // in the web — the instruments then sat far below the view.
+    this.eyePoint = new THREE.Object3D();
+    this.eyePoint.position.set(bx + 0.02, -drop + 0.55, 0);
+    this.pitchGroup.add(this.eyePoint);
+
     // ballast sacks hung along the rim — one vanishes with each SPACE
     this.sackMeshes = [];
     const sackMat = new THREE.MeshLambertMaterial({ color: 0x9c8256 });
@@ -509,10 +530,18 @@ export class Airship {
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.3, 8), dark);
       hub.rotation.z = Math.PI / 2;
       holder.add(hub);
-      const span = prop === 'both' ? 2.5 : 2.2;
+      // A 4-5 metre screw is what the book describes, but it has to TURN in the
+      // gap between the keel and the belly of the gas bag: on the short-keeled
+      // ships (the No. 9's basket rides close under her egg) a full-sized blade
+      // would sweep straight through the envelope. Clamp it to the real room.
+      const hubR = 0.15, clearance = 0.35;
+      const bellyHere = this.envAt(x);              // 0 once we are past her stern
+      const room = Math.max(0.55, drop - 0.15 - bellyHere - clearance);
+      const R = Math.min(prop === 'both' ? 2.5 : 2.2, room);
+      const span = Math.max(0.4, R - hubR);
       for (const sgn of [1, -1]) {
         const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, span, 0.46), bladeMat);
-        blade.position.y = sgn * (span / 2 + 0.1);
+        blade.position.y = sgn * (span / 2 + hubR);
         // pitch is a twist about the blade's OWN span, not about the shaft:
         // turning it about the shaft just swings the blade out of line with
         // its opposite number, which is what made the screw look like two

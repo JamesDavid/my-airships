@@ -272,8 +272,34 @@ export function buildWorld(scene) {
   seineW.rotation.x = -Math.PI / 2;
   seineW.position.y = 0.3;
   scene.add(seineW);
-  const wb = new THREE.Mesh(new THREE.BoxGeometry(14, 2.2, 92), new THREE.MeshLambertMaterial({ color: 0xa8a094 }));
-  wb.position.set(-1986, 2.4, 40); // Pont de St-Cloud, just past the start
+  // the Pont de St-Cloud: a stone road bridge, well clear of the Avre aqueduct
+  // downstream of it (the two stood a few hundred metres apart in life, and
+  // sat one on top of the other here)
+  const bridgeMat = new THREE.MeshLambertMaterial({ color: 0xa8a094 });
+  const wb = new THREE.Group();
+  const roadway = new THREE.Mesh(new THREE.BoxGeometry(13, 2.2, 96), bridgeMat);
+  roadway.position.y = 5.4;
+  wb.add(roadway);
+  for (const pz of [-30, 0, 30]) {                 // piers, with arches between
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(11, 5.4, 7), bridgeMat);
+    pier.position.set(0, 2.7, pz);
+    wb.add(pier);
+  }
+  for (const pz of [-15, 15]) {
+    const arch = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 12, 12, 1, false, 0, Math.PI),
+      bridgeMat);
+    arch.rotation.z = Math.PI / 2;
+    arch.position.set(0, 4.4, pz);
+    arch.scale.set(0.62, 1, 0.62);
+    wb.add(arch);
+  }
+  for (const sx of [-1, 1]) {                      // parapets
+    const par = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 96), bridgeMat);
+    par.position.set(sx * 6, 7.2, 0);
+    wb.add(par);
+  }
+  wb.position.set(-1986, 0, -250);
+  wb.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(wb);
 
   // river traffic: barges and a puffing steamer
