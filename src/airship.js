@@ -61,7 +61,9 @@ function makeCompassFace() {
   }
   x.font = 'italic 18px Georgia, serif';
   x.fillStyle = '#6b5a3f';
-  for (const [ch, deg] of [['NE', 45], ['SE', 135], ['SO', 225], ['NO', 315]]) {
+  // English throughout, to match the cardinals and the HUD's own wind names:
+  // the card had French ordinals (SO, NO) against an English W, which is neither
+  for (const [ch, deg] of [['NE', 45], ['SE', 135], ['SW', 225], ['NW', 315]]) {
     const a = (deg - 90) * Math.PI / 180;
     x.fillText(ch, 128 + Math.cos(a) * 78, 128 + Math.sin(a) * 78);
   }
