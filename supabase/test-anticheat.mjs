@@ -35,12 +35,14 @@ function flyTrack(track, shipId, speed) {
       ax /= al; az /= al;
       const target = { x: g.x + ax * 26, y: g.y, z: g.z + az * 26 };
       let guard = 0, crossed = null;
+      // a stopping trial is flown INTO the station slowly, and halted there
+      const legV = (track.stops && i === 0) ? Math.min(v, 2.4) : v;
       let sd = (pos.x - g.x) * nx + (pos.z - g.z) * nz;
       while (guard++ < 20000) {
         const ddx = target.x - pos.x, ddy = target.y - pos.y, ddz = target.z - pos.z;
         const d = Math.hypot(ddx, ddy, ddz);
-        if (d < v * step) break;
-        pos = { x: pos.x + (ddx / d) * v * step, y: pos.y + (ddy / d) * v * step, z: pos.z + (ddz / d) * v * step };
+        if (d < legV * step) break;
+        pos = { x: pos.x + (ddx / d) * legV * step, y: pos.y + (ddy / d) * legV * step, z: pos.z + (ddz / d) * legV * step };
         t += step;
         let want = Math.atan2(-ddz, ddx) - yaw;
         want = Math.atan2(Math.sin(want), Math.cos(want));            // shortest way round
@@ -52,6 +54,13 @@ function flyTrack(track, shipId, speed) {
         sd = now;
       }
       splits.push(+(crossed ?? t).toFixed(2));
+      // on a stopping trial she halts in the station ring before going on
+      if (track.stops && i === 0) {
+        for (let k = 0; k < 12; k++) {
+          t += step;
+          p.push(+pos.x.toFixed(1), +pos.y.toFixed(1), +pos.z.toFixed(1), +yaw.toFixed(2));
+        }
+      }
     }
   }
   return { t: +(splits[splits.length - 1]).toFixed(2), splits, dt: GHOST_DT, p };

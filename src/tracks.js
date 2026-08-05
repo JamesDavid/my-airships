@@ -14,6 +14,14 @@ export const TRACKS = [
     gates: ellipse(-1250, 200, 300, 190, 6, 30, 20),
   },
   {
+    // his own exercise of 12 July 1901, and the hardest kind of flying there is:
+    // not speed, but arriving at a named spot and stopping there
+    id: 'longchamps-ten', location: 'paris', laps: 3, stops: true,
+    name: 'The Longchamps Ten',
+    sub: '“stopping each time at a point designed beforehand” — halt in the first ring each lap',
+    gates: ellipse(-1250, 200, 300, 190, 6, 30, 20),
+  },
+  {
     id: 'gymkhana', location: 'paris', laps: 2, v: 2,
     name: 'The Aerial Gymkhana',
     sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',

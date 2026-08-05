@@ -248,6 +248,54 @@ export function buildWorldStLouis(scene) {
   scene.add(hangar);
   buildings.push({ x: -985, z: 60, w: 48, d: 20, h: 17, top: 17 });
 
+  // ---------- the Aeronautic Concourse ----------
+  // Roughly fourteen fenced acres at the western edge, leased from the newly
+  // relocated Washington University: the airship sheds, the judges' stand, and
+  // the paling that kept the crowd off the field (PERIOD_NOTES.md).
+  const shedMat = new THREE.MeshLambertMaterial({ color: 0xd6cdb6 });
+  const postMat = new THREE.MeshLambertMaterial({ color: 0x6b5236 });
+  const CONC = { x: -900, z: 60, w: 250, d: 210 };
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(CONC.w, CONC.d),
+    new THREE.MeshLambertMaterial({ color: 0x8a9464 }));
+  apron.rotation.x = -Math.PI / 2;
+  apron.position.set(CONC.x, 0.07, CONC.z);
+  apron.receiveShadow = true;
+  scene.add(apron);
+  // the paling fence
+  for (let i = 0; i <= 26; i++) {
+    for (const [fx, fz] of [[CONC.x - CONC.w / 2 + (i / 26) * CONC.w, CONC.z - CONC.d / 2],
+      [CONC.x - CONC.w / 2 + (i / 26) * CONC.w, CONC.z + CONC.d / 2]]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 0.3), postMat);
+      post.position.set(fx, 1.2, fz);
+      scene.add(post);
+    }
+  }
+  for (let i = 0; i <= 22; i++) {
+    for (const fx of [CONC.x - CONC.w / 2, CONC.x + CONC.w / 2]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 0.3), postMat);
+      post.position.set(fx, 1.2, CONC.z - CONC.d / 2 + (i / 22) * CONC.d);
+      scene.add(post);
+    }
+  }
+  // three sheds for the competing ships, and a judges' stand with its timing flag
+  for (let i = 0; i < 3; i++) {
+    const shed = new THREE.Mesh(new THREE.BoxGeometry(58, 16, 20), shedMat);
+    const sz = CONC.z - 62 + i * 62;
+    shed.position.set(CONC.x - 60, 8, sz);
+    shed.castShadow = true;
+    scene.add(shed);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(60, 2, 22),
+      new THREE.MeshLambertMaterial({ color: 0xa89a7c }));
+    roof.position.set(CONC.x - 60, 17, sz);
+    scene.add(roof);
+    buildings.push({ x: CONC.x - 60, z: sz, w: 60, d: 22, h: 17, top: 18 });
+  }
+  const judges = new THREE.Mesh(new THREE.BoxGeometry(22, 9, 12), shedMat);
+  judges.position.set(CONC.x + 70, 4.5, CONC.z - 70);
+  judges.castShadow = true;
+  scene.add(judges);
+  buildings.push({ x: CONC.x + 70, z: CONC.z - 70, w: 22, d: 12, h: 9, top: 10 });
+
   // ---------- the three race pylons, each flying a big flag ----------
   const flags = [];
   for (const p of PYLONS) {

@@ -189,6 +189,18 @@ export function validateRun({ trackId, shipId, run }, opts = {}) {
   if (passes.length < expected) {
     return bad('gates-missed', `${passes.length} of ${expected} gates threaded`);
   }
+  // On a stopping trial the station gate must be taken at rest — "stopping each
+  // time at a point designed beforehand" — so the trace has to show her halted
+  // there, not merely passing through.
+  if (track.stops) {
+    for (let i = 0; i < expected; i++) {
+      if (i % gates.length !== 0) continue;
+      const k = Math.max(1, Math.min(n - 1, Math.round(passes[i] / dt)));
+      const j = (k - 1) * 4, q = k * 4;
+      const v = Math.hypot(p[q] - p[j], p[q + 1] - p[j + 1], p[q + 2] - p[j + 2]) / dt;
+      if (v > 3.6) return bad('did-not-stop', `${v.toFixed(1)} m/s through the station on lap ${Math.floor(i / gates.length) + 1}`);
+    }
+  }
   // …and the barograph must agree with the timing card, gate by gate.
   for (let i = 0; i < expected; i++) {
     if (Math.abs(passes[i] - splits[i]) > LIMITS.timeSlack + dt) {

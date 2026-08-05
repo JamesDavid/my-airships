@@ -142,6 +142,7 @@ function startTrack(t) {
   race.state = 'count';
   race.count = t.historic ? 3.5 : 1.8;
   race.gate = 0; race.lap = 1; race.t = 0; race.splits = [];
+  race.winding = 0; race._az = null;      // how far round the Tower she has swept
   race.lastResult = null; race._gateS = undefined;
   ghostRec = []; ghostLastSample = -1;
   loadBest(t);
@@ -846,6 +847,20 @@ function updateRace(dt) {
     }
   } else if (s === 'run') {
     race.t += dt;
+    // "…describe a closed curve in such a way that the axis of the Eiffel Tower
+    // should be within the interior of the circuit" (the Deutsch foundation).
+    // Summing the bearing swept about the Tower gives exactly that: a closed
+    // path encloses the axis if and only if the total comes to a full turn.
+    if (world.towerPos) {
+      const az = Math.atan2(ship.pos.z - world.towerPos.z, ship.pos.x - world.towerPos.x);
+      if (race._az !== null) {
+        let d = az - race._az;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        race.winding += d;
+      }
+      race._az = az;
+    }
     // the finish (historic homeward leg) stays a generous radius check
     if (homeward) {
       if (ship.pos.distanceTo(world.startRing) < 30) { finishRace(); }
@@ -862,6 +877,14 @@ function updateRace(dt) {
       race._gateS = sd;
       if (prevSd !== undefined && prevSd < 0 && sd >= 0) {
         if (lateral < passR) {
+          // "Ten times in succession I made the circuit of Longchamps, stopping
+          // each time at a point designed beforehand" — on a stopping trial the
+          // station gate only counts if she is very nearly at rest
+          if (track.stops && race.gate === 0 && ship.vel.length() > 3) {
+            addMsg('stop', 'You must STOP at the point designed beforehand — come round and halt in the ring.', 4);
+            race._gateS = undefined;
+            return;
+          }
           race._gateS = undefined;
           blip(620 + race.gate * 60);
           race.splits.push(race.t);
@@ -898,7 +921,9 @@ function finishRace() {
   race.state = 'done';
   const t = race.t;
   if (track.historic) {
-    const won = t <= world.raceLimit;
+    // the Commission checks the shape of the course as well as the clock
+    const encircled = !world.towerPos || Math.abs(race.winding) >= 5.6;   // ~0.89 of a turn
+    const won = t <= world.raceLimit && encircled;
     const beatSantos = t <= world.raceRecord;
     const ace = t <= 600;
     const beatRivals = !rivals.some((r) => r.beatPlayer);
@@ -907,7 +932,9 @@ function finishRace() {
       race.best = t; localStorage.setItem(bestRaceKey(), String(t));
     }
     let sub;
-    if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
+    if (!encircled) {
+      sub = `${fmt(t)} — but the Tower did not lie within your circuit. The Commission cannot allow it. (R to try again)`;
+    } else if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
     else {
       sub = `${fmt(t)} — the prize is yours.`;
       if (beatSantos) sub += ' You have outflown Santos-Dumont himself.';
@@ -1356,8 +1383,11 @@ function updateHUD() {
       obj = `${track.name} — gate ${race.gate + 1}/${track.gates.length} · ${d} m`;
     } else {
       const homeward = race.gate >= gateRings.length;
+      const openCurve = world.towerPos && Math.abs(race.winding) < 5.6;
       obj = homeward
-        ? `${world.hints.back} — ${d} m`
+        ? (openCurve
+          ? `${world.hints.back} — ${d} m · the Tower is not yet INSIDE your circuit!`
+          : `${world.hints.back} — ${d} m`)
         : `${world.hints.out} — ${d} m${gateRings.length > 1 ? ` (pylon ${race.gate + 1}/${gateRings.length})` : ''}`;
     }
   } else if (s === 'done') obj = track && !track.historic ? 'Enter: fly it again.' : 'Trial complete. R to fly again.';

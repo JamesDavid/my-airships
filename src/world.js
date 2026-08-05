@@ -869,6 +869,87 @@ function addBookPlaces(scene, buildings) {
     scene.add(t);
   }
 
+  // ---- Saint-Cloud itself: the Aéro-Club's ground lay on the coteaux, under
+  // the wooded hillside of the park, with the village between. The château had
+  // burned in 1870 and been pulled down in 1891, so what stands above the
+  // grounds is the park's terraces, its cascade, and the trees. The hill is set
+  // well back — its foot must not reach the aerodrome at x -2140.
+  const scRand = mulberry32(1901);
+  const HILL = { x: -2980, z: -60, rTop: 240, rBot: 520, h: 110 };
+  const hillH = (x, z) => {
+    const r = Math.hypot(x - HILL.x, z - HILL.z);
+    if (r <= HILL.rTop) return HILL.h;
+    return HILL.h * Math.max(0, (HILL.rBot - r) / (HILL.rBot - HILL.rTop));
+  };
+  const hillside = new THREE.Mesh(
+    new THREE.CylinderGeometry(HILL.rTop, HILL.rBot, HILL.h, 24, 1),
+    new THREE.MeshLambertMaterial({ color: 0x76854f }));
+  hillside.position.set(HILL.x, HILL.h / 2, HILL.z);
+  hillside.receiveShadow = true;
+  scene.add(hillside);
+  buildings.push({ x: HILL.x, z: HILL.z, w: HILL.rBot * 1.5, d: HILL.rBot * 1.5,
+    h: HILL.h * 0.8, top: HILL.h * 0.8 });
+
+  // the terraces of the park, stepping down the east face toward the river
+  for (let i = 0; i < 3; i++) {
+    const tx = -2500 - i * 60;
+    const ty = hillH(tx, -40);
+    const terr = new THREE.Mesh(new THREE.BoxGeometry(70, 4, 260 - i * 40),
+      new THREE.MeshLambertMaterial({ color: 0xb9b2a0 }));
+    terr.position.set(tx, ty + 2, -40);
+    terr.receiveShadow = terr.castShadow = true;
+    scene.add(terr);
+  }
+  // the grande cascade spilling down between them
+  const casc = new THREE.Mesh(new THREE.PlaneGeometry(20, 130),
+    new THREE.MeshPhongMaterial({ color: 0x8fb6c9, shininess: 110, specular: 0xffffff }));
+  casc.rotation.set(-Math.PI / 2 + 0.62, 0, Math.PI / 2);
+  casc.position.set(-2520, 34, -40);
+  scene.add(casc);
+
+  // the village of Saint-Cloud, on the flat between the hill and the aerodrome
+  const scWall = new THREE.MeshLambertMaterial({ color: 0xe0d6bd });
+  const scRoof = new THREE.MeshLambertMaterial({ color: 0x6b5a4a });
+  for (let i = 0; i < 34; i++) {
+    const x = -2300 - scRand() * 110;
+    const z = -400 + scRand() * 800;
+    if (Math.hypot(x - PAD_POS.x, z - PAD_POS.z) < 170) continue;   // keep the field clear
+    const w = 12 + scRand() * 10, d = 10 + scRand() * 8, h = 8 + scRand() * 7;
+    const house = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), scWall);
+    house.position.set(x, h / 2, z);
+    house.castShadow = house.receiveShadow = true;
+    scene.add(house);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 1.08, 2.2, d * 1.08), scRoof);
+    roof.position.set(x, h + 1.1, z);
+    scene.add(roof);
+    const chim = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.4, 0.8), scRoof);
+    chim.position.set(x + (scRand() - 0.5) * w * 0.6, h + 3.2, z + (scRand() - 0.5) * d * 0.6);
+    scene.add(chim);
+    buildings.push({ x, z, w, d, h, top: h + 2.2 });
+  }
+  // the church, its spire over the village roofs
+  const scChurch = new THREE.Group();
+  const scNave = new THREE.Mesh(new THREE.BoxGeometry(28, 15, 14), scWall);
+  scNave.position.y = 7.5; scChurch.add(scNave);
+  const scSpire = new THREE.Mesh(new THREE.ConeGeometry(4.2, 24, 6), scRoof);
+  scSpire.position.set(-10, 27, 0); scChurch.add(scSpire);
+  scChurch.position.set(-2360, 0, 90);
+  scChurch.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  scene.add(scChurch);
+  buildings.push({ x: -2360, z: 90, w: 28, d: 14, h: 15, top: 39 });
+
+  // and the wood of the park, standing on the slope at its own height
+  for (let i = 0; i < 190; i++) {
+    const x = -2460 - scRand() * 560, z = -560 + scRand() * 1000;
+    const sc = 4 + scRand() * 4;
+    const tr2 = new THREE.Mesh(new THREE.SphereGeometry(1, 7, 5),
+      new THREE.MeshLambertMaterial({ color: 0x4d6135 }));
+    tr2.scale.set(sc * 1.2, sc, sc * 1.2);
+    tr2.position.set(x, hillH(x, z) + sc * 0.85, z);
+    tr2.castShadow = true;
+    scene.add(tr2);
+  }
+
   // ---- the Île de Puteaux, where the No. 9 caught fire crossing the Seine,
   // and the far end of the No. 5's morning excursion from Longchamps
   const isle = new THREE.Mesh(new THREE.CircleGeometry(1, 26),

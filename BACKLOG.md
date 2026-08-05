@@ -45,6 +45,14 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   four-metre drop, the electric tramway, and the escort running the coast; two new
   scenarios (the chestnut tree, the 14th of July review). See docs/PERIOD_NOTES.md.
 
+- [x] **The last of the book's rules** — the Deutsch prize judged as written ("a closed
+  curve in such a way that the axis of the Eiffel Tower should be within the interior of
+  the circuit", measured by the bearing swept about the Tower); "The Longchamps Ten", his
+  stopping exercise of 12 July 1901, as a trial in its own right, enforced in the game and
+  in the run validator alike; the Aeronautic Concourse at St. Louis with its sheds, judges'
+  stand and paling; and Saint-Cloud itself — the park's wooded hill, terraces and cascade,
+  with the village between it and the aerodrome.
+
 ## Future — multiplayer, if it goes further
 
 - [ ] **Live race rooms** — Supabase Realtime *Broadcast* + *Presence* (not the DB):
