@@ -62,9 +62,12 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   heartbeat rows, no cleanup, and a room vanishes when its host's page closes. Air-to-air
   bumping is always on, resolved so each pilot pushes only their OWN ship: latency can
   never shove anyone else about, and contact costs way and gas but never wrecks.
-  Still to do: spectate mode for a pilot waiting out a race; live gate splits so you can
-  see who leads mid-race rather than only at the finish; and a reconnect path — a dropped
-  socket currently needs a re-join from the menu.
+  Spectating and live gate splits are in: a pilot can stand down and ride with anyone in
+  the room (every camera works, including standing in their basket), and each gate pass is
+  broadcast so the panel shows a running order — deepest into the course first — instead of
+  only a finishing list.
+  Still to do: a reconnect path (a dropped socket needs a re-join from the menu), and
+  voice//text chat if rooms ever fill with strangers.
 
 - [ ] **Virtual reality (WebXR / Quest)** — three.js has it built in: `renderer.xr.enabled`,
   an XRButton, and `setAnimationLoop`. It runs in the Quest browser off the same Pages URL,

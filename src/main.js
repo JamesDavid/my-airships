@@ -276,6 +276,7 @@ addEventListener('keydown', (e) => {
     addMsg('edu', `Gate removed — ${editing.gates.length} left.`, 0);
   }
   if (e.code === 'KeyC') cycleCamera();
+  if (e.code === 'KeyX' && spectate.on) watchNext();
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
   if (e.code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
   if (e.code === 'KeyM') muted = !muted;
@@ -665,7 +666,12 @@ function buildMenuButtons() {
         try { navigator.clipboard.writeText(info.code); addMsg('room', `Room code ${info.code} copied.`, 0); }
         catch { addMsg('room', `The room code is ${info.code}.`, 0); }
       });
+      menuButton(trDiv, spectate.on ? 'Take a ship again' : 'Stand down and watch',
+        spectate.on ? 'rejoin the flying' : 'ride with another pilot (X cycles)', () => {
+          setSpectate(!spectate.on);
+        });
       menuButton(trDiv, 'Leave the room', '', () => {
+        if (spectate.on) setSpectate(false);
         live.leave(); roomRoster = []; roomResults = []; drawRoom(); buildMenuButtons();
       });
     }
@@ -715,14 +721,62 @@ function drawRoom() {
   const el0 = document.getElementById('room');
   if (!live.inRoom()) { el0.innerHTML = ''; return; }
   const info = live.roomInfo();
-  const lines = roomRoster.map((r) =>
-    `<div class="rrow${r.self ? ' rme' : ''}">${escapeHtml(r.pilot)}` +
-    `<span style="opacity:.55"> · ${(SHIPS[r.ship] || SHIPS.no6).name.replace('Santos-Dumont ', '')}</span></div>`).join('');
+  // during a race the panel is a running order: whoever is deepest into the
+  // course stands first, so you can see the lead change instead of waiting
+  // for the finish
+  const aboard = roomRoster.length ? roomRoster : live.roster();
+  const running = race.state === 'run' || live.standings().length > 0;
+  const rows = running ? live.standings() : aboard;
+  const lines = rows.map((r, i) => {
+    const nm = escapeHtml(r.pilot) + (r.self ? '' : '');
+    const shipName = (SHIPS[r.ship] || SHIPS.no6).name.replace('Santos-Dumont ', '');
+    if (running && r.progress) {
+      const nGates = track ? track.gates.length : 6;
+      return `<div class="rrow${r.self ? ' rme' : ''}">${i + 1}. ${nm}` +
+        `<span style="opacity:.6"> · lap ${r.progress.lap} gate ${r.progress.gate}/${nGates}` +
+        ` · ${fmt(r.progress.t)}</span></div>`;
+    }
+    return `<div class="rrow${r.self ? ' rme' : ''}">${nm}` +
+      `<span style="opacity:.55"> · ${r.spectating ? 'watching' : shipName}</span></div>`;
+  }).join('');
+  const watchers = aboard.filter((r) => r.spectating).length;
   const res = roomResults.length
     ? '<div class="rhead" style="margin-top:6px">FINISHED</div>' + roomResults
-      .map((r) => `<div class="rrow">${escapeHtml(r.pilot)} — ${fmt(r.t)}</div>`).join('')
+      .map((r, i) => `<div class="rrow">${i + 1}. ${escapeHtml(r.pilot)} — ${fmt(r.t)}</div>`).join('')
     : '';
-  el0.innerHTML = `<div class="rhead">ROOM ${info.code} · ${roomRoster.length} aboard</div>${lines}${res}`;
+  const watching = spectate.on ? ` · watching ${escapeHtml(spectate.pilot || '…')} (X: next)` : '';
+  el0.innerHTML = `<div class="rhead">ROOM ${info.code} · ${aboard.length} aboard` +
+    `${watchers ? ' · ' + watchers + ' watching' : ''}${watching}</div>${lines}${res}`;
+}
+
+// ---------------------------------------------------------------- spectating
+// A pilot who is not flying rides with whoever is: the remote ships are full
+// models, so every camera — chase, postcard, even standing in the basket —
+// works on another pilot's machine exactly as it does on your own.
+const spectate = { on: false, key: null, pilot: '', ship: null };
+
+function camShip() { return (spectate.on && spectate.ship) ? spectate.ship : ship; }
+
+function watchNext() {
+  const ships = live.remoteShips();
+  if (!ships.length) { spectate.ship = null; spectate.pilot = ''; return; }
+  const i = ships.findIndex((s) => s.pilot === spectate.pilot);
+  const pick = ships[(i + 1) % ships.length];
+  spectate.ship = pick.mesh; spectate.pilot = pick.pilot;
+  addMsg('watch', `Watching ${pick.pilot}.`, 0);
+  drawRoom();
+}
+
+function setSpectate(on) {
+  spectate.on = on;
+  live.setSpectating(on);
+  ship.group.visible = !on;
+  ship.shadow.visible = !on;
+  if (ship.ropeLine) ship.ropeLine.visible = !on;
+  if (on) { watchNext(); addMsg('watch', 'You stand down and watch the race. (X for the next pilot)', 0); }
+  else { spectate.ship = null; spectate.pilot = ''; addMsg('watch', 'You take a ship again.', 0); }
+  drawRoom();
+  buildMenuButtons();
 }
 
 async function createOrJoinRoom(trackId, code, hosting) {
@@ -747,6 +801,7 @@ async function createOrJoinRoom(trackId, code, hosting) {
       addMsg('roomdone', `${p.pilot} crosses the line at ${fmt(p.t)}.`, 0);
       drawRoom();
     },
+    onGate: () => drawRoom(),
     onNotice: (p) => addMsg('roomsay', `${p.pilot}: ${p.text}`, 0),
   });
   if (!res.ok) {
@@ -1059,6 +1114,7 @@ function updateRace(dt) {
           race.splits.push(race.t);
           if (!track.historic) showSplit();
           race.gate++;
+          if (live.inRoom()) { live.callGate(race.gate, race.lap, race.t); drawRoom(); }
           if (race.gate === gates.length) {
             if (track.historic && race.lap < track.laps) {
               // another circuit of the pylons before the run for home
@@ -1483,8 +1539,12 @@ const CAM_NAMES = ['Chase', 'Aboard — the basket', 'Postcard', 'From the Tower
 const camPos = new THREE.Vector3(-1050, 40, 120);
 let bobT = 0;
 function updateCamera(dt) {
-  const p = ship.pos;
-  const fwd = new THREE.Vector3(Math.cos(ship.yaw), 0, -Math.sin(ship.yaw));
+  // watching, but the pilot you were riding with has gone: hold the view where
+  // it is rather than snapping back to your own (hidden) ship
+  if (spectate.on && !spectate.ship) return;
+  const view = camShip();                       // your ship, or the one you are watching
+  const p = view.pos;
+  const fwd = new THREE.Vector3(Math.cos(view.yaw), 0, -Math.sin(view.yaw));
   bobT += dt;
   let desired, look, snap = false;
   if (camMode === 0) {
@@ -1498,9 +1558,9 @@ function updateCamera(dt) {
   } else if (camMode === 1) {
     // first person, standing in the basket (B3: the diagonal intoxication)
     desired = new THREE.Vector3();
-    (ship.eyePoint || ship.basketMesh).getWorldPosition(desired);
+    (view.eyePoint || view.basketMesh).getWorldPosition(desired);
     desired.addScaledVector(fwd, 0.1);
-    const cp = Math.cos(ship.pitch), sp = Math.sin(ship.pitch);
+    const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
     const fwdP = new THREE.Vector3(fwd.x * cp, sp, fwd.z * cp);
     look = desired.clone().addScaledVector(fwdP, 30);
     look.y += Math.sin(bobT * 1.7) * 0.35 - 8 + orbitPitch * -20;
@@ -1647,7 +1707,7 @@ function frame(now) {
   // the air itself is worth remarking on when it takes hold of the ship
   if (env.airY > 0.75) addMsg('updraft', 'The air itself is lifting you — a column of it, rising to build the cloud above.', 26);
   else if (env.airY < -0.55) addMsg('downdraft', 'The air is settling here: cool ground below, and the ship goes down with it.', 26);
-  ship.update(dt, input, wind, env);
+  if (!spectate.on) ship.update(dt, input, wind, env);
   checkCollisions(dt);
 
   // rival dirigibles fly their own race
@@ -1669,6 +1729,11 @@ function frame(now) {
     live.sendState(dt, ship);
     live.update(dt);
     // silk on silk: she is shoved aside and loses a little gas, never wrecked
+    // if the pilot we were watching has gone, ride with someone else
+    if (spectate.on) {
+      const still = live.remoteShips().some((s) => s.mesh === spectate.ship);
+      if (!still) watchNext();
+    }
     const rub = live.bump(ship, dt);
     if (rub > 0.6) {
       ship.gas = Math.max(0, ship.gas - Math.min(2.5, rub * 0.3));

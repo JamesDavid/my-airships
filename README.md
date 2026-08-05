@@ -48,8 +48,10 @@ public domain).
 - **Fly together**: open a room and it is listed for anyone to join, or take a friend's
   code. Everyone flies the same trial, sees the others where they actually are — their own
   ship class, their screw turning at their throttle, their rudder over as they turn — and
-  the whole room is called away on one countdown. Ships bump: silk grinds on silk and the
-  gas hisses away, but nobody is wrecked by another pilot's lag.
+  the whole room is called away on one countdown. Every gate pass is called, so the panel
+  keeps a running order and you can watch the lead change. Ships bump: silk grinds on silk
+  and the gas hisses away, but nobody is wrecked by another pilot's lag. Not flying? Stand
+  down and ride with any pilot in the room — chase, postcard, or standing in their basket.
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |

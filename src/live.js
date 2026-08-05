@@ -38,7 +38,7 @@ const SEAT = seatUuid();
 
 let client = null, channel = null, scene = null;
 let lobby = null, hosting = false, onLobby = null;
-let me = { key: SEAT, pilot: '', ship: 'no6' };
+let me = { key: SEAT, pilot: '', ship: 'no6', spectating: false };
 let room = null;                   // { trackId, code, topic }
 const remotes = new Map();         // key -> { pilot, ship, buf[], mesh, label, lastSeen }
 let sendAcc = 0;
@@ -47,9 +47,23 @@ let handlers = {};
 export function inRoom() { return !!channel; }
 export function roomInfo() { return room; }
 export function roster() {
-  const out = [{ key: me.key, pilot: me.pilot, ship: me.ship, self: true }];
-  for (const [key, r] of remotes) out.push({ key, pilot: r.pilot, ship: r.ship, self: false });
+  const out = [{ key: me.key, pilot: me.pilot, ship: me.ship, self: true,
+    spectating: me.spectating, progress: myProgress }];
+  for (const [key, r] of remotes) {
+    out.push({ key, pilot: r.pilot, ship: r.ship, self: false,
+      spectating: !!r.spectating, progress: r.progress || null });
+  }
   return out;
+}
+
+// where each pilot has got to: the leader is whoever is deepest into the course
+let myProgress = null;
+export function setMyProgress(p) { myProgress = p; }
+export function standings() {
+  return roster().filter((r) => !r.spectating && r.progress)
+    .sort((a, b) => (b.progress.lap - a.progress.lap)
+      || (b.progress.gate - a.progress.gate)
+      || (a.progress.t - b.progress.t));
 }
 
 export function newRoomCode() {
@@ -168,6 +182,8 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
       const m = metas[metas.length - 1] || {};
       const r = remotes.get(key) || { buf: [], mesh: null, lastSeen: nowS() };
       r.pilot = m.pilot || 'Someone';
+      r.spectating = !!m.spectating;
+      if (r.spectating && r.mesh) disposeMesh(r);       // a watcher has no ship aloft
       if (r.ship !== m.ship) { disposeMesh(r); r.ship = m.ship || 'no6'; }
       remotes.set(key, r);
     }
@@ -189,7 +205,16 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     if (r.buf.length > 24) r.buf.shift();
   });
 
-  channel.on('broadcast', { event: 'go' }, ({ payload }) => handlers.onStart?.(payload));
+  channel.on('broadcast', { event: 'gate' }, ({ payload }) => {
+    const r = remotes.get(payload.k);
+    if (r) r.progress = { gate: payload.g, lap: payload.l, t: payload.t };
+    handlers.onGate?.(payload);
+  });
+  channel.on('broadcast', { event: 'go' }, ({ payload }) => {
+    for (const r of remotes.values()) r.progress = null;
+    myProgress = null;
+    handlers.onStart?.(payload);
+  });
   channel.on('broadcast', { event: 'done' }, ({ payload }) => handlers.onResult?.(payload));
   channel.on('broadcast', { event: 'said' }, ({ payload }) => handlers.onNotice?.(payload));
 
@@ -198,7 +223,7 @@ export async function join({ trackId, code, onRoster, onStart, onResult, onNotic
     const done = (s) => { if (!settled) { settled = true; resolve(s); } };
     channel.subscribe(async (s) => {
       if (s === 'SUBSCRIBED') {
-        await channel.track({ pilot: me.pilot, ship: me.ship });
+        await channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating });
         done('SUBSCRIBED');
       } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') done(s);
     });
@@ -221,12 +246,19 @@ export function leave() {
 /** Our ship class rides in the presence record, so others draw us correctly. */
 export function setShip(shipId) {
   me.ship = shipId;
-  if (channel) channel.track({ pilot: me.pilot, ship: me.ship }).catch(() => {});
+  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating }).catch(() => {});
 }
+
+/** Watching rather than flying: no packets go out, and nobody draws a ship. */
+export function setSpectating(on) {
+  me.spectating = !!on;
+  if (channel) channel.track({ pilot: me.pilot, ship: me.ship, spectating: me.spectating }).catch(() => {});
+}
+export function spectating() { return me.spectating; }
 
 // ---------------------------------------------------------------- talking
 export function sendState(dt, ship) {
-  if (!channel) return;
+  if (!channel || me.spectating) return;      // a watcher has nothing to report
   sendAcc += dt;
   if (sendAcc < 1 / SEND_HZ) return;
   sendAcc = 0;
@@ -254,10 +286,10 @@ export function seat() { return SEAT; }
  * other while one of them renders; this makes the drawing, interpolation and
  * bumping testable from a single page. Not used by the game itself.
  */
-export function _debugAddRemote({ pilot = 'Phantom', ship = 'no6', x = 0, y = 60, z = 0, yaw = 0, throttle = 0 }) {
+export function _debugAddRemote({ pilot = 'Phantom', ship = 'no6', x = 0, y = 60, z = 0, yaw = 0, throttle = 0, progress = null }) {
   if (!scene) return null;
   const key = 'phantom-' + Math.random().toString(36).slice(2);
-  const r = { pilot, ship, buf: [], mesh: null, lastSeen: nowS(), throttle, rudder: 0, gas: 100, wrecked: false };
+  const r = { pilot, ship, buf: [], mesh: null, lastSeen: nowS(), throttle, rudder: 0, gas: 100, wrecked: false, progress };
   for (let i = 0; i < 3; i++) r.buf.push({ t: nowS() - 0.4 + i * 0.15, x, y, z, yaw, pitch: 0 });
   remotes.set(key, r);
   return key;
@@ -267,6 +299,12 @@ export function _debugAddRemote({ pilot = 'Phantom', ship = 'no6', x = 0, y = 60
 export function remoteShips() {
   return [...remotes.values()].filter((r) => r.mesh)
     .map((r) => ({ pilot: r.pilot, ship: r.ship, mesh: r.mesh, throttle: r.throttle }));
+}
+
+export function callGate(gate, lap, t) {
+  myProgress = { gate, lap, t };
+  channel?.send({ type: 'broadcast', event: 'gate',
+    payload: { k: me.key, pilot: me.pilot, g: gate, l: lap, t: +t.toFixed(2) } });
 }
 
 export function callResult(t, place) {
