@@ -626,7 +626,10 @@ export class Airship {
       this.vel.multiplyScalar(0.97);
       this.vel.y -= 6 * dt;
       this.pos.addScaledVector(this.vel, dt);
-      if (this.pos.y < 3) { this.pos.y = 3; this.vel.set(0, 0, 0); }
+      // the wreck settles on its own keel, and once down it IS down: `landed`
+      // must become true or the pilot can never leave the ship again
+      const rest = Math.max(1.5, -this.keelY * 0.4);
+      if (this.pos.y < rest) { this.pos.y = rest; this.vel.set(0, 0, 0); this.landed = true; }
       this.updateRope(dt);
       this.updateTransforms(dt);
       return;
@@ -863,6 +866,16 @@ export class Airship {
 
   dispose() {
     this.scene.remove(this.group, this.shadow, this.ropeLine);
+    // hand the card back its buffers — a ship is rebuilt on every respawn
+    const done = new Set();
+    const kill = (r) => { if (r && !done.has(r)) { done.add(r); r.dispose?.(); } };
+    for (const root of [this.group, this.shadow, this.ropeLine]) {
+      root?.traverse?.((o) => {
+        kill(o.geometry);
+        for (const m of (Array.isArray(o.material) ? o.material : [o.material])) kill(m);
+      });
+      kill(root?.geometry); kill(root?.material);
+    }
     this.ropeLine = null;
   }
 }

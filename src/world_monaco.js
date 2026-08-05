@@ -10,7 +10,9 @@ import { STREETS_MC, inSiteMC } from './monaco_plan.js';
 
 const PAD = new THREE.Vector3(40, 2, 0);
 const START = new THREE.Vector3(120, 42, 0);
-const TURN = new THREE.Vector3(520, 55, -2550); // Cap Martin, at half real scale
+// Cap Martin at half real scale — held far enough off the headland that the
+// whole ring is over open water (the massif's collider reaches x 550, z -2570)
+const TURN = new THREE.Vector3(620, 58, -2520);
 const SHORE_X = 26;
 
 export function buildWorldMonaco(scene) {

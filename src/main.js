@@ -13,6 +13,7 @@ import { SHIPS, SHIP_KEYS } from './ships.js';
 import { SCENARIOS, Rival } from './scenarios.js';
 import { TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 import * as net from './net.js';
+import { courseLength, shipTopSpeed } from './anticheat.js';
 
 // ---------------------------------------------------------------- setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -86,7 +87,8 @@ function buildRings(gates, originPos) {
   });
 }
 
-function bestKey(t) { return `tt_${t.id}_${currentShip}`; }
+// a re-cut circuit is a different course: its version retires the old times
+function bestKey(t) { return `tt_${t.id}${t.v ? '_v' + t.v : ''}_${currentShip}`; }
 
 function loadBest(t) {
   // a ghost fetched from the record office keeps flying this course until you
@@ -105,7 +107,8 @@ function loadBest(t) {
 function updateGhostMesh() {
   if (ghostMesh) { scene.remove(ghostMesh); ghostMesh = null; }
   if (!ghostBest) return;
-  const E = ship.spec.envelope;
+  // a downloaded ghost flies at the size of the ship that actually set it
+  const E = (SHIPS[ghostBest.ship] || ship.spec).envelope;
   const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
     new THREE.MeshLambertMaterial({ color: 0xd9b24a, transparent: true, opacity: 0.32, depthWrite: false }));
   m.scale.set(E.length / 2, E.diameter / 2, E.diameter / 2);
@@ -145,7 +148,38 @@ function endTrack() {
   race.state = 'idle'; race.t = 0; race.gate = 0;
 }
 
+// Give the graphics card back everything the old city was holding. Without
+// this, each journey between the three worlds left its geometry and textures
+// resident for the life of the tab — a slow climb that ends in a crash on a
+// tablet. (Shared, module-cached resources are simply re-uploaded on demand.)
+function disposeWorld(oldScene, oldComposer) {
+  const seenRes = new Set();
+  const kill = (r) => { if (r && !seenRes.has(r)) { seenRes.add(r); r.dispose?.(); } };
+  if (oldComposer) {
+    // the composer only frees its own two buffers — the bloom pass is holding
+    // a dozen more of its own, and they go with it
+    for (const p of oldComposer.passes || []) kill(p);
+    kill(oldComposer);
+  }
+  if (!oldScene) { return; }
+  oldScene.traverse((o) => {
+    // every world lights its own sun, and each sun holds a 2048² shadow map
+    if (o.isLight && o.shadow) { kill(o.shadow.map); kill(o.shadow.mapPass); o.shadow.map = null; }
+    kill(o.geometry);
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+      if (!m) continue;
+      for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) kill(m[k]);
+      // the sky and the water carry their textures in shader uniforms, where
+      // a plain property sweep never finds them
+      for (const u of Object.values(m.uniforms || {})) if (u && u.value && u.value.isTexture) kill(u.value);
+      kill(m);
+    }
+  });
+  oldScene.clear();
+}
+
 function loadWorld(loc) {
+  const oldScene = scene, oldComposer = composer;
   currentLocation = loc;
   clearRivals();
   scenario = null;
@@ -168,6 +202,9 @@ function loadWorld(loc) {
     (-world.windBase.x * rs + world.windBase.z * rc) * mag);
   wind.copy(dailyWind);
   race.state = 'idle'; race.t = 0; race.gate = 0;
+  // each course keeps its own record: the Deutsch half-hour and the St. Louis
+  // ten minutes are not the same achievement
+  race.best = +(localStorage.getItem(bestRaceKey()) || 0);
   setCenter('', '');
   spawnShip(currentShip);
   camPos.set(world.padPos.x - 90, 45, world.padPos.z + 90);
@@ -175,6 +212,7 @@ function loadWorld(loc) {
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.7, 0.86));
   composer.addPass(new OutputPass());
+  disposeWorld(oldScene, oldComposer);
   addMsg('loc', world.name, 0);
 }
 
@@ -184,8 +222,11 @@ const keys = {};
 let camMode = 0, muted = false;
 
 addEventListener('keydown', (e) => {
-  keys[e.code] = true;
   initAudio();
+  if (e.code === 'Escape') { if (boardOpen()) closeBoard(); else toggleMenu(); return; }
+  // while a panel is up the simulation is paused: don't fly the ship behind it
+  if (menuOpen || boardOpen()) return;
+  keys[e.code] = true;
   if (e.code === 'Space') { ship.dropBallast(); e.preventDefault(); }
   if (e.code === 'KeyF') input.coax = true;
   if (e.code === 'Enter') tryStartRace();
@@ -205,19 +246,43 @@ addEventListener('keydown', (e) => {
     addMsg('edu', `Gate removed — ${editing.gates.length} left.`, 0);
   }
   if (e.code === 'KeyC') cycleCamera();
-  if (e.code === 'Escape') { if (boardOpen()) closeBoard(); else toggleMenu(); }
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
   if (e.code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
   if (e.code === 'KeyM') muted = !muted;
-  if (SHIP_KEYS[e.code]) {
-    if (ship.landed && race.state === 'idle') spawnShip(SHIP_KEYS[e.code]);
-    else addMsg('noswitch', 'Land (and finish the trial) to change ships.', 6);
-  }
-  if (e.code === 'KeyL') {
-    if (ship.landed && race.state === 'idle') loadWorld(LOCS[(LOCS.indexOf(currentLocation) + 1) % LOCS.length]);
-    else addMsg('noloc', 'Land (and finish the trial) before travelling — the air-ship goes by railway waggon.', 6);
-  }
+  if (SHIP_KEYS[e.code]) tryChangeShip(SHIP_KEYS[e.code]);
+  if (e.code === 'KeyL') tryTravel(LOCS[(LOCS.indexOf(currentLocation) + 1) % LOCS.length]);
 });
+
+// A wrecked ship is on the ground for good: she can be left for another, and
+// doing so clears away the trial she died in. (Before this, a wreck in mid-air
+// left `landed` false and the fleet was locked behind an impossible order.)
+function canLeaveShip() {
+  return (ship.landed || ship.wrecked) && (race.state === 'idle' || ship.wrecked);
+}
+function clearAfterWreck() {
+  if (!ship.wrecked) return;
+  endTrack(); clearRivals(); scenario = null; editing = null;
+  if (scenRing) scenRing.visible = false;
+}
+function tryChangeShip(id) {
+  if (!canLeaveShip()) {
+    addMsg('noswitch', 'Land (and finish the trial) to change ships.', 6);
+    return false;
+  }
+  clearAfterWreck();
+  spawnShip(id);
+  return true;
+}
+function tryTravel(loc) {
+  if (loc === currentLocation) return false;
+  if (!canLeaveShip()) {
+    addMsg('noloc', 'Land (and finish the trial) before travelling — the air-ship goes by railway waggon.', 6);
+    return false;
+  }
+  clearAfterWreck();
+  loadWorld(loc);
+  return true;
+}
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 // drag orbit (mouse or touch) on the canvas only
@@ -370,14 +435,11 @@ function buildMenuButtons() {
   for (const [id, s] of Object.entries(SHIPS)) {
     if (s.ai) continue;
     menuButton(shipsDiv, s.name, s.sub, () => {
-      if (ship.landed && race.state === 'idle') { spawnShip(id); toggleMenu(false); }
-      else addMsg('noswitch', 'Land (and finish the trial) to change ships.', 0);
+      if (tryChangeShip(id)) toggleMenu(false);
     }, id === currentShip);
   }
   const locBtn = (id, label, sub) => menuButton(optsDiv, label, sub, () => {
-    if (id === currentLocation) return;
-    if (ship.landed && race.state === 'idle') { loadWorld(id); toggleMenu(false); }
-    else addMsg('noloc', 'Land first — the air-ship travels by railway waggon.', 0);
+    if (tryTravel(id)) toggleMenu(false);
   }, id === currentLocation);
   locBtn('paris', 'Paris, 1901', 'the Deutsch Prize course');
   locBtn('monaco', 'Monaco, winter 1902', 'the maritime guide rope');
@@ -405,9 +467,15 @@ function buildMenuButtons() {
   trDiv.innerHTML = '';
   for (const t of [...TRACKS, ...loadCustomTracks()]) {
     let best = null;
-    try { best = JSON.parse(localStorage.getItem(`tt_${t.id}_${currentShip}`) || 'null'); } catch { /* noop */ }
+    try { best = JSON.parse(localStorage.getItem(bestKey(t)) || 'null'); } catch { /* noop */ }
+    // warn before the flight, not at the moment the tank runs dry
+    const P = ship.spec.physics;
+    const vTop = shipTopSpeed(ship.spec);
+    const need = vTop ? courseLength(t) / vTop : 0;
+    const thirsty = P.fuel && need > P.fuel * 0.9;
     menuButton(trDiv, t.name + (best ? ` — ${fmt(best.t)}` : ''),
-      (t.custom ? '(custom) ' : '') + (t.sub || `${t.laps} laps`), () => {
+      (t.custom ? '(custom) ' : '') + (t.sub || `${t.laps} laps`)
+      + (thirsty ? ' · <b>at the limit of her petrol</b>' : ''), () => {
         if (currentLocation !== t.location) loadWorld(t.location);
         startTrack(t);
         toggleMenu(false);
@@ -590,7 +658,8 @@ async function raceWorldGhost(row) {
   if (g.ship && SHIPS[g.ship] && ship.landed) spawnShip(g.ship);
   chaseGhost = {
     trackId: t.id,
-    ghost: { t: g.t, dt: g.dt || GHOST_DT, splits: g.splits, p: g.p, pilot: g.pilot, foreign: true },
+    ghost: { t: g.t, dt: g.dt || GHOST_DT, splits: g.splits, p: g.p,
+      pilot: g.pilot, ship: g.ship, foreign: true },
   };
   startTrack(t);
   updateGhostMesh();
@@ -634,8 +703,18 @@ function resetShip() {
 }
 
 // ---------------------------------------------------------------- race
+// the historic trial's record, kept per city (their limits differ: the Deutsch
+// half-hour at Paris and Monaco, the ten minutes of the St. Louis prize)
+function bestRaceKey() { return `myairships_best_${currentLocation}`; }
+(function migrateOldBest() {
+  const old = localStorage.getItem('myairships_best');
+  if (old && !localStorage.getItem('myairships_best_paris')) {
+    localStorage.setItem('myairships_best_paris', old);   // it can only have been Paris
+    localStorage.removeItem('myairships_best');
+  }
+})();
 const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult: null,
-  best: +(localStorage.getItem('myairships_best') || 0) };
+  best: +(localStorage.getItem('myairships_best_paris') || 0) };
 
 function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
@@ -748,7 +827,7 @@ function finishRace() {
     const beatRivals = !rivals.some((r) => r.beatPlayer);
     race.lastResult = { won, beatSantos, beatRivals, t };
     if (won && (!race.best || t < race.best)) {
-      race.best = t; localStorage.setItem('myairships_best', String(t));
+      race.best = t; localStorage.setItem(bestRaceKey(), String(t));
     }
     let sub;
     if (!won) sub = `${fmt(t)} — “Errors do not count. I have learned my lesson.” (R to try again)`;
@@ -768,7 +847,8 @@ function finishRace() {
   const rival = ghostBest && ghostBest.foreign ? ghostBest : null;
   let prev = ghostBest;
   if (rival) { try { prev = JSON.parse(localStorage.getItem(bestKey(track)) || 'null'); } catch { prev = null; } }
-  const run = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice(), pilot: net.pilotName() };
+  const run = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice(),
+    pilot: net.pilotName(), ship: currentShip };
   const improved = !prev || t < prev.t;
   if (improved) {
     try { localStorage.setItem(bestKey(track), JSON.stringify(run)); } catch { /* full */ }
@@ -1125,9 +1205,11 @@ function updateCamera(dt) {
   }
   const k = 1 - Math.pow(0.0012, dt);
   camPos.lerp(desired, snap ? 1 : k);
+  // keep the lens out of the turf BEFORE aiming it, or the framing is computed
+  // from a position the camera does not end up at
+  if (camMode !== 1 && camPos.y < 2) camPos.y = 2;
   camera.position.copy(camPos);
   camera.lookAt(look);
-  if (camMode !== 1 && camPos.y < 2) camera.position.y = 2;
 }
 
 // ---------------------------------------------------------------- HUD

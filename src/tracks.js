@@ -14,34 +14,34 @@ export const TRACKS = [
     gates: ellipse(-1250, 200, 300, 190, 6, 30, 20),
   },
   {
-    id: 'gymkhana', location: 'paris', laps: 2,
+    id: 'gymkhana', location: 'paris', laps: 2, v: 2,
     name: 'The Aerial Gymkhana',
     sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
     gates: [
-      { x: 452, y: 35, z: 560, r: 16 },   // skirt the rim of the Grande Roue
+      { x: 452, y: 42, z: 560, r: 16 },   // skirt the rim of the Grande Roue
       { x: 300, y: 25, z: 330, r: 18 },   // low over the Champ de Mars
       { x: 260, y: 35, z: 75, r: 18 },    // the Tower's shoulder — his one danger
       { x: 20, y: 50, z: 140, r: 18 },    // over the Trocadéro dome, between its towers
-      { x: 660, y: 16, z: -300, r: 13 },  // DOWN the Champs-Élysées canyon
+      { x: 573, y: 16, z: -344, r: 13 },  // DOWN the Champs-Élysées canyon
       { x: 420, y: 13, z: -420, r: 5.5, ang: -2.034 }, // UNDER the Arc, along the avenue
     ],
   },
   {
-    id: 'harbor', location: 'monaco', laps: 3,
+    id: 'harbor', location: 'monaco', laps: 2, v: 2,
     name: 'The Harbor Circuit',
-    sub: 'the Casino terrace, over the Prince’s Palace — 3 laps',
+    sub: 'the Casino terrace, over the Prince’s Palace — 2 laps',
     gates: [
       { x: 100, y: 18, z: 40, r: 16 },    // off the landing-stage
       { x: 300, y: 16, z: -160, r: 16 },  // wave-top down the coast
       { x: -75, y: 38, z: -295, r: 14 },  // the Casino terrace
       { x: 250, y: 20, z: 120, r: 16 },   // back out over the bay
-      { x: -10, y: 75, z: 420, r: 15 },   // climb OVER the Prince's Palace
+      { x: -10, y: 82, z: 420, r: 15 },   // climb clear OVER the Prince's Palace
     ],
   },
   {
-    id: 'basin', location: 'stlouis', laps: 3,
+    id: 'basin', location: 'stlouis', laps: 2, v: 2,
     name: 'The Basin Sprint',
-    sub: 'the wheel, The Pike’s midway, the lagoon avenue — 3 laps',
+    sub: 'the wheel, The Pike’s midway, the lagoon avenue — 2 laps',
     gates: [
       { x: -288, y: 40, z: -330, r: 15 }, // skirt the great wheel's rim
       { x: -520, y: 14, z: -331, r: 13 }, // down The Pike's midway canyon

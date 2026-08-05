@@ -121,8 +121,9 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no6',
     brief: 'The Commission is assembled. Round the Eiffel Tower and return within the time limit. The motor WILL falter on the way home — work the spark lever and fly low against the wind.',
     setup(ctx) {
-      ctx.setCenter('October 19th, 1901', 'Fly to the gold ring and the trial begins.');
-      ctx.startRace();
+      // the Commission is convoked when the PILOT is ready over the ring —
+      // starting the clock here would run it while the ship still sat on the pad
+      ctx.setCenter('October 19th, 1901', 'Fly to the gold start ring and call “Let go all!” (Enter, or GO) — the clock starts then.');
       this.done = false;
     },
     tick(ctx) {
@@ -182,8 +183,7 @@ export const SCENARIOS = [
     location: 'stlouis', shipId: 'no7',
     brief: 'The race that never happened: the triangular course you proposed to the Exposition, flown in the racing No. 7 against La Ville de Paris and a No. 6. Beat the clock — and beat them.',
     setup(ctx) {
-      ctx.setCenter('St. Louis, 1904', 'The rivals are inflating. Fly to the gold ring and begin.');
-      ctx.startRace();
+      ctx.setCenter('St. Louis, 1904', 'The rivals are inflating. Fly to the gold ring and begin (Enter, or GO) — the clock starts then.');
       this.done = false;
     },
     tick(ctx) {

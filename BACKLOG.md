@@ -26,6 +26,17 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   own gates at the ship's own physics. The whole feature vanishes when unconfigured.
   See docs/ONLINE.md.
 
+- [x] **A review pass over the whole game** — fixed: the Monaco turn pylon standing
+  inside the Tête de Chien; the gymkhana's Champs gate buried in a frontage (the clear
+  corridor there was 7.8 m against a 13 m ring); the harbor gate whose lower rim was
+  inside the Prince's Palace roof; petrol endurance far too short for the longer
+  circuits (every ship now carries a 25% reserve flying flat out, and harbor/basin drop
+  to 2 laps); GPU resources never released on travel between cities (a 2048² shadow map
+  and thirteen bloom targets per journey); a mid-air wreck locking the fleet behind
+  "land first"; the Deutsch and St. Louis scenarios starting the clock while the ship
+  still sat on the pad; the Seine being decorative while other waters drowned you; one
+  shared "best" across three cities with different limits.
+
 ## Future — multiplayer, if it goes further
 
 - [ ] **Live race rooms** — Supabase Realtime *Broadcast* + *Presence* (not the DB):

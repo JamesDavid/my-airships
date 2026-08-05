@@ -311,7 +311,8 @@ export function buildWorld(scene) {
     towSpots: [
       { name: 'Bagatelle, by the Bois', pos: new THREE.Vector3(-450, 0, -140) },
       { name: 'Longchamps racecourse', pos: new THREE.Vector3(LONGCHAMPS.x, 0, LONGCHAMPS.z) },
-      { name: 'the Trocadéro bank', pos: new THREE.Vector3(-60, 0, 60) },
+      // on the quay, not in the river — the Seine drowns a ship now
+      { name: 'the Trocadéro bank', pos: new THREE.Vector3(-30, 0, 70) },
     ],
     limitNote: 'the historic 30:00 at half scale',
     vistaPos: new THREE.Vector3(TOWER_POS.x + 20, 215, TOWER_POS.z + 20),
@@ -324,7 +325,9 @@ export function buildWorld(scene) {
       back: 'Home to St. Cloud — less wind down low.',
       turnMsg: '“I turned with a sudden movement of the rudder, round the Tower’s lightning conductor.” Now home — against the wind. Fly LOW.',
     },
-    isWater: () => false,
+    // the Seine is water like any other: "I should fall into the Seine" —
+    // both reaches drown a ship that comes down on them
+    isWater: (x, z) => nearPolyline(riverPts, x, z, 32) || nearPolyline(westPts, x, z, 29),
     isInBois(x, z) {
       if (x < -1900 || x > -340 || Math.abs(z) > 560) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
@@ -629,6 +632,24 @@ function makeArc(pos) {
 }
 
 // ---------------------------------------------------------------- Seine
+// Is (x,z) within `half` metres of a river's centre line? Cheap enough to ask
+// every frame: a bounding reject, then squared distance to each segment.
+export function nearPolyline(pts, x, z, half) {
+  const h2 = half * half;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    if (x < Math.min(a.x, b.x) - half || x > Math.max(a.x, b.x) + half) continue;
+    if (z < Math.min(a.z, b.z) - half || z > Math.max(a.z, b.z) + half) continue;
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const len2 = dx * dx + dz * dz;
+    let t = len2 ? ((x - a.x) * dx + (z - a.z) * dz) / len2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ox = x - (a.x + dx * t), oz = z - (a.z + dz * t);
+    if (ox * ox + oz * oz < h2) return true;
+  }
+  return false;
+}
+
 function seinePoints() {
   const curve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-380, 0, -1500),

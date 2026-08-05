@@ -115,6 +115,7 @@ export function buildWorldStLouis(scene) {
   }
 
   // the radiating lagoon avenues of the fan
+  const lagoons = [];   // remembered so the water is as wet as it looks
   for (const sideZ of [-1, 1]) {
     const ax1 = 60, az1 = 40 * sideZ, ax2 = -560, az2 = 360 * sideZ;
     const len = Math.hypot(ax2 - ax1, az2 - az1);
@@ -128,6 +129,7 @@ export function buildWorldStLouis(scene) {
     lagoon.rotation.x = -Math.PI / 2; lagoon.rotation.z = -ang;
     lagoon.position.set((ax1 + ax2) / 2 + 6, 0.3, (az1 + az2) / 2 + 24 * sideZ);
     scene.add(lagoon);
+    lagoons.push({ x: lagoon.position.x, z: lagoon.position.z, ang, len: len * 0.7, w: 22 });
   }
 
   // THE PIKE: the mile of midway attractions along the north edge
@@ -296,7 +298,17 @@ export function buildWorldStLouis(scene) {
       back: 'Home to the Concourse — the crowd is on its feet',
       turnMsg: 'The last pylon is rounded! Now home before your rivals.',
     },
-    isWater: (x, z) => x > 70 && x < 490 && Math.abs(z) < 75,
+    // the Grand Basin AND the lagoon avenues — every sheet of water on the
+    // ground plan will take a ship that comes down on it
+    isWater: (x, z) => {
+      if (x > 70 && x < 490 && Math.abs(z) < 75) return true;
+      for (const l of lagoons) {
+        const c = Math.cos(-l.ang), s = Math.sin(-l.ang);
+        const dx = x - l.x, dz = z - l.z;
+        if (Math.abs(dx * c - dz * s) < l.len / 2 && Math.abs(dx * s + dz * c) < l.w / 2) return true;
+      }
+      return false;
+    },
     isInBois: () => false,
   };
 }
