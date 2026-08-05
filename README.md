@@ -3,7 +3,8 @@
 **Fly Alberto Santos-Dumont's dirigibles over 1901 Paris — a browser flight game built
 from his 1904 memoir, *My Airships*.**
 
-**▶ Play it here: https://jamesdavid.github.io/my-airships/** — no install, just a modern browser.
+**▶ Play it here: https://myairships.com** — no install, just a modern browser.
+On a telephone, add it to your Home Screen and it runs without the browser's bars.
 
 ![Guide-roping over the Bois de Boulogne at dawn](media/paris.jpg)
 
