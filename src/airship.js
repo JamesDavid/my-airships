@@ -13,6 +13,107 @@ export { windAt }; // re-export for existing importers
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+// ---------------------------------------------------------------- dial faces
+// Engraved instrument faces, drawn once and shared by every ship. Both dials
+// are built the same way: the pilot's eye sees texture-up as up and
+// texture-right as their own right, and a positive rotation.x turns the dial
+// clockwise from where they stand.
+function dialCanvas() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f2ead6'; x.beginPath(); x.arc(128, 128, 128, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = '#8a7350'; x.lineWidth = 3;
+  x.beginPath(); x.arc(128, 128, 120, 0, Math.PI * 2); x.stroke();
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  return { c, x };
+}
+function dialTexture(c) {
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// the compass rose: N at the needle, bearings running clockwise (N E S W)
+function makeCompassFace() {
+  const { c, x } = dialCanvas();
+  x.strokeStyle = '#22180f';
+  for (let deg = 0; deg < 360; deg += 10) {
+    const a = (deg - 90) * Math.PI / 180;          // canvas 0° is to the right
+    const major = deg % 90 === 0, mid = deg % 30 === 0;
+    const r0 = major ? 88 : mid ? 96 : 104;
+    x.lineWidth = major ? 5 : mid ? 3 : 1.5;
+    x.beginPath();
+    x.moveTo(128 + Math.cos(a) * r0, 128 + Math.sin(a) * r0);
+    x.lineTo(128 + Math.cos(a) * 116, 128 + Math.sin(a) * 116);
+    x.stroke();
+  }
+  // canvas y grows downward, so drawing N at the top puts it at texture-up;
+  // going clockwise on screen is E, S, W — exactly how a card is engraved.
+  // The cardinals sit well inside the band the north pointer sweeps, so the
+  // needle never hides the letter it is pointing at.
+  x.font = 'bold 42px Georgia, serif';
+  for (const [ch, deg] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]]) {
+    const a = (deg - 90) * Math.PI / 180;
+    x.fillStyle = ch === 'N' ? '#8c2f1e' : '#22180f';
+    x.fillText(ch, 128 + Math.cos(a) * 50, 128 + Math.sin(a) * 50);
+  }
+  x.font = 'italic 18px Georgia, serif';
+  x.fillStyle = '#6b5a3f';
+  for (const [ch, deg] of [['NE', 45], ['SE', 135], ['SO', 225], ['NO', 315]]) {
+    const a = (deg - 90) * Math.PI / 180;
+    x.fillText(ch, 128 + Math.cos(a) * 78, 128 + Math.sin(a) * 78);
+  }
+  return dialTexture(c);
+}
+
+// the aneroid, read as an altimeter: 0 at the top, 400 m clockwise round
+function makeBaroFace() {
+  const { c, x } = dialCanvas();
+  const SPAN = 4.6;                                 // radians of needle travel
+  x.strokeStyle = '#22180f';
+  for (let m = 0; m <= 400; m += 25) {
+    const a = (m / 400) * SPAN - Math.PI / 2;
+    const major = m % 100 === 0;
+    x.lineWidth = major ? 5 : 2;
+    x.beginPath();
+    x.moveTo(128 + Math.cos(a) * (major ? 90 : 100), 128 + Math.sin(a) * (major ? 90 : 100));
+    x.lineTo(128 + Math.cos(a) * 116, 128 + Math.sin(a) * 116);
+    x.stroke();
+  }
+  x.fillStyle = '#22180f';
+  x.font = 'bold 30px Georgia, serif';
+  for (let m = 0; m <= 400; m += 100) {
+    const a = (m / 400) * SPAN - Math.PI / 2;
+    x.fillText(String(m), 128 + Math.cos(a) * 62, 128 + Math.sin(a) * 62);
+  }
+  // the legend goes in the gap the scale leaves at the bottom right
+  x.font = 'italic 16px Georgia, serif';
+  x.fillStyle = '#6b5a3f';
+  x.fillText('MÈTRES', 128, 208);
+  return dialTexture(c);
+}
+
+// the engraved placard under the two levers, read from the pilot's seat
+function makeLeverPlate() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 52;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e8dcc0'; x.fillRect(0, 0, 256, 52);
+  x.strokeStyle = '#8a7350'; x.lineWidth = 3; x.strokeRect(2, 2, 252, 48);
+  x.fillStyle = '#22180f';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold 22px Georgia, serif';
+  x.fillText('CARB.', 66, 27);
+  x.fillText('ALLUM.', 190, 27);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+let COMPASS_FACE = null, BARO_FACE = null, LEVER_PLATE = null;
+
 // hull profiles: modify a unit sphere's radial profile along x
 function makeEnvelopeGeometry(shape) {
   const geo = new THREE.SphereGeometry(1, 30, 20);
@@ -254,7 +355,9 @@ export class Airship {
     const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.05, 14), brass);
     drum.rotation.z = Math.PI / 2;
     baro.add(drum);
-    const face = new THREE.Mesh(new THREE.CircleGeometry(0.088, 14), cream);
+    if (!BARO_FACE) BARO_FACE = makeBaroFace();
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.088, 24),
+      new THREE.MeshLambertMaterial({ map: BARO_FACE, emissive: 0x4a453c }));
     face.rotation.y = -Math.PI / 2;
     face.position.x = -0.03;
     baro.add(face);
@@ -271,13 +374,25 @@ export class Airship {
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.05, 14), brass);
     bowl.rotation.z = Math.PI / 2;
     compass.add(bowl);
-    const card = new THREE.Mesh(new THREE.CircleGeometry(0.088, 14), cream);
+    // the card FLOATS: it swings with the needle so N is always true north,
+    // and the heading is whatever letter stands under the fixed lubber mark
+    if (!COMPASS_FACE) COMPASS_FACE = makeCompassFace();
+    this.compassCard = new THREE.Group();
+    const card = new THREE.Mesh(new THREE.CircleGeometry(0.088, 24),
+      new THREE.MeshLambertMaterial({ map: COMPASS_FACE, emissive: 0x4a453c }));
     card.rotation.y = -Math.PI / 2;
     card.position.x = -0.03;
-    compass.add(card);
-    this.compassNeedle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.078, 0.02),
+    this.compassCard.add(card);
+    compass.add(this.compassCard);
+    // the lubber line: a brass index at the top of the bowl, marking the bow
+    const lubber = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.012),
       new THREE.MeshLambertMaterial({ color: 0x8c2f1e, emissive: 0x3a130b }));
-    this.compassNeedle.geometry.translate(0, 0.033, 0);
+    lubber.position.set(-0.045, 0.098, 0);
+    compass.add(lubber);
+    // a slim north pointer riding the outer band, clear of the engraved letters
+    this.compassNeedle = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.032, 0.014),
+      new THREE.MeshLambertMaterial({ color: 0x8c2f1e, emissive: 0x3a130b }));
+    this.compassNeedle.geometry.translate(0, 0.064, 0);
     this.compassNeedle.position.x = -0.04;
     compass.add(this.compassNeedle);
     compass.position.set(bx + 0.5, -drop + 0.3, 0.2);
@@ -297,6 +412,13 @@ export class Airship {
       const quadrant = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.2), wood);
       quadrant.position.set(bx + 0.48, -drop + 0.18, 0.38);
       this.pitchGroup.add(quadrant);
+      // the engraved plate naming the two levers, facing the operator
+      if (!LEVER_PLATE) LEVER_PLATE = makeLeverPlate();
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.04),
+        new THREE.MeshLambertMaterial({ map: LEVER_PLATE, emissive: 0x4a453c }));
+      plate.rotation.y = -Math.PI / 2;
+      plate.position.set(bx + 0.398, -drop + 0.18, 0.38);
+      this.pitchGroup.add(plate);
       this.carbLever.position.set(bx + 0.48, -drop + 0.2, 0.33);
       this.pitchGroup.add(this.carbLever);
       this.sparkLever.position.set(bx + 0.48, -drop + 0.2, 0.43);
@@ -713,13 +835,15 @@ export class Airship {
     this.sparkT = Math.max(0, (this.sparkT || 0) - dt);
     this.sparkLever.rotation.z = 0.35 - (this.sparkT > 0 ? Math.sin(this.sparkT * 18) * 0.4 : 0);
     const altM = Math.max(0, this.pos.y - this.spec.keel.drop);
-    this.baroNeedle.rotation.x = -(Math.min(altM, 400) / 400) * 4.6; // barometer = altitude
+    // the needle sweeps CLOCKWISE with height, over the engraved metre scale
+    this.baroNeedle.rotation.x = (Math.min(altM, 400) / 400) * 4.6;
     if (this._pennantAng !== undefined) {
       this.pennant.rotation.y = this._pennantAng - this.yaw + Math.sin(this._t * 4.2) * 0.1;
     }
-    // needle points true north (-z). Dial reads clockwise-from-ahead:
-    // facing east (yaw 0), north is 90° to port, so the needle leans left.
+    // needle points true north (-z), and the engraved card rides with it, so
+    // the letter beneath the lubber index is the bearing you are steering
     this.compassNeedle.rotation.x = this.yaw - Math.PI / 2;
+    this.compassCard.rotation.x = this.yaw - Math.PI / 2;
     for (let i = 0; i < this.sackMeshes.length; i++) this.sackMeshes[i].visible = i < this.bags;
     this.propAngle += (this.motorOn ? 4 + 40 * this.throttle * this.motorHealth : 0.3) * dt;
     for (const p of this.props) p.rotation.x = this.propAngle;

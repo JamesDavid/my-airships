@@ -27,7 +27,8 @@ create table if not exists public.times (
   -- the crude checks the database itself can make
   constraint times_t_range      check (t > 8 and t < 3600),
   constraint times_pilot_len    check (char_length(pilot) between 1 and 24),
-  constraint times_pilot_clean  check (pilot ~ '^[[:print:]]+$' and pilot !~ '[<>&"''\\]'),
+  -- accents are welcome (the register is French); control characters are not
+  constraint times_pilot_clean  check (pilot !~ '[[:cntrl:]]' and pilot !~ '[<>&"''\\]'),
   constraint times_ids_len      check (char_length(track_id) < 64 and char_length(ship_id) < 32),
   constraint times_ghost_size   check (pg_column_size(ghost) < 700000),
   -- one row per pilot per course per ship class

@@ -32,8 +32,26 @@ export function config() {
 export function enabled() { return !!config(); }
 
 // ---------------------------------------------------------------- pilot
+// Every pilot is entered in the register on their first flight, under a name
+// of the period — theirs to keep or to change in the menu. It rides on your
+// ghosts and on anything you send to the record office.
+const FIRST = ['Alberto', 'Émile', 'Henri', 'Gaston', 'Léon', 'Auguste', 'Camille',
+  'Édouard', 'Jules', 'Marcel', 'Lucien', 'Armand', 'Victor', 'Georges', 'Raymond',
+  'Célestine', 'Blanche', 'Marguerite', 'Hélène', 'Suzanne', 'Adrienne'];
+const LAST = ['Bruneau', 'Vasseur', 'Marchand', 'Lefèvre', 'Beaumont', 'Dufresne',
+  'Chatelain', 'Roussel', 'Vaillant', 'Sauvage', 'Corbin', 'Mercier', 'Fontaine',
+  'Boulanger', 'Perrault', 'Delaunay', 'Tissandier', 'Villeneuve', 'Aubert'];
+
 export function pilotName() {
   return localStorage.getItem(LS_PILOT) || '';
+}
+
+/** The name a pilot flies under — assigned on the first flight if unset. */
+export function ensurePilotName() {
+  const have = pilotName();
+  if (have) return have;
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  return setPilotName(`${pick(FIRST)} ${pick(LAST)}`);
 }
 export function setPilotName(name) {
   const clean = String(name || '').replace(/[<>&"'\\]|[\u0000-\u001F]/g, '').trim().slice(0, 24);

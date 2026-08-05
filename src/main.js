@@ -425,9 +425,13 @@ function buildMenuButtons() {
     if (!code) return;
     const g = decodeGhost(code);
     if (!g) { addMsg('gh2', 'That code would not decode.', 0); return; }
+    g.foreign = true;
     ghostBest = g;
+    if (track && !track.historic) chaseGhost = { trackId: track.id, ghost: g };
     updateGhostMesh();
-    addMsg('gh2', `Rival ghost loaded — it flies at ${fmt(g.t)}. Beat it.`, 0);
+    addMsg('gh2', g.pilot
+      ? `${g.pilot}’s ghost is loaded — it flies at ${fmt(g.t)}. Beat it.`
+      : `Rival ghost loaded — it flies at ${fmt(g.t)}. Beat it.`, 0);
     toggleMenu(false);
   });
   if (!editing) {
@@ -458,14 +462,8 @@ function buildMenuButtons() {
   }
   // ---- the record office: these entries exist only if one is configured ----
   if (net.enabled()) {
-    const who = net.pilotName();
     menuButton(trDiv, 'World records', 'the ledger of times for this course', () => {
       showBoard(boardTrackFor().id, currentShip, false);
-    });
-    menuButton(trDiv, who ? `Pilot name: ${who}` : 'Sign the register', 'the name your times are entered under', () => {
-      const name = net.setPilotName(prompt('Sign the register — your pilot name:', who || '') || '');
-      if (name) addMsg('pn', `The register reads “${name}”.`, 0);
-      buildMenuButtons();
     });
     if (ghostBest && track && !track.historic && !track.custom && !ghostBest.foreign) {
       menuButton(trDiv, 'Send my best to the record office', `${fmt(ghostBest.t)} on ${track.name}`,
@@ -483,6 +481,12 @@ function buildMenuButtons() {
       addMsg('tc', `“${t.name}” added to your time trials.`, 0);
       buildMenuButtons();
     } catch { addMsg('tc', 'That code would not decode.', 0); }
+  });
+  // the register: every pilot flies under a name, online or not
+  menuButton(optsDiv, `Pilot: ${net.pilotName()}`, 'the name on your ghosts and your times', () => {
+    const name = net.setPilotName(prompt('Sign the register — your pilot name:', net.pilotName()) || '');
+    if (name) addMsg('pn', `The register reads “${name}”.`, 0);
+    buildMenuButtons();
   });
   menuButton(optsDiv, 'Camera: ' + CAM_NAMES[camMode], 'change view', () => { cycleCamera(); buildMenuButtons(); });
   menuButton(optsDiv, `Photograph mode: ${document.body.classList.contains('photo') ? 'on' : 'off'}`, 'sepia and grain', () => {
@@ -764,7 +768,7 @@ function finishRace() {
   const rival = ghostBest && ghostBest.foreign ? ghostBest : null;
   let prev = ghostBest;
   if (rival) { try { prev = JSON.parse(localStorage.getItem(bestKey(track)) || 'null'); } catch { prev = null; } }
-  const run = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice() };
+  const run = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice(), pilot: net.pilotName() };
   const improved = !prev || t < prev.t;
   if (improved) {
     try { localStorage.setItem(bestKey(track), JSON.stringify(run)); } catch { /* full */ }
@@ -1194,6 +1198,7 @@ addEventListener('resize', () => {
   if (composer) composer.setSize(innerWidth, innerHeight);
 });
 
+net.ensurePilotName();   // every pilot is entered in the register on arrival
 loadWorld('paris');
 toggleMenu(true);   // start screen: choose your ship and your sky
 document.getElementById('help').classList.add('hidden');
@@ -1202,6 +1207,9 @@ document.getElementById('help').classList.add('hidden');
 window.__game = { get ship() { return ship; }, get camMode() { return camMode; }, get world() { return world; },
   get rivals() { return rivals; }, get scenario() { return scenario; },
   get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
+  get scene() { return scene; }, get composer() { return composer; },   // force a frame when rAF is asleep
+  updateCamera,
+  setCamMode(m) { camMode = m; camera.near = m === 1 ? 0.1 : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
 let last = performance.now();
