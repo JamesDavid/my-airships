@@ -54,7 +54,11 @@ export function maxGroundSpeed(spec) {
 // for diving. A No. 9 cannot post a No. 7's trace.
 export function maxMeanSpeed(spec) {
   const top = shipTopSpeed(spec);
-  return top ? top * 1.15 + 2.5 : LIMITS.windAllowance;   // the Brazil rides the wind alone
+  // A FLAT allowance is a much bigger favour to a slow ship than to a fast one:
+  // at +2.5 m/s the No. 9 was allowed 9.95 m/s average, which let a No. 6's
+  // trace be posted under her name. Keep it proportional, with only a token
+  // constant for the dive-and-climb cycling.
+  return top ? top * 1.2 + 0.5 : LIMITS.windAllowance;    // the Brazil rides the wind alone
 }
 
 export function trackById(id, extra) {
