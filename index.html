@@ -123,7 +123,7 @@
     top:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
   /* the carburating lever — a throttle you SET, like the brass lever aboard:
      bottom is stopped, top is full chat, and it stays where you leave it */
-  #thrTrack { position:fixed; right:16px; bottom:26px; width:48px; height:150px;
+  #thrTrack { position:fixed; right:16px; bottom:26px; width:48px; height:196px;
     border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
     touch-action:none; z-index:30; }
   #thrFill { position:absolute; left:3px; right:3px; bottom:3px; height:0;
@@ -133,7 +133,7 @@
     font-size:9.5px; display:flex; align-items:center; justify-content:center;
     bottom:4px; user-select:none; -webkit-user-select:none; }
   /* helm trim — horizontal; the wheel stays where you lash it */
-  #helmTrack { position:fixed; left:16px; bottom:26px; width:196px; height:48px;
+  #helmTrack { position:fixed; left:16px; bottom:90px; width:196px; height:48px;
     border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
     touch-action:none; z-index:30; }
   #helmCenter { position:absolute; top:6px; bottom:6px; left:50%; width:2px;
@@ -142,11 +142,12 @@
     background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
     font-size:9.5px; display:flex; align-items:center; justify-content:center;
     left:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
-  /* left hand: sand over the valve, above the helm.
+  /* left hand: sand above the helm, valve below it — both on the helm's axis
+     (helm spans 16…212, so its centre is 114; a 60 px button starts at 84).
      right hand: the coaxing lever over the carburettor */
-  #btnSand { left:16px; bottom:172px; }
-  #btnVent { left:16px; bottom:98px; }
-  #btnFix  { right:16px; bottom:186px; }
+  #btnSand { left:84px; bottom:152px; }
+  #btnVent { left:84px; bottom:16px; }
+  #btnFix  { right:16px; bottom:232px; }
   body.touch #hintBR { display:none; }
   body.touch #panelTR { right:74px; }
   body.touch #panelBL { bottom:252px; }
@@ -159,13 +160,14 @@
     .tbtn.sm { width: 56px; height: 56px; font-size: 14px; }
     #pitchTrack { width: 56px; height: 230px; right: 110px; }
     #pitchThumb { width: 44px; height: 44px; left: 4px; font-size: 11px; }
-    #helmTrack { width: 230px; height: 56px; }
+    #helmTrack { width: 230px; height: 56px; bottom: 104px; }
     #helmThumb { width: 44px; height: 44px; top: 4px; font-size: 10px; }
-    #thrTrack { width: 56px; height: 180px; right: 22px; bottom: 26px; }
+    #thrTrack { width: 56px; height: 230px; right: 22px; bottom: 26px; }
     #thrThumb { width: 44px; height: 44px; left: 4px; font-size: 10px; }
-    #btnSand { left: 20px; bottom: 194px; }
-    #btnVent { left: 20px; bottom: 110px; }
-    #btnFix  { right: 22px; bottom: 220px; }
+    /* helm spans 16…246, centre 131; a 72 px button starts at 95 */
+    #btnSand { left: 95px; bottom: 172px; }
+    #btnVent { left: 95px; bottom: 20px; }
+    #btnFix  { right: 22px; bottom: 266px; }
     #menu button { padding: 10px 12px; font-size: 15px; }
     #panelTL { font-size: 16px; }
     #timer { font-size: 34px; }
