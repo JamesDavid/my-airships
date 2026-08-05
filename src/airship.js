@@ -735,9 +735,14 @@ export class Airship {
       this.vel.multiplyScalar(0.97);
       this.vel.y -= 6 * dt;
       this.pos.addScaledVector(this.vel, dt);
-      // the wreck settles on its own keel, and once down it IS down: `landed`
-      // must become true or the pilot can never leave the ship again
-      const rest = Math.max(1.5, -this.keelY * 0.4);
+      // The wreck settles on its own keel, and once down it IS down: `landed`
+      // must become true or the pilot can never leave the ship again.
+      //
+      // restHeight(), the SAME measure a clean landing uses. This used to be
+      // -keelY * 0.4, a guess at the keel depth made before lowY existed, and
+      // it put the wreck well below her own lowest timber: the basket sank
+      // through the ground every time she came down hard.
+      const rest = this.restHeight();
       if (this.pos.y < rest) { this.pos.y = rest; this.vel.set(0, 0, 0); this.landed = true; }
       this.updateRope(dt);
       this.updateTransforms(dt);

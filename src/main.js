@@ -66,7 +66,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('app').appendChild(renderer.domElement);
 let composer = null;
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 20000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 12000);
 
 const LOCS = ['paris', 'monaco', 'stlouis'];
 let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
@@ -100,9 +100,86 @@ function spawnShip(specId, where = null) {
   } else {
     ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
   }
+  ship.eyeNear = measureEyeNear(ship);
   setCenter('', '');   // clear any wreck notice from the previous ship
   document.getElementById('helpTitle').textContent = `My Airships — ${ship.spec.name}`;
   addMsg('ship', `${ship.spec.name} — ${ship.spec.sub}`, 0);
+}
+
+/**
+ * Stop the streets fighting the ground they are painted on.
+ *
+ * The roads, plazas and water sit five to nine centimetres above a ground plane
+ * nine kilometres across. That is far too fine a distinction for the depth
+ * buffer at any distance: aboard the ship, where the near plane is 0.1 m, the
+ * buffer can only resolve 0.18 m at the range of the Grand Palais from the
+ * Tower — and on a telephone with a 16-bit buffer, 46 m. So the two surfaces
+ * flicker against each other across the whole city.
+ *
+ * Moving them further apart would make the roads visibly hover when you fly low
+ * over them, and adding vertices does nothing at all: this is depth precision,
+ * not tessellation. The right tool is polygon offset, which biases the depth
+ * written for a surface without moving the surface. Each decal is nudged by its
+ * height order, so they keep their own layering as well.
+ */
+function settleGroundDecals(root) {
+  const flats = [];
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry || o.isInstancedMesh) return;
+    const b = new THREE.Box3().setFromObject(o);
+    if (!isFinite(b.min.y)) return;
+    if (b.max.y - b.min.y > 1.5) return;              // not a flat thing
+    if (b.max.y <= 0.005 || b.max.y > 1.2) return;    // the ground itself, or a building
+    if ((b.max.x - b.min.x) * (b.max.z - b.min.z) < 100) return;
+    flats.push({ o, y: b.max.y });
+  });
+  flats.sort((a, b) => a.y - b.y);
+  flats.forEach(({ o }, i) => {
+    // the material may be shared with something that is NOT a decal
+    o.material = o.material.clone();
+    o.material.polygonOffset = true;
+    o.material.polygonOffsetFactor = -(2 + i);
+    o.material.polygonOffsetUnits = -(2 + i);
+    o.material.needsUpdate = true;
+  });
+  return flats.length;
+}
+
+/**
+ * How near the near plane may be, aboard THIS ship.
+ *
+ * Depth precision is inversely proportional to the near plane, and 0.1 m is far
+ * tighter than most of the fleet needs: in the No. 6 the closest thing to the
+ * pilot's eye is a dial face at 0.44 m. The No. 4 is the exception — she is
+ * flown from a bicycle saddle with the frame 0.08 m away — so it cannot simply
+ * be raised for everyone. Measured per ship, most of the fleet gets a near
+ * plane two and a half times further out, and that much more depth precision
+ * across the whole city.
+ */
+function measureEyeNear(s) {
+  try {
+    s.group.updateMatrixWorld(true);
+    // eyePoint is an Object3D carried on the ship, not a bare vector: ask it
+    // where it is. Treating it as a Vector3 gives NaN distances and every ship
+    // silently falls back to the old near plane, which is what happened first.
+    const eye = new THREE.Vector3();
+    if (s.eyePoint && s.eyePoint.getWorldPosition) s.eyePoint.getWorldPosition(eye);
+    else eye.copy(s.pos);
+    const v = new THREE.Vector3();
+    let near = Infinity;
+    s.group.traverse((o) => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes || !o.geometry.attributes.position) return;
+      const pos = o.geometry.attributes.position;
+      const step = Math.max(1, Math.floor(pos.count / 200));
+      for (let i = 0; i < pos.count; i += step) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        const d = v.distanceTo(eye);
+        if (d === d) near = Math.min(near, d);        // NaN is not a distance
+      }
+    });
+    if (!isFinite(near)) return 0.1;
+    return Math.max(0.05, Math.min(0.3, near * 0.6));
+  } catch { return 0.1; }
 }
 
 function makeRing(color) {
@@ -294,6 +371,7 @@ function loadWorld(loc) {
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.7, 0.86));
   composer.addPass(new OutputPass());
   disposeWorld(oldScene, oldComposer);
+  settleGroundDecals(scene);   // roads and plazas must not fight the ground
   live.attach(scene);
   addMsg('loc', world.name, 0);
 }
@@ -550,7 +628,7 @@ function pollInput() {
 
 function cycleCamera() {
   camMode = (camMode + 1) % 4;
-  camera.near = camMode === 1 ? 0.1 : 0.5;  // FP: instruments are inches from the eye
+  camera.near = camMode === 1 ? (ship.eyeNear || 0.1) : 0.5;  // FP: instruments are inches from the eye
   camera.updateProjectionMatrix();
   addMsg('cam', 'Camera: ' + CAM_NAMES[camMode], 0);
 }
@@ -2737,7 +2815,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
   get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
   get scene() { return scene; }, get composer() { return composer; },   // force a frame when rAF is asleep
   updateCamera, pollInput, drawThrottleLever, checkCollisions, hullPoints, updateHUD,
-  setCamMode(m) { camMode = m; camera.near = m === 1 ? 0.1 : 0.5; camera.updateProjectionMatrix(); },
+  setCamMode(m) { camMode = m; camera.near = m === 1 ? (ship.eyeNear || 0.1) : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
 let hudTick = 0;
