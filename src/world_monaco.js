@@ -328,7 +328,7 @@ export function buildWorldMonaco(scene) {
     windBase: WINDB,                              // down the coast: headwind out, flying home
     raceLimit: 900, raceRecord: 885,
     hints: {
-      idleNear: 'Press ENTER for the flight to Cap Martin. (1-7, 9, 0, B change ships · L: Paris)',
+      idleNear: 'The run to Cap Martin waits — call “Let go all!” when you are ready.',
       idleFar: 'Free flight — the start ring waits over the landing-stage of La Condamine.',
       out: 'Down the coast to Cap Martin — into the teeth of the breeze. Guide-rope low over the waves.',
       back: 'Home to the bay of Monaco — the wind behind you now.',

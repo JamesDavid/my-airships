@@ -478,7 +478,7 @@ export function buildWorld(scene) {
     windBase: windB,
     raceLimit: 900, raceRecord: 885,
     hints: {
-      idleNear: 'Press ENTER to convoke the Commission. (1-7, 9, 0, B change ships · L: Monaco)',
+      idleNear: 'The Commission waits — call “Let go all!” when you are ready.',
       idleFar: 'Free flight — the start ring waits above the Aéro Club at St. Cloud.',
       out: 'Round the Eiffel Tower — ride the wind high.',
       back: 'Home to St. Cloud — less wind down low.',

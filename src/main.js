@@ -333,7 +333,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyX' && spectate.on) watchNext();
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
   if (e.code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
-  if (e.code === 'KeyM') muted = !muted;
+  if (e.code === 'KeyM') { muted = !muted; drawSoundBtn(); }
   if (SHIP_KEYS[e.code]) tryChangeShip(SHIP_KEYS[e.code]);
   if (e.code === 'KeyL') tryTravel(LOCS[(LOCS.indexOf(currentLocation) + 1) % LOCS.length]);
 });
@@ -593,21 +593,46 @@ function showPane() {
   }
 }
 /**
- * A parked notice must sit BELOW the instruments and the trial, and no constant
- * can promise that: the trial's line wraps to six or seven rows on a telephone
- * and to one on a desk. So it is measured. Only on narrow screens — on a wide
- * one the corners are nowhere near the middle.
+ * On a telephone the top of the screen is one column, not four corners. Across
+ * 440 px, "WIND 11 km/h from the W" and a trial line cannot both fit on a row,
+ * and the room's roster and any parked notice want the same band again — they
+ * printed over each other, which is what pilots reported.
+ *
+ * So they are stacked, each measured below the last, because none of them has a
+ * knowable height: the trial line wraps to one row on a desk and four on a
+ * phone, and a roster grows with every pilot who joins. On a wide screen the
+ * stylesheet's corners are restored.
  */
-function parkClearOfCorners() {
-  const c = document.getElementById('center');
-  if (innerWidth > 900) { c.style.top = ''; return; }
-  const low = Math.max(document.getElementById('panelTL').getBoundingClientRect().bottom,
-    document.getElementById('panelTR').getBoundingClientRect().bottom);
-  c.style.top = Math.round(low + 10) + 'px';
+function layoutHud() {
+  const tl = document.getElementById('panelTL');
+  const tr = document.getElementById('panelTR');
+  const rm = document.getElementById('room');
+  const ct = document.getElementById('center');
+  const parked = ct.classList.contains('parked');
+  if (innerWidth > 900) {
+    tr.style.top = ''; tr.style.left = ''; rm.style.top = ''; ct.style.top = '';
+    return;
+  }
+  const GAP = 5;
+  const tlBox = tl.getBoundingClientRect();
+  // First try to put the trial in the empty band BESIDE the instruments — the
+  // band between them and the round buttons is dead space otherwise, and using
+  // it lifts everything below by the height of a whole block. It only counts as
+  // fitting if it wraps no lower than the instruments do.
+  tr.style.top = `${Math.round(tlBox.top)}px`;
+  tr.style.left = `${Math.round(tlBox.right + 10)}px`;
+  if (tr.getBoundingClientRect().bottom > tlBox.bottom + 2) {
+    tr.style.left = '';                        // too tall beside them: stack instead
+    tr.style.top = `${Math.round(tlBox.bottom + GAP)}px`;
+  }
+  // read back after each write: an empty block is zero-high and must not
+  // reserve a band, and a wrapped one takes as many as it needs
+  rm.style.top = `${Math.round(Math.max(tlBox.bottom, tr.getBoundingClientRect().bottom) + GAP)}px`;
+  ct.style.top = parked
+    ? `${Math.round(Math.max(tr.getBoundingClientRect().bottom, rm.getBoundingClientRect().bottom) + GAP + 4)}px`
+    : '';
 }
-addEventListener('resize', () => {
-  if (document.getElementById('center').classList.contains('parked')) parkClearOfCorners();
-});
+addEventListener('resize', layoutHud);
 
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
@@ -799,7 +824,12 @@ function buildMenuButtons() {
   menuButton(optsDiv, `Photograph mode: ${document.body.classList.contains('photo') ? 'on' : 'off'}`, 'sepia and grain', () => {
     document.body.classList.toggle('photo'); buildMenuButtons();
   });
-  menuButton(optsDiv, `Sound: ${muted ? 'off' : 'on'}`, 'the spitting rumble', () => { muted = !muted; buildMenuButtons(); });
+  menuButton(optsDiv, `Sound: ${soundState() === 'asleep' ? 'asleep — tap the horn to wake her'
+    : (muted ? 'off' : 'on')}`, 'the spitting rumble', () => {
+    initAudio();
+    muted = soundState() === 'asleep' ? false : !muted;
+    drawSoundBtn(); buildMenuButtons();
+  });
   menuButton(optsDiv, `On-screen controls: ${document.body.classList.contains('touch') ? 'on' : 'off'}`,
     'the helm and trim sliders, on any screen', () => {
       setTouchUI(!document.body.classList.contains('touch'));
@@ -2003,14 +2033,102 @@ function ambientQuotes() {
 
 // ---------------------------------------------------------------- audio
 let audio = null;
+
+/**
+ * The state the pilot needs to know about, which is not the same as `muted`:
+ *   asleep — there is no sound and only a TAP can start it. Every mobile
+ *            browser refuses to run an audio context until a real gesture, and
+ *            iOS suspends it again whenever you leave the page. This is why the
+ *            motor is sometimes silent from the first moment of a flight.
+ *   off    — the pilot switched it off.
+ *   on     — running.
+ */
+function soundState() {
+  if (muted) return 'off';
+  if (!audio || audio.ctx.state !== 'running') return 'asleep';
+  return 'on';
+}
+
+const SPK = 'M3.6 9.2h3.1L11.4 5v14L6.7 14.8H3.6z';         // the horn, in all three
+const ICONS = {
+  on: `<path d="${SPK}" fill="currentColor"/>`
+    + '<path d="M14.6 8.6a4.8 4.8 0 0 1 0 6.8M17.2 6a8.4 8.4 0 0 1 0 12"'
+    + ' fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+  off: `<path d="${SPK}" fill="currentColor"/>`
+    + '<path d="M15.2 9.6l5 4.8M20.2 9.6l-5 4.8" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.7" stroke-linecap="round"/>',
+  asleep: `<path d="${SPK}" fill="currentColor"/>`
+    + '<path d="M14.6 8.6a4.8 4.8 0 0 1 0 6.8" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.7" stroke-linecap="round"/>'
+    + '<circle cx="18.6" cy="12" r="1.5" fill="currentColor"/>',
+};
+const TITLES = {
+  on: 'Sound is on — tap to silence her',
+  off: 'Sound is off — tap to let her be heard',
+  asleep: 'Tap to wake the sound (your telephone will not start it on its own)',
+};
+
+let soundShown = null;
+function drawSoundBtn() {
+  const b = document.getElementById('btnSound');
+  if (!b) return;
+  const st = soundState();
+  if (st === soundShown) return;                 // only touch the DOM on a change
+  soundShown = st;
+  b.querySelector('svg').innerHTML = ICONS[st];
+  b.title = TITLES[st];
+  b.setAttribute('aria-label', TITLES[st]);
+  b.classList.toggle('asleep', st === 'asleep');
+  b.classList.toggle('off', st === 'off');
+}
+
+function wireSound() {
+  const b = document.getElementById('btnSound');
+  if (!b) return;
+  // pointerdown, not click: on iOS the gesture that may resume an audio context
+  // is the one being handled, and click can arrive too late to count as one
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const wasAsleep = soundState() === 'asleep';
+    initAudio();                                 // create or resume, inside the gesture
+    // asleep means she simply is not running: wake her rather than toggling,
+    // or a pilot whose sound never started would switch it OFF by trying
+    muted = wasAsleep ? false : !muted;
+    drawSoundBtn();
+    buildMenuButtons();
+  });
+  drawSoundBtn();
+
+  // Any touch anywhere is also a chance to start her — a pilot who taps the helm
+  // before finding the sound button should not have to go looking for it.
+  // NOT for the sound button itself: this runs in the capture phase, so it would
+  // resume the context before the button's own handler could see that it had
+  // been asleep, and the pilot's first tap would silence her instead of starting
+  // her.
+  const wake = (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest('#btnSound')) return;
+    initAudio();
+  };
+  addEventListener('pointerdown', wake, { capture: true, passive: true });
+  addEventListener('touchend', wake, { capture: true, passive: true });
+  // iOS suspends the context when the page goes away and does NOT resume it
+  addEventListener('visibilitychange', () => { if (!document.hidden) initAudio(); });
+}
 function initAudio() {
-  // iOS/iPad Safari starts the context suspended — resume inside the gesture
+  // iOS/iPad Safari starts the context suspended, and puts it back to sleep —
+  // as 'suspended' or as the WebKit-only 'interrupted' — whenever the page goes
+  // away or a call comes in. Resume must happen inside the gesture, and may be
+  // needed many times over a flight, so this is safe to call as often as we like.
   if (audio) {
-    if (audio.ctx.state === 'suspended') audio.ctx.resume();
+    if (audio.ctx.state !== 'running') audio.ctx.resume().catch(() => {});
     return;
   }
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  if (ctx.state === 'suspended') ctx.resume();
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return;                      // no audio on this browser; fly in silence
+  let ctx;
+  try { ctx = new Ctor(); } catch { return; }
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
   const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 50;
   const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 320;
   const gain = ctx.createGain(); gain.gain.value = 0;
@@ -2028,6 +2146,7 @@ function initAudio() {
   audio = { ctx, osc, gain, windGain };
 }
 function updateAudio() {
+  drawSoundBtn();                  // the context can suspend itself at any time
   if (!audio) return;
   const h = ship.motorHealth;
   const flicker = ship.sputtering && Math.random() < 0.35 ? 0.15 : 1;
@@ -2139,7 +2258,7 @@ function updateHUD() {
   // (countdown numbers refresh the timer each frame, so they stay centered)
   if (el('centerBig').textContent && performance.now() - centerSetAt > 3500) {
     document.getElementById('center').classList.add('parked');
-    parkClearOfCorners();
+    layoutHud();
   }
   const s = race.state;
   el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';
@@ -2207,6 +2326,7 @@ const bootFaults = [];
 step('the register', () => net.ensurePilotName());
 const flying = step('the world', () => loadWorld('paris'));
 step('the fault book', () => wireBugBook());
+step('the sound', () => wireSound());
 step('the menu', () => {
   toggleMenu(true);   // start screen: choose your ship and your sky
   document.getElementById('help').classList.add('hidden');
@@ -2230,6 +2350,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
   setCamMode(m) { camMode = m; camera.near = m === 1 ? 0.1 : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
+let hudTick = 0;
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
@@ -2366,6 +2487,10 @@ function frame(now) {
 
   updateCamera(dt);
   updateHUD();
+  // the blocks above change size as the wind, the trial and the roster change:
+  // re-stack a few times a second rather than every frame
+  hudTick += dt;
+  if (hudTick > 0.2) { hudTick = 0; layoutHud(); }
   drawThrottleLever();
   updateAudio();
   composer.render();

@@ -354,7 +354,7 @@ export function buildWorldStLouis(scene) {
     raceLimit: 1030, raceRecord: 950, raceLaps: 3,
     vistaPos: new THREE.Vector3(620, 120, 60), // from Festival Hall
     hints: {
-      idleNear: 'Press ENTER for the grand prize — three pylons, two rivals. (ships 1-7, 9, 0, B · L travels)',
+      idleNear: 'The grand prize waits — three pylons, two rivals.',
       idleFar: 'Free flight — the start ring waits over the Aeronautic Concourse.',
       out: 'Round the pylons before the grandstands',
       back: 'Home to the Concourse — the crowd is on its feet',
