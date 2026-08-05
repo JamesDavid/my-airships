@@ -88,7 +88,10 @@ for (const t of TRACKS) {
 }
 
 console.log('\n— forgeries —');
-const base = flyTrack(TRACKS[1], 'no6');       // the gymkhana
+// look the course up by id: indexing into TRACKS breaks silently the moment a
+// new trial is inserted ahead of it, and the forgeries then test nothing
+const GYM = TRACKS.find((t) => t.id === 'gymkhana');
+const base = flyTrack(GYM, 'no6');
 
 // 1. simply claim a better time
 const lie = { ...base, t: base.t / 3 };
@@ -117,12 +120,12 @@ for (let i = 0; i < n; i++) {
 check('flew the straight line', validateRun({ trackId: 'gymkhana', shipId: 'no6', run: line }), false, 'gates-missed');
 
 // 5. the right path, but on a ship that could not hold that pace
-const fastShip = flyTrack(TRACKS[1], 'no7');
+const fastShip = flyTrack(GYM, 'no7');
 check('no7 pace claimed by no9', validateRun({ trackId: 'gymkhana', shipId: 'no9', run: fastShip }), false, 'impossible-pace');
 check('no7 pace claimed by no7', validateRun({ trackId: 'gymkhana', shipId: 'no7', run: fastShip }), true);
 
 // 6. one lap flown, three laps claimed
-const oneLap = flyTrack({ ...TRACKS[1], laps: 1 }, 'no6');
+const oneLap = flyTrack({ ...GYM, laps: 1 }, 'no6');
 check('one lap, two claimed', validateRun({ trackId: 'gymkhana', shipId: 'no6', run: oneLap }), false, 'split-count');
 
 // 7. a gate skipped
