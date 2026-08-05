@@ -191,3 +191,40 @@ off with `update public.bug_reports set handled = true where id = 42;`.
 Without the table the button still appears (the office is reachable) and the
 insert answers 404, which the pilot sees as *the record office has no ledger
 for this*.
+
+## Flight records
+
+`flights` collects **how attempts end, and nothing else**. One row when a
+flight finishes — no session trail, no positions, no free text, no names.
+
+| column | |
+|---|---|
+| `pilot_id` | the same per-machine UUID the leaderboard uses. **The only identifier.** |
+| `place`, `kind`, `ref`, `ship_id` | what was flown, where: `scenario`/`trial`/`game` and which one |
+| `outcome` | `complete`, `finished`, `failed`, `wrecked`, `abandoned`, `stopped` |
+| `secs` | how long the attempt lasted |
+| `detail` | a few numbers — the finishing time, how a wreck happened, gems found |
+
+The pilot id is there for one reason: so that *forty pilots gave up on the
+Deutsch* can be told from *one pilot gave up forty times*, which is the whole
+difference between a hard course and a bored afternoon. Nothing else about a
+pilot is sent, and the rows cannot be read back over the wire — insert-only for
+`anon`, like the fault book.
+
+Starting a new attempt closes the previous one as `abandoned`, so the common
+case — trying something, not liking it, going elsewhere — is recorded without
+any need to notice the pilot leaving.
+
+**A pilot can switch it off** in Options ("Flight records: on/off"); nothing
+else about the game changes. It is on by default.
+
+```sql
+-- which scenarios people abandon, and how far in
+select ref, outcome, count(*), round(avg(secs)) as avg_secs
+  from public.flights where kind = 'scenario'
+ group by ref, outcome order by ref;
+
+-- attempts versus distinct pilots: a hard course, or one stubborn aeronaut?
+select ref, count(*) as attempts, count(distinct pilot_id) as pilots
+  from public.flights where outcome = 'abandoned' group by ref order by 2 desc;
+```

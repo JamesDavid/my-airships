@@ -228,6 +228,31 @@ export async function submitBug({ body, state, shot }) {
   } catch (e) { return { ok: false, reason: netReason(e) }; }
 }
 
+// ---------------------------------------------------------------- flight records
+// How attempts END, and nothing else: no session trail, no positions, no free
+// text, no names. One row when a flight finishes. The per-machine pilot id is
+// the only identifier, and it is there so that "forty pilots gave up on the
+// Deutsch" can be told from "one pilot gave up forty times".
+//
+// A pilot may switch it off; nothing else changes if they do.
+const LS_RECORDS = 'myairships_records';
+export function recordsOn() { return store.get(LS_RECORDS) !== '0'; }
+export function setRecordsOn(on) { store.set(LS_RECORDS, on ? '1' : '0'); }
+
+export function logFlight({ place, kind, ref, shipId, outcome, secs, detail }) {
+  if (!enabled() || !recordsOn()) return;
+  if (!kind || !ref || !outcome) return;
+  const row = {
+    pilot_id: pilotId(), place, kind, ref, ship_id: shipId, outcome,
+    secs: Number.isFinite(secs) ? +secs.toFixed(1) : null,
+    detail: detail || null, client_version: CLIENT_VERSION,
+  };
+  // fire and forget: a record is never worth a moment of the pilot's flight,
+  // and a failure here must be invisible
+  req('/rest/v1/flights', { method: 'POST', body: row, timeout: 8000,
+    headers: { Prefer: 'return=minimal' } }).catch(() => {});
+}
+
 // ---------------------------------------------------------------- plumbing
 function httpReason(r) {
   if (r.status === 404) return 'no-table';

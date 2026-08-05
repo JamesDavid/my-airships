@@ -129,3 +129,51 @@ create policy bug_insert_anon on public.bug_reports
 -- The picture, if any, is in `shot` as a data: URL — paste it into a browser
 -- address bar to look at it. To close one off:
 --   update public.bug_reports set handled = true where id = 42;
+
+
+-- ---------------------------------------------------------------------------
+-- Flight records: how attempts END, and nothing else.
+--
+-- Deliberately narrow. There is no session trail, no positions, no free text,
+-- no names — one row when an attempt finishes, carrying what was flown, where,
+-- and how it went. `pilot_id` is the same per-machine UUID the leaderboard
+-- uses and is the ONLY identifier. It is here so that "forty people gave up on
+-- the Deutsch" can be told from "one person gave up forty times", which is the
+-- whole difference between a hard course and a bored pilot.
+--
+-- Optional, like everything else. No table, no records, no complaints.
+create table if not exists public.flights (
+  id             bigint generated always as identity primary key,
+  created_at     timestamptz not null default now(),
+  pilot_id       uuid,
+  place          text,                       -- paris | monaco | stlouis
+  kind           text,                       -- scenario | trial | game
+  ref            text,                       -- which scenario, course or game
+  ship_id        text,
+  outcome        text,                       -- complete | finished | failed | wrecked | abandoned
+  secs           real,                       -- how long the attempt lasted
+  detail         jsonb,                      -- a few numbers: gate reached, lap, gems found
+  client_version text,
+  constraint flights_kind    check (kind    in ('scenario','trial','game')),
+  constraint flights_outcome check (outcome in ('complete','finished','failed','wrecked','abandoned','stopped')),
+  constraint flights_secs    check (secs is null or (secs >= 0 and secs < 86400)),
+  constraint flights_detail_len check (detail is null or pg_column_size(detail) <= 2000)
+);
+
+create index if not exists flights_what on public.flights (kind, ref, outcome);
+
+alter table public.flights enable row level security;
+
+-- Anyone may file one; nobody may read them back over the wire.
+drop policy if exists flights_insert_anon on public.flights;
+create policy flights_insert_anon on public.flights
+  for insert to anon with check (true);
+
+-- Reading them (dashboard SQL editor, or the service role):
+--   select ref, outcome, count(*), round(avg(secs)) as avg_secs
+--     from public.flights where kind = 'scenario'
+--    group by ref, outcome order by ref, count(*) desc;
+--
+-- How many DIFFERENT pilots gave up on a thing, versus how many attempts:
+--   select ref, count(*) as attempts, count(distinct pilot_id) as pilots
+--     from public.flights where outcome = 'abandoned' group by ref;

@@ -138,7 +138,14 @@ function settleGroundDecals(root) {
     // the material may be shared with something that is NOT a decal
     o.material = o.material.clone();
     o.material.polygonOffset = true;
-    o.material.polygonOffsetFactor = -(2 + i);
+    // FACTOR is multiplied by the polygon's depth slope, so at a grazing angle
+    // — a road seen nearly edge-on from a low camera — a large one throws the
+    // surface a very long way forward. Ranking it up to -87 pushed the streets
+    // clean in front of the buildings standing on them, which was reported as
+    // the houses having a reflection in the ground. It stays at -1 for
+    // everything; the RANK goes into units, which are counted in the smallest
+    // resolvable depth step and stay tiny however many decals there are.
+    o.material.polygonOffsetFactor = -1;
     o.material.polygonOffsetUnits = -(2 + i);
     o.material.needsUpdate = true;
   });
@@ -262,6 +269,7 @@ function updateGhostMesh() {
 
 // start any course: the historic trial or a lap circuit (instant restart)
 function startTrack(t) {
+  flightBegin('trial', t.id);
   track = t;
   scenario = null;
   editing = null;
@@ -930,6 +938,11 @@ function buildMenuButtons() {
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
   if (net.enabled()) {
     menuButton(optsDiv, 'Report a fault', 'send the works an account of it, with a picture', openBugBook);
+    menuButton(optsDiv, `Flight records: ${net.recordsOn() ? 'on' : 'off'}`,
+      'how attempts end — no names, no positions, nothing that follows you', () => {
+        net.setRecordsOn(!net.recordsOn());
+        buildMenuButtons();
+      });
   }
 
   // the register sits with the title: it is who you are, not a setting
@@ -1107,6 +1120,78 @@ function bearingTag(r) {
     + `<span style="opacity:.5"> ${far}</span>`;
 }
 
+/**
+ * Where the next thing you are looking for is, and how far off.
+ *
+ * A pilot asked for this: "we should have a bearing and distance to next ring
+ * in any game with sequential goals". Anything with an order to it — the gates
+ * of a trial, the hoops of a scenario route, the landing zone, the gems of a
+ * hunt, the hidden place in hot-and-cold — hands its next mark to this, and it
+ * is shown on the same arrow as the wind and the rivals: turning with your own
+ * head, so straight up is dead ahead.
+ */
+function nextMark() {
+  if (!ship || !world) return null;
+  if (play.id === 'hotcold' && play.places[0] && play.pause <= 0) {
+    const p = play.places[0];
+    return { x: p.x, z: p.z, name: 'it' };            // no name — that is the game
+  }
+  if (play.id === 'postcards' && play.gems.length) {
+    let best = null, bd = Infinity;
+    for (const g of play.gems) {
+      const d = Math.hypot(g.position.x - ship.pos.x, g.position.z - ship.pos.z);
+      if (d < bd) { bd = d; best = g; }
+    }
+    return best ? { x: best.position.x, z: best.position.z, name: best.userData.place.name } : null;
+  }
+  if (scenario && routeRings.length) {
+    const r = routeRings[0];
+    return { x: r.position.x, z: r.position.z, name: 'the next hoop' };
+  }
+  if (scenario && scenRing && scenRing.visible) {
+    return { x: scenRing.position.x, z: scenRing.position.z, name: 'the landing' };
+  }
+  if (track && race.state === 'run') {
+    const gates = track.gates;
+    const g = gates[race.gate % gates.length];
+    if (g) return { x: g.x, z: g.z, name: `gate ${(race.gate % gates.length) + 1} of ${gates.length}` };
+  }
+  if (track && race.state === 'idle' && world.startRing) {
+    return { x: world.startRing.x, z: world.startRing.z, name: 'the start ring' };
+  }
+  return null;
+}
+
+function drawNextMark() {
+  const el = document.getElementById('mark');
+  if (!el) return;
+  const m = nextMark();
+  if (!m) { el.innerHTML = ''; return; }
+  const dx = m.x - ship.pos.x, dz = m.z - ship.pos.z;
+  const d = Math.hypot(dx, dz);
+  const deg = -90 - (Math.atan2(-dz, dx) - ship.yaw) * 180 / Math.PI;
+  const far = d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d / 5) * 5 + ' m';
+  el.innerHTML = `<span class="brg" style="transform:rotate(${deg.toFixed(0)}deg)">➤</span> `
+    + `<b>${far}</b> <span class="markname">${escapeHtml(m.name)}</span>`;
+}
+
+// ---------------------------------------------------------------- flight records
+// One row when an attempt ends, so it can be seen WHICH things people give up
+// on and where. Nothing follows a pilot around: no positions, no session, no
+// names — see net.logFlight and supabase/schema.sql.
+let flight = null;
+function flightBegin(kind, ref) {
+  flightEnd('abandoned');                    // whatever was open is over
+  flight = { kind, ref, at: performance.now(), ship: currentShip, place: currentLocation };
+}
+function flightEnd(outcome, detail) {
+  if (!flight) return;
+  const f = flight;
+  flight = null;                             // before the send: never log twice
+  net.logFlight({ place: f.place, kind: f.kind, ref: f.ref, shipId: f.ship,
+    outcome, secs: (performance.now() - f.at) / 1000, detail });
+}
+
 // ---------------------------------------------------------------- the games
 // Tag, the postcard hunt, hot-and-cold and follow-the-leader. What is being
 // played is the host's word, broadcast; WHERE everything is is worked out
@@ -1146,6 +1231,7 @@ function makeGem(p) {
 }
 
 function startGame(id, round) {
+  if (id) flightBegin('game', id);
   clearGems();
   play.id = id; play.round = round || 1;
   play.got = new Set(); play.ping = 0; play.pause = 0; play.kept = 0; play.lost = 0;
@@ -1172,6 +1258,8 @@ function startGame(id, round) {
 }
 
 function stopGame(quiet) {
+  flightEnd('stopped', play.id === 'postcards'
+    ? { found: play.got.size, of: play.places.length } : null);
   clearGems();
   play.id = null; play.places = []; play.got = new Set(); play.said = '';
   if (!quiet) setCenter('', '');
@@ -2115,6 +2203,7 @@ function updateRace(dt) {
 }
 
 function finishRace() {
+  flightEnd('finished', { t: +race.t.toFixed(2), laps: track ? track.laps : null });
   race.state = 'done';
   const t = race.t;
   if (track.historic) {
@@ -2211,6 +2300,7 @@ function scenCtx() {
 }
 
 function startScenario(def) {
+  flightBegin('scenario', def.id);
   toggleMenu(false);
   clearRoute();
   if (currentLocation !== def.location) loadWorld(def.location);
@@ -2229,6 +2319,7 @@ function startScenario(def) {
 }
 
 function scenComplete(text) {
+  flightEnd('complete');
   const done = store.json('myairships_scen', {}) || {};
   done[scenario.id] = true;
   store.set('myairships_scen', JSON.stringify(done));
@@ -2240,6 +2331,7 @@ function scenComplete(text) {
 }
 
 function scenFail(text) {
+  flightEnd('failed');
   scenario._failed = true;
   setCenter('Not this time', `${text}  (R to retry)`);
 }
@@ -2451,6 +2543,7 @@ const EVENT_TEXT = {
 function drainEvents() {
   for (const ev of ship.events) {
     if (ev.startsWith('wreck:')) {
+      flightEnd('wrecked', { how: ev.slice(6) });
       const r = ev.slice(6);
       if (r === 'hardLanding') setCenter('Wrecked!', '“He who wishes to navigate an air-ship should first practise landings…” (R)');
       continue;
@@ -2688,6 +2781,7 @@ function updateHUD() {
   const rel = Math.atan2(-w.z, w.x) - ship.yaw;
   el('windArrow').style.transform = `rotate(${-90 - rel * 180 / Math.PI}deg)`;
   el('play').textContent = play.id ? play.said : '';
+  drawNextMark();
   el('gasBar').style.width = ship.gas + '%';
   el('gasPct').textContent = Math.round(ship.gas) + '%';
   const fMax = ship.spec.physics.fuel;

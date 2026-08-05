@@ -707,13 +707,33 @@ function addLandmarks(scene) {
     tower.position.set(0, 31, s * 21); troc.add(tower);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(3.4, 8, 8), slate);
     cap.position.set(0, 66, s * 21); troc.add(cap);
-    // curved wings reaching toward the river
-    for (let w = 0; w < 6; w++) {
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(9, 12, 13), cream);
-      const a = s * (0.35 + w * 0.16);
-      seg.position.set(20 + Math.sin(Math.abs(a)) * 40, 6, s * 24 + s * w * 12);
-      seg.rotation.y = -a;
-      troc.add(seg);
+    // The curved galleries. These used to be six detached boxes stepped round an
+    // approximate arc, and from the street they read as blocks left lying about
+    // rather than as a building — a pilot asked what they were. They follow a
+    // true arc now, each bay meeting the next, with a cornice over them.
+    const R = 58, A0 = 0.42, A1 = 1.72, BAYS = 11;
+    const step = (A1 - A0) / BAYS;
+    const chord = 2 * R * Math.sin(step / 2) + 0.4;    // so consecutive bays touch
+    for (let w = 0; w < BAYS; w++) {
+      const a = A0 + step * (w + 0.5);
+      const px = Math.cos(a) * R, pz = s * Math.sin(a) * R;
+      const bay = new THREE.Mesh(new THREE.BoxGeometry(chord, 15, 13), cream);
+      bay.position.set(px, 7.5, pz);
+      bay.rotation.y = s * (a - Math.PI / 2) * -1;     // tangent to the arc
+      troc.add(bay);
+      const corn = new THREE.Mesh(new THREE.BoxGeometry(chord, 1.6, 15), slate);
+      corn.position.set(px, 15.6, pz);
+      corn.rotation.y = bay.rotation.y;
+      troc.add(corn);
+      // a pavilion where the gallery meets the rotunda, and again at its end
+      if (w === 0 || w === BAYS - 1) {
+        const pav = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 7, 21, 10), cream);
+        pav.position.set(px, 10.5, pz);
+        troc.add(pav);
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(7.6, 6, 10), slate);
+        cap.position.set(px, 24, pz);
+        troc.add(cap);
+      }
     }
   }
   troc.position.set(20, 0, 140);

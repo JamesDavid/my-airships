@@ -27,6 +27,11 @@
   #panelTL b { font-size:13px; letter-spacing:.12em; opacity:.65; }
   /* how the game is going, under the instruments */
   #play { font-size:14px; font-style:italic; color:#6b4a1e; margin-top:3px; min-height:17px; }
+  /* where the next mark lies — the same arrow as the wind, turning with your head */
+  #mark { font-size:14px; color:#3a2c1e; min-height:18px; }
+  #mark .brg { display:inline-block; }
+  #mark b { font-weight:normal; color:#6b4a1e; }
+  #mark .markname { font-size:12px; font-style:italic; opacity:.65; }
   #panelTR { top:calc(14px + env(safe-area-inset-top, 0px));
     right:calc(18px + env(safe-area-inset-right, 0px)); text-align:right; }
   #timer { font-size:30px; font-variant-numeric:tabular-nums; }
@@ -515,6 +520,7 @@
   <b>THROTTLE</b> <span id="thr">0</span>%<br>
   <b>WIND</b> <span id="windArrow" style="display:inline-block">➤</span> <span id="wind">—</span>
   <div id="play"></div>
+  <div id="mark"></div>
 </div>
 
 <div class="hud" id="panelTR">
