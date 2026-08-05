@@ -480,13 +480,49 @@ export class Airship {
       this.sackMeshes.push(s);
     }
 
-    // the shifting weight — a sack hauled fore/aft along the keel (Figs. 3, 8-9)
-    this.weightMesh = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6),
-      new THREE.MeshLambertMaterial({ color: 0x83704f }));
-    this.weightMesh.scale.y = 1.3;
-    // runs on a cord outboard of the keel rail, clear of the basket
-    this.weightMesh.position.set(0, -drop - 0.35, 0.85);
-    this.pitchGroup.add(this.weightMesh);
+    // ---- the shifting weights (Ch. VI; Figs. 3, 8-9) ----
+    // "I placed two bags of ballast, one fore and one aft, suspended from the
+    // balloon envelope by cords. By means of lighter cords each of these two
+    // weights could be drawn into the basket, thus shifting the centre of
+    // gravity of the whole system. Pulling in the fore weight would cause the
+    // stem of the balloon to point diagonally upward; pulling in the aft weight
+    // would have just the opposite effect."
+    //
+    // TWO sacks, then, not one weight sliding along a rail — and they do not
+    // slide: each hangs at its own end and is HAULED IN toward the basket, one
+    // at a time. From the No. 3 they hang at the extremities of the pole keel,
+    // "because of the greater distance they were now set apart… they worked
+    // with an effectiveness that astonished even myself."
+    this.trim = null;
+    if (prop !== 'none') {
+      const onKeel = !(K.type === 'basket-long' || K.type === 'pole');
+      const anchorY = onKeel ? -drop : -E.diameter / 2;
+      const anchorX = onKeel ? K.length / 2 : E.length * 0.34;
+      const hang = onKeel ? 0.9 : 1.6;
+      const sackMat = new THREE.MeshLambertMaterial({ color: 0x83704f });
+      const mk = () => {
+        const g = new THREE.Group();
+        const sack = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 6), sackMat);
+        sack.scale.set(0.85, 1.25, 0.85);
+        sack.position.y = -hang;
+        g.add(sack);
+        this.pitchGroup.add(g);
+        return g;
+      };
+      this.trim = {
+        fore: mk(), aft: mk(), anchorX, anchorY, hang,
+        travel: anchorX * 0.82,       // how far in they can be hauled
+      };
+      this.trim.fore.position.set(anchorX, anchorY, 0);
+      this.trim.aft.position.set(-anchorX, anchorY, 0);
+      // the cords: the one it hangs by, and the lighter one that hauls it in
+      const cordMat = new THREE.LineBasicMaterial({ color: 0x2a1f14, transparent: true, opacity: 0.7 });
+      this.trimCords = new THREE.LineSegments(
+        new THREE.BufferGeometry().setAttribute('position',
+          new THREE.BufferAttribute(new Float32Array(24), 3)), cordMat);
+      this.trimCords.frustumCulled = false;
+      this.pitchGroup.add(this.trimCords);
+    }
     // The motor belongs WITH its screw: a crankcase, cylinders standing up out
     // of it, the radiator ahead, exhaust stubs, and a shaft running to the hub.
     // (Before this the screw turned in clear air with the engine amidships.)
@@ -942,9 +978,8 @@ export class Airship {
   updateTransforms(dt) {
     this.group.rotation.y = this.yaw;
     this.pitchGroup.rotation.z = this.pitch;
-    // visible shifting weight: hauled AFT to point the nose up, and vice versa
     const P = this.spec.physics;
-    this.weightMesh.position.x = -(this.pitch / (P.pitchMax || 1)) * this.spec.keel.length * 0.38;
+    this.updateTrim();
     // gentle roll around the ship's own axis in turns (smoothed)
     this.roll = this.roll || 0;
     this.roll += ((-this.rudderInput * 0.07) - this.roll) * Math.min(1, 3 * dt);
@@ -1009,6 +1044,40 @@ export class Airship {
       p[i++] = rp.z + Math.cos(ra) * ARM * side;
     }
     this.tillerCords.geometry.attributes.position.needsUpdate = true;
+  }
+
+  /**
+   * One sack in at a time, as he worked them. Nose up means the FORE weight has
+   * been hauled back toward the basket — that is the way round the book gives
+   * it, and it is the opposite of what "haul the weight aft to lift the nose"
+   * makes you picture, because the weight being moved aft is the one that was
+   * out at the bow.
+   */
+  updateTrim() {
+    if (!this.trim) return;
+    const P = this.spec.physics;
+    const f = Math.max(-1, Math.min(1, this.pitch / (P.pitchMax || 1)));
+    const t = this.trim;
+    t.fore.position.x = t.anchorX - Math.max(0, f) * t.travel;
+    t.aft.position.x = -t.anchorX + Math.max(0, -f) * t.travel;
+    // a sack hauled in swings a little off the vertical, being under way
+    t.fore.rotation.z = Math.max(0, f) * 0.5;
+    t.aft.rotation.z = -Math.max(0, -f) * 0.5;
+
+    const p = this.trimCords.geometry.attributes.position.array;
+    const basket = [0, -this.spec.keel.drop + 0.2, 0];
+    let i = 0;
+    for (const g of [t.fore, t.aft]) {
+      const sx = g.position.x + Math.sin(g.rotation.z) * t.hang;
+      const sy = g.position.y - Math.cos(g.rotation.z) * t.hang;
+      // the cord it hangs by, from its anchor straight down
+      p[i++] = g.position.x; p[i++] = t.anchorY; p[i++] = 0;
+      p[i++] = sx; p[i++] = sy; p[i++] = 0;
+      // and the lighter cord, running to the basket
+      p[i++] = sx; p[i++] = sy; p[i++] = 0;
+      p[i++] = basket[0]; p[i++] = basket[1]; p[i++] = basket[2];
+    }
+    this.trimCords.geometry.attributes.position.needsUpdate = true;
   }
 
   wreck(reason) {

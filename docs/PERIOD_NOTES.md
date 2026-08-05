@@ -112,6 +112,15 @@ Port Hercule.
   plan), AGS Library Digital Map Collection (UWM)
 
 
+## The hulls and the shifting weights
+
+Japanese silk with no net and no outer cover, the suspension taken straight off
+battened hems sewn along the envelope's flanks; a ballonnet on the first two
+ships and none after; piano wire in place of cord from the No. 4. The
+counterweights are **two** sacks hauled inboard one at a time, not one weight
+sliding along the keel. Set out with the passages in
+**[docs/HULLS.md](HULLS.md)**.
+
 ## The helm
 
 The helm is a **bar pivoted at its middle with a cord to each side of the rudder**, not a
