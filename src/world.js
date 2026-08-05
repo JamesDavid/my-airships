@@ -278,26 +278,62 @@ export function buildWorld(scene) {
   const bridgeMat = new THREE.MeshLambertMaterial({ color: 0xa8a094 });
   const wb = new THREE.Group();
   const roadway = new THREE.Mesh(new THREE.BoxGeometry(96, 2.2, 13), bridgeMat);
-  roadway.position.y = 5.4;
+  roadway.position.y = 6.5;
   wb.add(roadway);
   for (const px of [-30, 0, 30]) {                 // piers standing in the stream
-    const pier = new THREE.Mesh(new THREE.BoxGeometry(7, 5.4, 11), bridgeMat);
-    pier.position.set(px, 2.7, 0);
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(7, 6.5, 11), bridgeMat);
+    pier.position.set(px, 3.25, 0);
     wb.add(pier);
   }
   for (const px of [-15, 15]) {                    // and the vaults between them
     const arch = new THREE.Mesh(
       new THREE.CylinderGeometry(8, 8, 12, 14, 1, false, 0, Math.PI), bridgeMat);
     arch.rotation.x = -Math.PI / 2;                // axis across the roadway, crown up
-    arch.position.set(px, 4.3, 0);
+    arch.position.set(px, 5.4, 0);
     arch.scale.set(0.95, 1, 0.52);
     wb.add(arch);
   }
   for (const sz of [-1, 1]) {                      // parapets down both sides
     const par = new THREE.Mesh(new THREE.BoxGeometry(96, 1.4, 1.1), bridgeMat);
-    par.position.set(0, 7.2, sz * 6);
+    par.position.set(0, 8.3, sz * 6);
     wb.add(par);
   }
+  // abutments at the ends, and ramps carrying the roadway down to the bank —
+  // without them the deck simply stopped five metres above the grass
+  const RAMP = 34, DECKY = 6.5;
+  for (const sx of [-1, 1]) {
+    const abut = new THREE.Mesh(new THREE.BoxGeometry(14, DECKY, 13), bridgeMat);
+    abut.position.set(sx * 41, DECKY / 2, 0);
+    abut.castShadow = abut.receiveShadow = true;
+    wb.add(abut);
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(RAMP, 2.2, 13),
+      new THREE.MeshLambertMaterial({ color: 0x9a9285 }));
+    ramp.position.set(sx * (48 + RAMP / 2 - 2), DECKY / 2 - 0.4, 0);
+    ramp.rotation.z = sx * Math.atan2(DECKY - 1.2, RAMP);   // sloping down to the turf
+    ramp.receiveShadow = true;
+    wb.add(ramp);
+    for (const sz of [-1, 1]) {                   // the ramp keeps its parapets
+      const rp = new THREE.Mesh(new THREE.BoxGeometry(RAMP, 1.2, 1.1), bridgeMat);
+      rp.position.set(sx * (48 + RAMP / 2 - 2), DECKY / 2 + 0.7, sz * 6);
+      rp.rotation.z = sx * Math.atan2(DECKY - 1.2, RAMP);
+      wb.add(rp);
+    }
+  }
+  // the road the bridge carries: west into Saint-Cloud, east along the bank
+  const roadMat = new THREE.MeshLambertMaterial({ color: 0x9a9285 });
+  const road = (x1, z1, x2, z2, width) => {
+    const len = Math.hypot(x2 - x1, z2 - z1);
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(len, width), roadMat);
+    strip.rotation.x = -Math.PI / 2;
+    strip.rotation.z = -Math.atan2(z2 - z1, x2 - x1);
+    strip.position.set((x1 + x2) / 2, 0.15, (z1 + z2) / 2);
+    strip.receiveShadow = true;
+    scene.add(strip);
+  };
+  road(-2360, -250, -2072, -250, 13);          // from the village to the bridge
+  road(-1900, -250, -1700, -250, 13);          // and away on the Paris bank
+  road(-2360, -250, -2330, 90, 11);            // up through Saint-Cloud to the church
+  road(-2072, -250, -2140, 0, 11);             // a lane down to the Aéro-Club field
   wb.position.set(-1986, 0, -250);
   wb.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(wb);
@@ -818,6 +854,20 @@ function addBookPlaces(scene, buildings) {
     seg.rotation.z = Math.cos(ang) * 0.5;
     aq.add(seg);
   }
+  // the ends must land on something: a masonry abutment at each bank, taking
+  // the conduit down to the ground instead of leaving the deck in mid-air
+  for (const sx of [-1, 1]) {
+    const abut = new THREE.Mesh(new THREE.BoxGeometry(22, DECK + 1.5, 13), stone);
+    abut.position.set(sx * (SPAN / 2 - 6), (DECK + 1.5) / 2 - 0.5, 0);
+    abut.castShadow = abut.receiveShadow = true;
+    aq.add(abut);
+    // and a lower shoulder stepping down to the towpath
+    const step = new THREE.Mesh(new THREE.BoxGeometry(16, DECK * 0.55, 11), stone);
+    step.position.set(sx * (SPAN / 2 + 12), DECK * 0.275 - 0.4, 0);
+    step.castShadow = true;
+    aq.add(step);
+  }
+
   // The reach here runs north and south, so the crossing runs east and west:
   // the deck's long axis is local +x and the group is NOT turned. (Rotating it
   // a quarter turn laid the whole aqueduct along the water instead of over it.)
@@ -890,21 +940,45 @@ function addBookPlaces(scene, buildings) {
   buildings.push({ x: HILL.x, z: HILL.z, w: HILL.rBot * 1.5, d: HILL.rBot * 1.5,
     h: HILL.h * 0.8, top: HILL.h * 0.8 });
 
-  // the terraces of the park, stepping down the east face toward the river
-  for (let i = 0; i < 3; i++) {
-    const tx = -2500 - i * 60;
-    const ty = hillH(tx, -40);
-    const terr = new THREE.Mesh(new THREE.BoxGeometry(70, 4, 260 - i * 40),
-      new THREE.MeshLambertMaterial({ color: 0xb9b2a0 }));
-    terr.position.set(tx, ty + 2, -40);
+  // The park's terraces. Each is a RETAINING structure standing from the
+  // ground up to its own level, so its face meets the slope; flat slabs laid
+  // at a height floated at the downhill edge and buried themselves at the
+  // uphill one, which read as steps hanging in the hillside.
+  const terrMat = new THREE.MeshLambertMaterial({ color: 0xb9b2a0 });
+  for (let i = 0; i < 2; i++) {
+    const tx = -2520 - i * 90;
+    const ty = hillH(tx, -40) + 3;
+    const terr = new THREE.Mesh(new THREE.BoxGeometry(80, ty, 230 - i * 60), terrMat);
+    terr.position.set(tx, ty / 2, -40);
     terr.receiveShadow = terr.castShadow = true;
     scene.add(terr);
+    // lawn on top, so it reads as the park it is and not a slab of masonry
+    const lawn = new THREE.Mesh(new THREE.PlaneGeometry(78, 228 - i * 60),
+      new THREE.MeshLambertMaterial({ color: 0x7f9152 }));
+    lawn.rotation.x = -Math.PI / 2;
+    lawn.position.set(tx, ty + 0.06, -40);
+    lawn.receiveShadow = true;
+    scene.add(lawn);
+    // a line of clipped trees along the brink, and the balustrade
+    for (let k = -3; k <= 3; k++) {
+      const tree = new THREE.Mesh(new THREE.SphereGeometry(1, 7, 5),
+        new THREE.MeshLambertMaterial({ color: 0x4f6338 }));
+      const sc = 5.5;
+      tree.scale.set(sc * 0.8, sc, sc * 0.8);
+      tree.position.set(tx + 26, ty + sc * 0.9, -40 + k * (30 - i * 6));
+      tree.castShadow = true;
+      scene.add(tree);
+    }
+    const bal = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.2, 230 - i * 60), terrMat);
+    bal.position.set(tx + 39, ty + 1.1, -40);
+    scene.add(bal);
+    buildings.push({ x: tx, z: -40, w: 80, d: 230 - i * 60, h: ty, top: ty + 2.2 });
   }
   // the grande cascade spilling down between them
   const casc = new THREE.Mesh(new THREE.PlaneGeometry(20, 130),
     new THREE.MeshPhongMaterial({ color: 0x8fb6c9, shininess: 110, specular: 0xffffff }));
   casc.rotation.set(-Math.PI / 2 + 0.62, 0, Math.PI / 2);
-  casc.position.set(-2520, 34, -40);
+  casc.position.set(-2478, 26, -40);
   scene.add(casc);
 
   // the village of Saint-Cloud, on the flat between the hill and the aerodrome
