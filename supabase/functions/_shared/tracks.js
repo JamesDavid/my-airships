@@ -1,3 +1,5 @@
+// GENERATED FILE — do not edit.
+// Copied from src/tracks.js by supabase/sync-shared.mjs. Edit the original.
 // Time-trial circuits (the "aerial gymkhana"). Historical warrant, Ch. XII:
 // "Ten times in succession I made the circuit of Longchamps, stopping each
 // time at a point designed beforehand." Gates thread the world's drama —

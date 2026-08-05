@@ -36,6 +36,12 @@ public domain).
   a friend to race asynchronously. Dives trade altitude for speed; times are kept per
   ship class. A **track editor** (G drops a gate) lets you build and share circuits, and
   the **wind is seeded by the date** — everyone flies the same sky today.
+- **World records** (optional): point the game at a Supabase project and every
+  personal best is entered in a public ledger — boards per course and ship class, a
+  daily board flown on today's seeded wind, and the record-holder's ghost available to
+  download and chase. Submitted runs are scrutineered against the course geometry and
+  the ship's own physics, on the server, before they reach the ledger. Configure
+  nothing and the feature simply doesn't exist — see [docs/ONLINE.md](docs/ONLINE.md).
 - **Fly the whole fleet** — each ship handles like the book says it did:
 
 | Ship | Character |
@@ -89,6 +95,15 @@ python -m http.server 8140    # → http://localhost:8140/
 
 Uses [three.js](https://threejs.org/) from a CDN import map — no build step, no
 dependencies. Keep the tab focused; browsers pause background tabs.
+
+Optional online leaderboards need a free Supabase project and two keys —
+[docs/ONLINE.md](docs/ONLINE.md) walks through it, including deploying the
+server-side run validator. To check that validator after any change to the
+courses, ships, or its own rules:
+
+```
+node supabase/test-anticheat.mjs     # honest runs accepted, ten forgeries refused
+```
 
 ## The source material
 

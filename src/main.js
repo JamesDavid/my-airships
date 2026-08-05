@@ -11,7 +11,8 @@ import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
 import { SHIPS, SHIP_KEYS } from './ships.js';
 import { SCENARIOS, Rival } from './scenarios.js';
-import { TRACKS, trackSpawn, GHOST_DT, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
+import { TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
+import * as net from './net.js';
 
 // ---------------------------------------------------------------- setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,6 +32,7 @@ let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
 let rivals = [], scenario = null;
 let track = null;                       // the active course (historic or time trial)
 let ghostBest = null, ghostMesh = null, ghostRec = [], ghostLastSample = -1;
+let chaseGhost = null;                  // a downloaded record, pinned to its course
 let editing = null;                     // track-editor state
 let splitUntil = 0;
 let currentLocation = 'paris', currentShip = 'no6';
@@ -71,25 +73,13 @@ function historicTrack() {
 
 function buildRings(gates, originPos) {
   for (const r of gateRings) scene.remove(r);
-  const n = gates.length;
+  // headings come from tracks.js so the ring you see, the pass test, and the
+  // server-side run validator all use one definition of "through the gate"
+  const headings = gateHeadings(gates, originPos);
   gateRings = gates.map((g, i) => {
     const r = makeRing(0x8a8a8a);
     r.position.set(g.x, g.y, g.z);
-    // face each ring along the BISECTOR of its incoming and outgoing legs:
-    // on an oval this is the true tangent; at a sharp corner it splits the
-    // turn, so the fly-through always makes sense. Point-to-point courses
-    // use the start ring as the leg before gate 0 and the start ring again
-    // as the leg after the last gate (the homeward turn).
-    const prev = i > 0 ? gates[i - 1] : (originPos || gates[n - 1]);
-    const next = i < n - 1 ? gates[i + 1] : (originPos || gates[0]);
-    let ix = g.x - prev.x, iz = g.z - prev.z;
-    let ox = next.x - g.x, oz = next.z - g.z;
-    const il = Math.hypot(ix, iz) || 1, ol = Math.hypot(ox, oz) || 1;
-    ix /= il; iz /= il; ox /= ol; oz /= ol;
-    let dx = ix + ox, dz = iz + oz;
-    if (Math.hypot(dx, dz) < 0.15) { dx = ix; dz = iz; } // hairpin: face the entry
-    if (dx || dz) r.rotation.y = Math.atan2(dx, dz);
-    if (g.ang != null) r.rotation.y = g.ang; // explicit heading (e.g. an archway)
+    r.rotation.y = headings[i];
     r.scale.setScalar((g.r || 24) / 24);
     r.userData.r = g.r || 24;
     return r;
@@ -99,6 +89,14 @@ function buildRings(gates, originPos) {
 function bestKey(t) { return `tt_${t.id}_${currentShip}`; }
 
 function loadBest(t) {
+  // a ghost fetched from the record office keeps flying this course until you
+  // leave it — restarts (R) go on chasing the record-holder, not yourself
+  if (chaseGhost && chaseGhost.trackId === t.id) {
+    ghostBest = chaseGhost.ghost;
+    updateGhostMesh();
+    return;
+  }
+  chaseGhost = null;
   try { ghostBest = JSON.parse(localStorage.getItem(bestKey(t)) || 'null'); }
   catch { ghostBest = null; }
   updateGhostMesh();
@@ -207,7 +205,7 @@ addEventListener('keydown', (e) => {
     addMsg('edu', `Gate removed — ${editing.gates.length} left.`, 0);
   }
   if (e.code === 'KeyC') cycleCamera();
-  if (e.code === 'Escape') toggleMenu();
+  if (e.code === 'Escape') { if (boardOpen()) closeBoard(); else toggleMenu(); }
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
   if (e.code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
   if (e.code === 'KeyM') muted = !muted;
@@ -352,7 +350,11 @@ let menuOpen = false;
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
   menuEl.classList.toggle('hidden', !menuOpen);
-  if (menuOpen) { buildMenuButtons(); document.getElementById('help').classList.add('hidden'); }
+  if (menuOpen) {
+    buildMenuButtons();
+    document.getElementById('help').classList.add('hidden');
+    document.getElementById('board').classList.add('hidden');
+  }
 }
 function menuButton(parent, label, sub, onClick, current) {
   const b = document.createElement('button');
@@ -454,6 +456,22 @@ function buildMenuButtons() {
     });
     menuButton(trDiv, 'Editor: cancel', '', () => { editing = null; buildRings(historicTrack().gates); buildMenuButtons(); });
   }
+  // ---- the record office: these entries exist only if one is configured ----
+  if (net.enabled()) {
+    const who = net.pilotName();
+    menuButton(trDiv, 'World records', 'the ledger of times for this course', () => {
+      showBoard(boardTrackFor().id, currentShip, false);
+    });
+    menuButton(trDiv, who ? `Pilot name: ${who}` : 'Sign the register', 'the name your times are entered under', () => {
+      const name = net.setPilotName(prompt('Sign the register — your pilot name:', who || '') || '');
+      if (name) addMsg('pn', `The register reads “${name}”.`, 0);
+      buildMenuButtons();
+    });
+    if (ghostBest && track && !track.historic && !track.custom && !ghostBest.foreign) {
+      menuButton(trDiv, 'Send my best to the record office', `${fmt(ghostBest.t)} on ${track.name}`,
+        () => { submitBest(track, ghostBest); toggleMenu(false); });
+    }
+  }
   menuButton(trDiv, 'Load a track code', 'paste a friend’s circuit', () => {
     const code = prompt('Paste the track code:');
     if (!code) return;
@@ -481,6 +499,123 @@ function buildMenuButtons() {
   menuButton(optsDiv, `Today’s surface wind: ~${wKmh} km/h`, 'the same sky for everyone, everywhere, today', () => {});
   menuButton(optsDiv, 'Reset the ship', 'back to the aerodrome', () => { resetShip(); toggleMenu(false); });
   menuButton(optsDiv, 'Resume flying', '', () => toggleMenu(false));
+}
+
+// ---------------------------------------------------------------- record office
+// Everything below is inert when no Supabase project is configured: the menu
+// entries are never built, and nothing else calls into net.js.
+const boardEl = document.getElementById('board');
+let boardCtx = null;   // { trackId, shipId|null, today }
+
+function closeBoard() { boardEl.classList.add('hidden'); }
+function boardOpen() { return !boardEl.classList.contains('hidden'); }
+
+function boardTrackFor() {
+  if (track && !track.historic && !track.custom) return track;
+  return TRACKS.find((t) => t.location === currentLocation) || TRACKS[0];
+}
+
+async function showBoard(trackId, shipId, today) {
+  boardCtx = { trackId, shipId, today };
+  const t = TRACKS.find((x) => x.id === trackId);
+  boardEl.classList.remove('hidden');
+  toggleMenu(false);
+  document.getElementById('boardTitle').textContent = t ? t.name : 'The Record Office';
+  const scope = shipId ? SHIPS[shipId].name : 'all classes';
+  document.getElementById('boardSub').textContent =
+    `${scope}${today ? ' · flown on today’s wind' : ' · all time'} — consulting the ledger…`;
+  const rowsEl = document.getElementById('boardRows');
+  rowsEl.innerHTML = '';
+  renderBoardButtons();
+
+  const res = await net.leaderboard(trackId, shipId, { today });
+  if (!boardOpen() || boardCtx.trackId !== trackId) return;   // pilot moved on
+  document.getElementById('boardSub').textContent =
+    `${scope}${today ? ' · flown on today’s wind' : ' · all time'}`;
+  if (!res.ok) {
+    rowsEl.innerHTML = `<tr><td colspan="4">${net.phrase(res.reason)}</td></tr>`;
+    return;
+  }
+  if (!res.rows.length) {
+    rowsEl.innerHTML = '<tr><td colspan="4">No times on the books yet — set the first.</td></tr>';
+    return;
+  }
+  const me = net.pilotName();
+  res.rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    if (r.pilot === me) tr.className = 'mine';
+    const seal = r.verified ? ' <span class="seal" title="verified by the Commission">✓</span>' : '';
+    tr.innerHTML = `<td class="pos">${i + 1}</td><td>${escapeHtml(r.pilot)}${seal}</td>`
+      + `<td class="sh">${SHIPS[r.ship_id] ? SHIPS[r.ship_id].name.replace('Santos-Dumont ', '') : r.ship_id}</td>`
+      + `<td class="tm">${fmt(r.t)}</td><td></td>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'race it';
+    btn.onclick = () => raceWorldGhost(r);
+    tr.lastElementChild.appendChild(btn);
+    rowsEl.appendChild(tr);
+  });
+}
+
+function renderBoardButtons() {
+  const el = document.getElementById('boardBtns');
+  el.innerHTML = '';
+  const add = (label, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label; b.onclick = fn; el.appendChild(b);
+  };
+  add(boardCtx.shipId ? `Class: ${SHIPS[boardCtx.shipId].name}` : 'Class: all',
+    () => showBoard(boardCtx.trackId, boardCtx.shipId ? null : currentShip, boardCtx.today));
+  add(boardCtx.today ? 'Today’s wind' : 'All time',
+    () => showBoard(boardCtx.trackId, boardCtx.shipId, !boardCtx.today));
+  add('Other courses', () => {
+    const i = TRACKS.findIndex((x) => x.id === boardCtx.trackId);
+    const nx = TRACKS[(i + 1) % TRACKS.length];
+    showBoard(nx.id, boardCtx.shipId, boardCtx.today);
+  });
+  add('Close', closeBoard);
+}
+
+async function raceWorldGhost(row) {
+  addMsg('wg', 'Sending for the record-holder’s barograph…', 0);
+  const g = await net.fetchGhost(row.id);
+  if (!g) { addMsg('wg', 'That trace could not be fetched.', 0); return; }
+  const t = TRACKS.find((x) => x.id === boardCtx.trackId);
+  if (!t) return;
+  closeBoard();
+  if (currentLocation !== t.location) loadWorld(t.location);
+  if (g.ship && SHIPS[g.ship] && ship.landed) spawnShip(g.ship);
+  chaseGhost = {
+    trackId: t.id,
+    ghost: { t: g.t, dt: g.dt || GHOST_DT, splits: g.splits, p: g.p, pilot: g.pilot, foreign: true },
+  };
+  startTrack(t);
+  updateGhostMesh();
+  setCenter(t.name, `${g.pilot} flies this course in ${fmt(g.t)} — chase them.`);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// after a personal best, offer it to the record office (never blocks the game)
+async function submitBest(t, run) {
+  if (!net.enabled() || t.historic || t.custom) return;
+  if (!net.pilotName()) {
+    addMsg('sub', 'Sign the register (menu → Pilot name) to send times to the record office.', 0);
+    return;
+  }
+  const res = await net.submitTime({ trackId: t.id, shipId: currentShip, run });
+  if (!res.ok) { addMsg('sub', net.phrase(res.reason), 0); return; }
+  const rank = res.rank || await net.rankOf(t.id, currentShip, run.t);
+  addMsg('sub', rank
+    ? `Time entered in the ledger — ${ordinal(rank)} in the ${SHIPS[currentShip].name} class.`
+    : 'Time entered in the ledger.', 0);
+}
+
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
 function resetShip() {
@@ -624,17 +759,27 @@ function finishRace() {
   }
   // time trial: record the run, crown a new ghost
   blip(1100); blip(1400);
-  const prev = ghostBest;
+  // when you are chasing a downloaded ghost it stays on course; your own
+  // best still comes from your own ledger, not from the rival's trace
+  const rival = ghostBest && ghostBest.foreign ? ghostBest : null;
+  let prev = ghostBest;
+  if (rival) { try { prev = JSON.parse(localStorage.getItem(bestKey(track)) || 'null'); } catch { prev = null; } }
+  const run = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice() };
   const improved = !prev || t < prev.t;
   if (improved) {
-    ghostBest = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice() };
-    try { localStorage.setItem(bestKey(track), JSON.stringify(ghostBest)); } catch { /* full */ }
-    updateGhostMesh();
+    try { localStorage.setItem(bestKey(track), JSON.stringify(run)); } catch { /* full */ }
+    if (!rival) { ghostBest = run; updateGhostMesh(); }
+    submitBest(track, run);            // fire and forget; failures are toasts
   }
-  setCenter(fmt(t),
-    improved
-      ? (prev ? `New best — ${(prev.t - t).toFixed(1)}s faster! (Enter: again)` : 'First time set — your ghost now flies this course. (Enter: again)')
-      : `+${(t - prev.t).toFixed(1)}s off your best of ${fmt(prev.t)}. (Enter: again)`);
+  let sub = improved
+    ? (prev ? `New best — ${(prev.t - t).toFixed(1)}s faster! (Enter: again)` : 'First time set — your ghost now flies this course. (Enter: again)')
+    : `+${(t - prev.t).toFixed(1)}s off your best of ${fmt(prev.t)}. (Enter: again)`;
+  if (rival) {
+    sub = t < rival.t
+      ? `You have beaten ${rival.pilot || 'the record-holder'} by ${(rival.t - t).toFixed(1)}s! ` + sub
+      : `${(t - rival.t).toFixed(1)}s behind the record-holder. ` + sub;
+  }
+  setCenter(fmt(t), sub);
 }
 
 // ---------------------------------------------------------------- scenarios
@@ -1065,7 +1210,7 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  if (menuOpen) { updateCamera(dt); composer.render(); return; }  // paused while the menu is up
+  if (menuOpen || boardOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
 
   windGustT += dt;
   wind.x = dailyWind.x + Math.sin(windGustT * 0.13) * 0.7 + Math.sin(windGustT * 0.041 + 2) * 0.9;

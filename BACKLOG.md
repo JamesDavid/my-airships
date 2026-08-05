@@ -19,6 +19,24 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   Basin, Festival Hall, the Observation Wheel, and the triangular pylon course he
   proposed to the Fair's organizers (Ch. XXIV).
 
+- [x] **World records (online, optional)** — Supabase-backed ledger of times per course
+  and ship class, a daily board on the seeded wind, and downloadable record-holder
+  ghosts to chase. Submissions are validated by `src/anticheat.js` — the same module in
+  the browser and in the Edge Function — which replays the ghost through the course's
+  own gates at the ship's own physics. The whole feature vanishes when unconfigured.
+  See docs/ONLINE.md.
+
+## Future — multiplayer, if it goes further
+
+- [ ] **Live race rooms** — Supabase Realtime *Broadcast* + *Presence* (not the DB):
+  8–10 Hz position packets, no ship-to-ship collision, host-elected countdown, remote
+  ships drawn with the existing ghost/rival meshes. Airships at 40 km/h tolerate the
+  200–300 ms this costs, which is why the cheap transport is the right one here. Keep it
+  behind a `src/net.js`-shaped seam so PartyKit or a dedicated relay can replace it.
+- [ ] **Spectator / press box** — watch a live room from the Trocadéro terrace.
+- [ ] **Rooms for the historic courses** — needs a server-side notion of the aerodrome
+  finish radius before those times can be trusted online.
+
 ## Future — systems
 
 - [ ] **Weather days** (menu-selectable): rain (wet envelope heavy, gusts — the No. 2's

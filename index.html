@@ -71,6 +71,28 @@
   #menu button small { opacity:.6; font-style:italic; }
   #menu .quote { font-style:italic; opacity:.7; margin-top:14px; font-size:12.5px; }
 
+  /* the record office */
+  #board { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.94);
+    color:#e9dcc4; padding:22px 28px; border:1px solid #7a6647; min-width:460px; max-width:92vw;
+    max-height:84vh; overflow:auto; z-index:40; }
+  #board h2 { margin:0 0 4px; font-weight:normal; font-style:italic; font-size:22px; color:#e8c477; }
+  #boardSub { font-size:12.5px; opacity:.7; font-style:italic; margin-bottom:12px; }
+  #boardRows { border-collapse:collapse; width:100%; font-size:14px; }
+  #boardRows td { padding:4px 10px 4px 0; border-bottom:1px solid rgba(122,102,71,.3); }
+  #boardRows td.pos { color:#a89163; width:28px; }
+  #boardRows td.tm { color:#e8c477; text-align:right; white-space:nowrap; }
+  #boardRows td.sh { opacity:.6; font-style:italic; font-size:12px; }
+  #boardRows tr.mine td { color:#f2ead6; }
+  #boardRows tr.mine td.pos { color:#e8c477; }
+  #boardRows td .seal { color:#8fae7d; }        /* the Commission's stamp */
+  #boardRows button { background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
+    font-family:inherit; font-size:11.5px; padding:2px 8px; cursor:pointer; }
+  #boardRows button:hover { border-color:#e8c477; color:#e8c477; }
+  #boardBtns { margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; }
+  #boardBtns button { background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
+    font-family:inherit; font-size:13px; padding:6px 12px; cursor:pointer; }
+  #boardBtns button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
+
   /* Photo mode */
   #grain, #vignette { position:fixed; inset:0; pointer-events:none; display:none; }
   #vignette { background:radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(30,18,8,.55) 100%); }
@@ -149,6 +171,10 @@
     .menu-col { min-width:200px; }
     #menu button { font-size:12px; padding:4px 8px; margin:2px 0; }
     #menu .quote { font-size:10.5px; margin-top:8px; }
+    #board { min-width:unset; width:94vw; padding:12px 16px; }
+    #board h2 { font-size:17px; }
+    #boardRows { font-size:12px; }
+    #boardBtns button { font-size:11.5px; padding:5px 9px; }
     .barwrap { width:120px; }
     #messages { width:94vw; }
     .msg { font-size:13px; }
@@ -226,6 +252,14 @@
     <div class="menu-col"><h3>Options</h3><div id="menuOpts"></div></div>
   </div>
   <div class="quote" id="menuQuote">The simulation is paused. Esc resumes.</div>
+</div>
+
+<!-- world records: only ever shown when an online record office is configured -->
+<div id="board" class="hidden">
+  <h2 id="boardTitle">The Record Office</h2>
+  <div id="boardSub">…</div>
+  <table id="boardRows"></table>
+  <div id="boardBtns"></div>
 </div>
 
 <div id="touchUI">
