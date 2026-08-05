@@ -140,3 +140,45 @@ Every failure surfaces as a toast in the game's own voice and nothing blocks:
 | *The record office refuses the entry* | RLS policy blocking the insert |
 | *No word back / cannot be reached* | network, wrong URL, project paused |
 | *Your own barograph refused the run* | the client's own check failed — usually a genuinely broken recording, worth reporting |
+
+## The fault book
+
+`bug_reports` collects what pilots send with **Report a fault** — the round
+button above the menu, and the Options entry. Both are built only when
+`net.enabled()` is true, so an offline copy of the game has no such button and
+no such menu line: there is nowhere for a report to go, and nothing to explain.
+
+A report carries:
+
+- **what they typed** (`body`, capped at 4 000 characters)
+- **a picture**, optional (`shot`, a `data:` URL, capped at ~280 KB). By default
+  it is the rendered view. A pilot may instead send a picture of the whole
+  window — instruments, menus and all — which goes through
+  `getDisplayMedia()`, so the browser asks them which window or tab to share.
+  If the picture is over the cap it is dropped and the words still go.
+- **the state they were flying in** (`state`, jsonb): ship, place, course, race
+  state, room, the instrument readings, viewport and user-agent, and the last
+  25 errors thrown. That error ring is installed on the first line of
+  `main.js`, before anything else can throw, so a pilot never has to reproduce
+  a fault with the console open.
+
+The table is **insert-only for `anon` and readable by nobody** — a report can
+contain a picture of someone's screen. Read them from the dashboard or with the
+service role:
+
+```sql
+select id, created_at, pilot, body,
+       state->'page'->>'ua'   as browser,
+       state->'ship'          as ship,
+       state->'faults'        as errors
+  from public.bug_reports
+ where not handled
+ order by created_at desc;
+```
+
+`shot` is a `data:` URL — paste it into an address bar to look at it. Close one
+off with `update public.bug_reports set handled = true where id = 42;`.
+
+Without the table the button still appears (the office is reachable) and the
+insert answers 404, which the pilot sees as *the record office has no ledger
+for this*.
