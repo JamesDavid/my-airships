@@ -1140,14 +1140,51 @@ async function windowPicture(maxW = 1280) {
   }
 }
 
-let bugShot = null;
+/**
+ * A picture the pilot chose from their own device — on a telephone that means
+ * the camera roll, and it is the only way to show a fault in the instruments or
+ * the menu, since getDisplayMedia does not exist on mobile browsers.
+ *
+ * Phone screenshots run to several megabytes, well past what the table will
+ * take, so it is drawn down until it fits: first by size, then by quality.
+ */
+async function devicePicture(file) {
+  if (!file || !/^image\//.test(file.type)) return null;
+  let bmp;
+  try {
+    // from-image so a photograph taken sideways is not sent on its side
+    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch { return null; }
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d');
+  for (const w of [1400, 1100, 850, 640]) {
+    const sc = Math.min(1, w / bmp.width);
+    c.width = Math.max(1, Math.round(bmp.width * sc));
+    c.height = Math.max(1, Math.round(bmp.height * sc));
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    for (const q of [0.7, 0.55, 0.42]) {
+      const url = c.toDataURL('image/jpeg', q);
+      if (url.length <= net.SHOT_LIMIT) { bmp.close?.(); return url; }
+    }
+  }
+  bmp.close?.();
+  return null;                          // nothing we can do; the words still go
+}
+
+let bugShot = null, viewShot = null;
 function openBugBook() {
   if (!net.enabled()) return;
   const el = document.getElementById('bug');
   toggleMenu(false);
   document.getElementById('board').classList.add('hidden');
-  // take the picture NOW, while the pilot is still looking at the fault
-  bugShot = viewPicture();
+  // take the picture NOW, while the pilot is still looking at the fault. Kept
+  // apart from bugShot so that choosing a file and changing your mind can put
+  // the view back without re-rendering a frame that has since moved on.
+  viewShot = viewPicture();
+  bugShot = viewShot;
+  document.getElementById('bugPicView').checked = true;
+  document.getElementById('bugFile').value = '';
+  document.getElementById('bugPicName').textContent = '';
   const img = document.getElementById('bugShot');
   img.src = bugShot || '';
   img.style.display = bugShot ? 'block' : 'none';
@@ -1167,21 +1204,48 @@ function wireBugBook() {
   if (!net.enabled()) return;
   const note = document.getElementById('bugNote');
   const send = document.getElementById('bugSend');
-  const view = document.getElementById('bugShotOn');
-  const win = document.getElementById('bugScreenOn');
   const img = document.getElementById('bugShot');
+  const view = document.getElementById('bugPicView');
+  const win = document.getElementById('bugPicWin');
+  const fromFile = document.getElementById('bugPicFile');
+  const none = document.getElementById('bugPicNone');
+  const file = document.getElementById('bugFile');
+  const name = document.getElementById('bugPicName');
+
+  // no getDisplayMedia on a telephone: don't offer what cannot be done there
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    document.getElementById('bugPicWinRow').classList.add('hidden');
+  }
 
   const preview = (url) => { img.src = url || ''; img.style.display = url ? 'block' : 'none'; };
-  view.onchange = () => { if (view.checked) win.checked = false; preview(view.checked ? bugShot : null); };
+  view.onchange = () => { if (view.checked) { bugShot = viewShot; preview(bugShot); } };
+  none.onchange = () => { if (none.checked) preview(null); };
   win.onchange = async () => {
-    if (!win.checked) { preview(view.checked ? bugShot : null); return; }
-    view.checked = false;
+    if (!win.checked) return;
     note.textContent = 'waiting on the browser…';
     const shot = await windowPicture();
     note.textContent = shot ? '' : 'the browser gave nothing back';
-    if (!shot) { win.checked = false; view.checked = true; preview(bugShot); return; }
+    if (!shot) { view.checked = true; bugShot = viewShot; preview(bugShot); return; }
     bugShot = shot;
     preview(shot);
+  };
+  // the picker is opened by our own button so it can be styled like the rest
+  document.getElementById('bugPicChoose').onclick = () => { fromFile.checked = true; file.click(); };
+  fromFile.onchange = () => { if (fromFile.checked && !file.files.length) file.click(); };
+  file.onchange = async () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    fromFile.checked = true;
+    name.textContent = 'reading…';
+    const url = await devicePicture(f);
+    if (!url) {
+      name.textContent = 'that picture could not be read';
+      view.checked = true; bugShot = viewShot; preview(bugShot);
+      return;
+    }
+    name.textContent = `${f.name.slice(0, 28)} · ${Math.round(url.length / 1400)} KB`;
+    bugShot = url;
+    preview(url);
   };
   document.getElementById('bugCancel').onclick = closeBugBook;
   const round = document.getElementById('btnBug');
@@ -1192,7 +1256,7 @@ function wireBugBook() {
     if (!body.trim()) { note.textContent = 'a word about it first'; return; }
     send.disabled = true;
     note.textContent = 'sending…';
-    const shot = (view.checked || win.checked) ? bugShot : null;
+    const shot = none.checked ? null : bugShot;
     const r = await net.submitBug({ body, state: faultState(), shot });
     if (r.ok) {
       closeBugBook();

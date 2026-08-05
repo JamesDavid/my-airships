@@ -46,9 +46,10 @@ public domain).
   course geometry and the ship's own physics before they reach the ledger. It is optional:
   configure nothing and the feature simply doesn't exist — see [docs/ONLINE.md](docs/ONLINE.md).
 - **Report a fault**: the beetle button above the menu sends the works an account of what
-  went wrong, with a picture of the view — or of the whole window, if you let the browser
-  ask you which to share — and the state you were flying in: ship, place, course, room,
-  instruments, and anything the page threw. Part of the same optional wiring: with no
+  went wrong, with a picture — the view, the whole window if you let the browser ask you
+  which to share, or **one from your own camera roll**, which on a telephone is the only
+  way to show a fault in the instruments or the menus — and the state you were flying in:
+  ship, place, course, room, instruments, and anything the page threw. Part of the same optional wiring: with no
   Supabase project configured there is nowhere to send one, so the button is never built.
 - **Fly together**: a room is a shared sky. Open one and it is listed for anyone to join —
   or open a **private** one, which stays off the list and lets in only the code you hand

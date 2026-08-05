@@ -151,11 +151,20 @@ no such menu line: there is nowhere for a report to go, and nothing to explain.
 A report carries:
 
 - **what they typed** (`body`, capped at 4 000 characters)
-- **a picture**, optional (`shot`, a `data:` URL, capped at ~280 KB). By default
-  it is the rendered view. A pilot may instead send a picture of the whole
-  window — instruments, menus and all — which goes through
-  `getDisplayMedia()`, so the browser asks them which window or tab to share.
-  If the picture is over the cap it is dropped and the words still go.
+- **a picture**, optional (`shot`, a `data:` URL, capped at ~280 KB). Four choices:
+
+  | | |
+  |---|---|
+  | *A picture of the view* (default) | the rendered frame, read in the same tick as the render |
+  | *A picture of the whole window* | instruments, menus and all, through `getDisplayMedia()` — the browser asks which window or tab to share. **Hidden when `getDisplayMedia` is absent**, which is every mobile browser |
+  | *A picture from this device* | the camera roll. On a telephone this is the only way to show a fault in the HUD or the menus, since the first option cannot see them and the second does not exist there |
+  | *No picture* | words and state only |
+
+  A picture from the device is drawn down until it fits — by size first
+  (1400 → 1100 → 850 → 640 px wide), then by JPEG quality (0.70 → 0.55 → 0.42),
+  and it is decoded with `imageOrientation: 'from-image'` so a photograph taken
+  sideways is not filed on its side. A 20 MB screenshot lands at about 290 KB.
+  If a picture still will not fit it is dropped and the words go without it.
 - **the state they were flying in** (`state`, jsonb): ship, place, course, race
   state, room, the instrument readings, viewport and user-agent, and the last
   25 errors thrown. That error ring is installed on the first line of
