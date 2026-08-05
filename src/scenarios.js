@@ -191,7 +191,7 @@ export const SCENARIOS = [
       const r = ctx.raceResult();
       if (r) {
         this.done = true;
-        if (r.won && r.beatRivals) ctx.complete('The grand prize is yours — “Por mares nunca d’antes navegados!”');
+        if (r.won && r.beatRivals) ctx.complete('The grand prize is yours — “Por ceos nunca d’antes navegados!”');
         else if (r.won) ctx.fail('Within the time — but a rival crossed first. The prize divides by speed. Again!');
         else ctx.fail('The time limit passes. The $100,000 stays in the treasury.');
       }

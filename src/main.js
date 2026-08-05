@@ -316,7 +316,8 @@ if (isTouch) {
     document.getElementById('help').classList.add('hidden');
   });
   document.querySelector('#help .quote').textContent =
-    'On touch: THR buttons for throttle. The HELM slider steers and stays where you lash it; ' +
+    'On touch: the CARB lever is the throttle — set it and it stays, like the brass lever aboard. '
+    + 'The HELM slider steers and stays where you lash it; ' +
     'the TRIM slider is the shifting weights and holds too — center either to run straight ' +
     'and level. SAND drops ballast, VENT descends, FIX coaxes the motor, GO starts the trial. ' +
     'Drag the sky to look around. Tap this panel to close it.';
@@ -327,9 +328,13 @@ if (isTouch) {
 function setTouchUI(on) {
   document.body.classList.toggle('touch', on);
   if (on) wireTouchControls();
-  else { touchPitch = 0; touchHelm = 0; }
+  else { touchPitch = 0; touchHelm = 0; throttleLever = false; }   // give the keys back the motor
   localStorage.setItem('myairships_touchui', on ? '1' : '0');
 }
+
+// capturing the pointer is a convenience, never a precondition: if the
+// browser refuses the id, the control must still answer the touch
+function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch { /* fine */ } }
 
 function wireTouchControls() {
   if (wireTouchControls._done) return;
@@ -367,7 +372,7 @@ function wireTouchControls() {
     touchPitch = v;
     thumb.style.top = `calc(50% - 19px + ${v * half}px)`;   // thumb tracks the pointer
   };
-  trk.addEventListener('pointerdown', (e) => { trk.setPointerCapture(e.pointerId); setTrim(e); });
+  trk.addEventListener('pointerdown', (e) => { capture(trk, e); setTrim(e); });
   trk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setTrim(e); });
   // the helm: horizontal, and it stays where you lash it (drag left = port)
   const hTrk = document.getElementById('helmTrack');
@@ -383,18 +388,56 @@ function wireTouchControls() {
     touchHelm = v;
     hThumb.style.left = `calc(50% - 19px - ${v * half}px)`;
   };
-  hTrk.addEventListener('pointerdown', (e) => { hTrk.setPointerCapture(e.pointerId); setHelm(e); });
+  hTrk.addEventListener('pointerdown', (e) => { capture(hTrk, e); setHelm(e); });
   hTrk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setHelm(e); });
+  // the carburating lever: an absolute setting, bottom stopped to top full —
+  // the motor then chases it, exactly as the brass lever aboard commands it
+  const tTrk = document.getElementById('thrTrack');
+  const setThr = (e) => {
+    e.preventDefault();
+    initAudio();
+    const rect = tTrk.getBoundingClientRect();
+    const span = rect.height - 46;
+    let v = 1 - (e.clientY - (rect.top + 23)) / span;
+    touchThrottle = Math.max(0, Math.min(1, v));
+    throttleLever = true;
+  };
+  tTrk.addEventListener('pointerdown', (e) => { capture(tTrk, e); setThr(e); });
+  tTrk.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) setThr(e); });
+}
+
+// the lever's thumb always shows what the motor is ACTUALLY doing, so the
+// keyboard (W/S) and the lever can never disagree
+function drawThrottleLever() {
+  const trk = document.getElementById('thrTrack');
+  if (!trk || !ship) return;
+  const thumb = document.getElementById('thrThumb');
+  const fill = document.getElementById('thrFill');
+  const h = trk.clientHeight || 150;
+  const span = h - 46;
+  thumb.style.bottom = `${4 + ship.throttle * span}px`;
+  fill.style.height = `${6 + ship.throttle * span}px`;
 }
 
 // on-screen controls default ON everywhere; the menu toggle remembers "off"
 const touchPref = localStorage.getItem('myairships_touchui');
 if (touchPref !== '0') setTouchUI(true);
 
-let touchPitch = 0;   // trim sliders: they hold their setting, like real weights
-let touchHelm = 0;    // and a lashed helm
+let touchPitch = 0;      // trim sliders: they hold their setting, like real weights
+let touchHelm = 0;       // and a lashed helm
+let touchThrottle = 0;   // and the carburating lever stays where it is set
+let throttleLever = false;
 function pollInput() {
-  input.throttle = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + (keys['KeyS'] || keys['ArrowDown'] ? -1 : 0);
+  const kbT = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + (keys['KeyS'] || keys['ArrowDown'] ? -1 : 0);
+  if (kbT !== 0) {
+    input.throttle = kbT;
+    touchThrottle = ship.throttle;   // the lever follows the keys
+  } else if (throttleLever) {
+    // drive the motor toward the lever's setting
+    input.throttle = Math.max(-1, Math.min(1, (touchThrottle - ship.throttle) * 8));
+  } else {
+    input.throttle = 0;
+  }
   const kbR = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + (keys['KeyD'] || keys['ArrowRight'] ? -1 : 0);
   input.rudder = kbR !== 0 ? kbR : touchHelm;
   const kb = (keys['KeyE'] ? 1 : 0) + (keys['KeyQ'] ? -1 : 0);
@@ -1290,7 +1333,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
   get rivals() { return rivals; }, get scenario() { return scenario; },
   get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
   get scene() { return scene; }, get composer() { return composer; },   // force a frame when rAF is asleep
-  updateCamera,
+  updateCamera, pollInput, drawThrottleLever,
   setCamMode(m) { camMode = m; camera.near = m === 1 ? 0.1 : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
@@ -1395,6 +1438,7 @@ function frame(now) {
 
   updateCamera(dt);
   updateHUD();
+  drawThrottleLever();
   updateAudio();
   composer.render();
 }

@@ -112,7 +112,8 @@ descriptions, handling passages, and per-ship specifications — each quoted and
 the graphics or physics rule it drives. Read it with the book at
 [gutenberg.org/ebooks/42344](https://www.gutenberg.org/ebooks/42344).
 
-*"Por mares nunca d'antes navegados!"* — O'er seas hereto unsailed.
+*"Por ceos nunca d'antes navegados!"* — Through skies never before sailed.
+(Camões' line, altered by one word, as it flew on his airship's streamer.)
 
 ## Credits & license
 

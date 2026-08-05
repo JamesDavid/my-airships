@@ -121,8 +121,19 @@
     background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
     font-size:10px; display:flex; align-items:center; justify-content:center;
     top:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
+  /* the carburating lever — a throttle you SET, like the brass lever aboard:
+     bottom is stopped, top is full chat, and it stays where you leave it */
+  #thrTrack { position:fixed; left:16px; bottom:92px; width:48px; height:150px;
+    border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
+    touch-action:none; z-index:30; }
+  #thrFill { position:absolute; left:3px; right:3px; bottom:3px; height:0;
+    border-radius:22px; background:rgba(232,196,119,.18); }
+  #thrThumb { position:absolute; left:4px; width:38px; height:38px; border-radius:50%;
+    background:rgba(232,196,119,.55); border:1.5px solid #e8c477; color:#2e2416;
+    font-size:9.5px; display:flex; align-items:center; justify-content:center;
+    bottom:4px; user-select:none; -webkit-user-select:none; }
   /* helm trim — horizontal; the wheel stays where you lash it */
-  #helmTrack { position:fixed; left:16px; bottom:92px; width:196px; height:48px;
+  #helmTrack { position:fixed; left:16px; bottom:26px; width:196px; height:48px;
     border-radius:24px; background:rgba(58,44,30,.38); border:1.5px solid rgba(233,220,196,.55);
     touch-action:none; z-index:30; }
   #helmCenter { position:absolute; top:6px; bottom:6px; left:50%; width:2px;
@@ -133,8 +144,8 @@
     left:calc(50% - 19px); user-select:none; -webkit-user-select:none; }
   body.touch #hintBR { display:none; }
   body.touch #panelTR { right:74px; }
-  body.touch #panelBL { bottom:238px; }
-  body.touch #messages { bottom:240px; }
+  body.touch #panelBL { bottom:252px; }
+  body.touch #messages { bottom:254px; }
   body.touch #help { pointer-events:auto; }
 
   /* ---------- tablets (iPad: touch + a big screen) ---------- */
@@ -145,6 +156,8 @@
     #pitchThumb { width: 44px; height: 44px; left: 4px; font-size: 11px; }
     #helmTrack { width: 230px; height: 56px; }
     #helmThumb { width: 44px; height: 44px; top: 4px; font-size: 10px; }
+    #thrTrack { width: 56px; height: 180px; bottom: 100px; }
+    #thrThumb { width: 44px; height: 44px; left: 4px; font-size: 10px; }
     #menu button { padding: 10px 12px; font-size: 15px; }
     #panelTL { font-size: 16px; }
     #timer { font-size: 34px; }
@@ -267,8 +280,10 @@
     <div id="helmCenter"></div>
     <div id="helmThumb">HELM</div>
   </div>
-  <div class="tbtn" data-key="KeyW" style="left:84px; bottom:158px">THR+</div>
-  <div class="tbtn" data-key="KeyS" style="left:84px; bottom:26px">THR−</div>
+  <div id="thrTrack">
+    <div id="thrFill"></div>
+    <div id="thrThumb">CARB</div>
+  </div>
   <div id="pitchTrack">
     <div id="pitchCenter"></div>
     <div id="pitchThumb">TRIM</div>

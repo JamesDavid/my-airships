@@ -494,7 +494,8 @@ export class Airship {
       this.pitchGroup.add(this.rudder);
     }
 
-    // pennant: "Por mares nunca d'antes navegados!" — it streams downwind
+    // pennant: "Por ceos nunca d'antes navegados!" — Camões altered by one word,
+    // exactly as it flew on his streamer; it streams downwind
     const penGeo = new THREE.PlaneGeometry(2.6, 0.7);
     penGeo.translate(1.3, 0, 0); // pivot at the staff
     this.pennant = new THREE.Mesh(penGeo,

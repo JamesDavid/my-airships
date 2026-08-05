@@ -301,11 +301,12 @@ export function buildWorldStLouis(scene) {
     // the Grand Basin AND the lagoon avenues — every sheet of water on the
     // ground plan will take a ship that comes down on it
     isWater: (x, z) => {
-      if (x > 70 && x < 490 && Math.abs(z) < 75) return true;
+      // wet right out to the edge you can see (the plane spans x 70…490, |z| ≤ 75)
+      if (x > 69.5 && x < 490.5 && Math.abs(z) < 75.5) return true;
       for (const l of lagoons) {
         const c = Math.cos(-l.ang), s = Math.sin(-l.ang);
         const dx = x - l.x, dz = z - l.z;
-        if (Math.abs(dx * c - dz * s) < l.len / 2 && Math.abs(dx * s + dz * c) < l.w / 2) return true;
+        if (Math.abs(dx * c - dz * s) < l.len / 2 + 0.5 && Math.abs(dx * s + dz * c) < l.w / 2 + 0.5) return true;
       }
       return false;
     },

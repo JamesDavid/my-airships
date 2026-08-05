@@ -327,7 +327,9 @@ export function buildWorld(scene) {
     },
     // the Seine is water like any other: "I should fall into the Seine" —
     // both reaches drown a ship that comes down on them
-    isWater: (x, z) => nearPolyline(riverPts, x, z, 32) || nearPolyline(westPts, x, z, 29),
+    // half-widths match the water ribbons exactly (70 m and 64 m wide), so the
+    // river is wet right out to the bank you can see
+    isWater: (x, z) => nearPolyline(riverPts, x, z, 35.5) || nearPolyline(westPts, x, z, 32.5),
     isInBois(x, z) {
       if (x < -1900 || x > -340 || Math.abs(z) > 560) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
