@@ -2444,6 +2444,8 @@ const EVENT_TEXT = {
   motorFixed: ['motorfixed', 'The motor takes heart and rumbles on!', 4],
   fuelOut: ['fuelout', 'The petroleum is spent! The motor dies away — you are a free balloon now.', 0],
   folding: ['folding', 'The balloon is folding in the middle like a pocket knife! Throttle down, level off, drop sand!', 8],
+  pumpFail: ['pumpfail', 'The rotary ventilator has stopped — the air balloon is emptying and she will go slack! (tap F)', 0],
+  pumpFixed: ['pumpfixed', 'The ventilator picks up again and the balloon draws taut.', 5],
 };
 
 function drainEvents() {

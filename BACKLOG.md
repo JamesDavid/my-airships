@@ -127,19 +127,6 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 
 ## Future — systems
 
-- [ ] **The ballonnet, and a fan that can fail** — the Nos. 1 and 2 carried an
-  interior air balloon sewn inside the bottom of the envelope, fed by a rotary
-  ventilator off the motor, with an air valve deliberately weaker than the gas
-  valves so that all the air left before any hydrogen did. Its fan "twice
-  refused to work adequately at the critical moment", and that is what folded
-  the No. 2. The game has the consequence — slack envelope, folding, the screw
-  eating the suspension — but not the cause, and a fan you must nurse would make
-  those two ships play as differently as they flew. From the No. 3 the rounder
-  hull dispensed with it entirely. See docs/HULLS.md.
-- [ ] **The battened hems** — no net, no chemise: the suspension was taken
-  straight off small wooden rods in long horizontal hems sewn down both flanks
-  of the envelope. Currently the wires meet the hull at a line of bare points.
-
 - [ ] **Weather days** (menu-selectable): rain (wet envelope heavy, gusts — the No. 2's
   lesson), the Nice storm thermal column that lifts you while venting, fog ("the balloon
   itself had completely disappeared"), night flight over the lit city (A7).

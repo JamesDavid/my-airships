@@ -229,6 +229,10 @@ export class Airship {
     this.fold = 0;
     this.gasPool = 0;
     this.fullness = 1;
+    // the interior air balloon of the Nos. 1 and 2, and the fan that feeds it
+    this.airFill = this.spec.envelope.ballonnet ? 1 : 0;
+    this.pumpOk = true;
+    this.pumpNag = 0;
     this._defKey = null;
     this._foldWarned = false;
     this.deformEnvelope(true);
@@ -561,14 +565,75 @@ export class Airship {
       return e;
     };
 
+    // ---- the rotary ventilator (Ch. X, Fig. 5) ----
+    // "the tube by which the rotary ventilator fed the interior air balloon" —
+    // a fan worked off the motor, with a trunk running up into the belly of the
+    // gas bag. Only the first two ships carried one; from the No. 3 the rounder
+    // form held itself and he was rid of the thing that had twice failed him.
+    if (E.ballonnet) {
+      const fanX = -K.length * 0.1;
+      const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.26, 10), dark);
+      housing.rotation.x = Math.PI / 2;
+      housing.position.set(fanX, -drop + 0.42, 0.34);
+      this.pitchGroup.add(housing);
+      this.fanMesh = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const v = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.16),
+          new THREE.MeshLambertMaterial({ color: 0x8a6b2f }));
+        v.rotation.z = (i * Math.PI) / 2;
+        this.fanMesh.add(v);
+      }
+      this.fanMesh.position.copy(housing.position);
+      this.fanMesh.position.z += 0.16;
+      this.pitchGroup.add(this.fanMesh);
+      // the trunk, up into the belly
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13,
+        Math.max(0.6, drop - this.envAt(fanX) - 0.4), 8),
+        new THREE.MeshLambertMaterial({ color: 0x6b5236 }));
+      trunk.position.set(fanX, (-drop + 0.55 + -this.envAt(fanX)) / 2, 0.2);
+      this.pitchGroup.add(trunk);
+    }
+
     // suspension wires
     const wirePts = [];
+    // ---- the battened hems (Ch. VI) ----
+    // "I gave up the usual network and chemise, or outer cover… Instead I
+    // attached the suspension cords of my basket directly to the balloon
+    // envelope by means of small wooden rods introduced into long horizontal
+    // hems sewed on both sides to its stuff for a great part of the balloon's
+    // length." So: no net over the bag and no cover round it — a seam down each
+    // flank with rods in it, and the suspension taken straight off them, on
+    // BOTH sides rather than from a line of bare points along her belly.
     const n = K.type === 'minimal' ? 4 : 7;
+    const HEM = 0.45;                       // radians below the equator
+    const sinH = Math.sin(HEM), cosH = Math.cos(HEM);
+    const hemAt = (x) => { const r = this.envAt(x); return { y: -r * sinH, z: r * cosH }; };
+    const hemMat = new THREE.MeshLambertMaterial({ color: 0x7a6242 });
+    const spanX = (K.type === 'minimal' ? K.length * 0.5 : K.length / 2) * 0.85;
+    for (const sz of [-1, 1]) {
+      // the hem itself, following the flank for a good part of her length
+      const pts = [];
+      for (let i = 0; i <= 12; i++) {
+        const x = -spanX + (2 * spanX / 12) * i;
+        const h = hemAt(x);
+        pts.push(new THREE.Vector3(x, h.y, sz * h.z));
+      }
+      const hem = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 14, 0.045, 5, false), hemMat);
+      this.pitchGroup.add(hem);
+    }
     for (let i = 0; i < n; i++) {
       const fx = -K.length / 2 + (K.length / (n - 1)) * i;
       const ex = fx * 0.85;
-      const eBottom = -this.envAt(ex) + 0.2;
-      wirePts.push(ex, eBottom, 0, fx, -drop, 0);
+      const h = hemAt(ex);
+      for (const sz of [-1, 1]) {
+        // the small wooden rod in the hem, and the wire hung from it
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.5, 5), hemMat);
+        rod.rotation.z = Math.PI / 2;
+        rod.position.set(ex, h.y, sz * h.z);
+        this.pitchGroup.add(rod);
+        wirePts.push(ex, h.y, sz * h.z, fx, -drop, 0);
+      }
     }
     const wireGeo = new THREE.BufferGeometry();
     wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(wirePts, 3));
@@ -816,6 +881,31 @@ export class Airship {
     this.heat += (heatTarget - this.heat) * Math.min(1, 0.35 * dt);
     if (env.underCloud && this.heat > 0.985) this.events.push('shadow');
 
+    // ---- the interior air balloon (B6a; Ch. X) ----
+    // The fan is driven off the motor, so the ballonnet is only kept up while
+    // she is under way: stop the engine, or let it sputter, and the air begins
+    // to go out of her. That is the whole of the No. 2's disaster — the pump
+    // "twice refused to work adequately at the critical moment".
+    const hasBallonnet = !!this.spec.envelope.ballonnet;
+    if (hasBallonnet) {
+      const running = this.motorOn && !this.sputtering && this.throttle > 0.04 && this.fuel > 0;
+      if (running && this.pumpOk) this.airFill = Math.min(1, this.airFill + dt * 0.30);
+      else this.airFill = Math.max(0, this.airFill - dt * 0.10);
+      if (this.pumpOk && running && Math.random() < dt / 75) {
+        this.pumpOk = false;
+        this.events.push('pumpFail');
+      }
+      // The same hand on the same levers that coaxes the motor will free it.
+      // input.coax is a one-shot set on the key DOWN, not a flag held while the
+      // key is: counting seconds of it accumulated one frame per press and the
+      // fan could never be revived at all. It counts taps — three of them.
+      if (!this.pumpOk && input.coax) {
+        this.pumpNag += 0.34;
+        if (this.pumpNag >= 1) { this.pumpOk = true; this.pumpNag = 0; this.events.push('pumpFixed'); }
+      } else if (this.pumpOk) this.pumpNag = 0;
+      if (this.fanMesh) this.fanMesh.rotation.z += dt * (running && this.pumpOk ? 26 : 0.4);
+    }
+
     // pressure (B6): fullness x heat x altitude expansion, + tail suction with speed
     const airspeedV = this.vel.clone().sub(windAt(wind, this.pos.y));
     // the air rises and settles as well as blowing: subtracting it here means
@@ -824,7 +914,13 @@ export class Airship {
     this.airY = env.airY || 0;
     airspeedV.y -= this.airY;
     const airspeed = Math.hypot(airspeedV.x, airspeedV.z);
-    const fullness = (this.gas / 100) * this.heat;
+    // the air balloon makes up what the gas has lost, up to its own capacity —
+    // which is why the first two ships could hold their shape at all
+    const gasFull = (this.gas / 100) * this.heat;
+    const AIR_CAP = 0.20;
+    const fullness = hasBallonnet
+      ? gasFull + Math.min(Math.max(0, 1 - gasFull), AIR_CAP * this.airFill)
+      : gasFull;
     const pressure = fullness * (1 + this.pos.y / 1600) + P.speedPressure * (airspeed / 18);
     this.pressure = pressure;
     if (pressure > P.pressureLimit) {

@@ -116,11 +116,25 @@ less immersion, therefore, it ballasts or unballasts the air-ship."
   since the trim response was always modelled as a shift of the centre of
   gravity, but the wrong object and the wrong motion.
 
+## The ballonnet, as modelled
+
+The Nos. 1 and 2 carry one; nothing else does. It makes up whatever the gas has
+lost, to a fifth of the envelope's volume, so she holds her form on a bag that
+is no longer full. The fan is driven **off the motor**, so it only keeps her up
+while she is under way: throttle down, run dry, or let the motor sputter and the
+air begins to go out of her. It can also simply stop, as his did twice, and then
+it must be freed with the same levers that coax the motor — three taps of F.
+
+Measured on the No. 1 at 87% gas: with the ballonnet full she stands at a
+fullness of 1.000; when the fan stops and the air bleeds away she falls to
+0.847, which is where the game's existing sag, drag and folding already live.
+That is the point of it — the folding was always modelled, but until now it had
+no cause.
+
 ## Still not modelled
 
-- The **ballonnet** and its motor-driven fan on the Nos. 1 and 2. The game has
-  the *consequence* — envelope slack, folding, the propeller fouling the
-  suspension — but not the air balloon itself, nor the fan that could fail.
-- The **battened hems** along the envelope's flanks: the suspension currently
-  meets the hull at a line of points rather than at a visible seam with rods.
 - Illuminating gas versus hydrogen on the No. 3.
+- The **automatic gas valves** as objects (*VV* in Fig. 5), and the air valve
+  *AV* deliberately weaker than they are, so that all the air leaves the
+  ballonnet before any hydrogen leaves the envelope. The game vents gas but does
+  not distinguish the two valves.

@@ -28,7 +28,10 @@ export const SHIPS = {
   // Folds like a pocket knife when starved — it nearly killed him at Bagatelle.
   no1: {
     id: 'no1', name: 'Santos-Dumont No. 1', sub: 'the first air-ship — handle with care',
-    envelope: { shape: 'cylinder', length: 25, diameter: 3.5, color: 0xcfc2a2 },
+    // an interior air balloon, fed by a fan off the motor, to hold her form:
+    // "the little interior air balloon… sewed inside to the bottom of the great
+    // balloon like a kind of closed pocket" (Ch. X). Only the first two had one.
+    envelope: { shape: 'cylinder', length: 25, diameter: 3.5, color: 0xcfc2a2, ballonnet: true },
     keel: { type: 'basket-long', length: 4, drop: 11 },
     prop: 'stern', rudderScale: 0.8,
     physics: {
@@ -43,7 +46,7 @@ export const SHIPS = {
   // Doubled up in a rain gust on its first trial.
   no2: {
     id: 'no2', name: 'Santos-Dumont No. 2', sub: 'the ventilated cylinder',
-    envelope: { shape: 'cylinder', length: 25, diameter: 4.1, color: 0xc8bb9d },
+    envelope: { shape: 'cylinder', length: 25, diameter: 4.1, color: 0xc8bb9d, ballonnet: true },
     keel: { type: 'basket-long', length: 4, drop: 10 },
     prop: 'stern', rudderScale: 0.8,
     physics: {
