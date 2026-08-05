@@ -11,6 +11,13 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './net_config.js';
 import { validateRun, validateEntry } from './anticheat.js';
 
+// iOS private browsing throws on localStorage writes; a pilot who cannot be
+// remembered should still be able to fly and to file a fault report
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* not remembered */ } },
+};
+
 const LS_CFG = 'myairships_supabase';
 const LS_PILOT = 'myairships_pilot';
 const LS_PID = 'myairships_pilot_id';
@@ -22,7 +29,7 @@ export function config() {
   if (_cfg !== undefined) return _cfg;
   let url = SUPABASE_URL, key = SUPABASE_ANON_KEY;
   try {                                    // a console override, so no rebuild is needed
-    const o = JSON.parse(localStorage.getItem(LS_CFG) || 'null');
+    const o = JSON.parse(store.get(LS_CFG) || 'null');
     if (o && o.url && o.key) { url = o.url; key = o.key; }
   } catch { /* ignore */ }
   _cfg = (url && key) ? { url: url.replace(/\/+$/, ''), key } : null;
@@ -43,7 +50,7 @@ const LAST = ['Bruneau', 'Vasseur', 'Marchand', 'Lefèvre', 'Beaumont', 'Dufresn
   'Boulanger', 'Perrault', 'Delaunay', 'Tissandier', 'Villeneuve', 'Aubert'];
 
 export function pilotName() {
-  return localStorage.getItem(LS_PILOT) || '';
+  return store.get(LS_PILOT) || '';
 }
 
 /** The name a pilot flies under — assigned on the first flight if unset. */
@@ -55,14 +62,14 @@ export function ensurePilotName() {
 }
 export function setPilotName(name) {
   const clean = String(name || '').replace(/[<>&"'\\]|[\u0000-\u001F]/g, '').trim().slice(0, 24);
-  if (clean) localStorage.setItem(LS_PILOT, clean);
+  if (clean) store.set(LS_PILOT, clean);
   return clean;
 }
 export function pilotId() {
-  let id = localStorage.getItem(LS_PID);
+  let id = store.get(LS_PID);
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
     id = (crypto.randomUUID && crypto.randomUUID()) || fallbackUuid();
-    localStorage.setItem(LS_PID, id);
+    store.set(LS_PID, id);
   }
   return id;
 }

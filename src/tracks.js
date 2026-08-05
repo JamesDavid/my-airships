@@ -1,3 +1,7 @@
+// storage can throw outright (iOS private browsing) — never let it stop a flight
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not saved */ } }
+
 // Time-trial circuits (the "aerial gymkhana"). Historical warrant, Ch. XII:
 // "Ten times in succession I made the circuit of Longchamps, stopping each
 // time at a point designed beforehand." Gates thread the world's drama —
@@ -123,12 +127,12 @@ export function decodeGhost(code) {
 
 // custom tracks live in localStorage
 export function loadCustomTracks() {
-  try { return JSON.parse(localStorage.getItem('myairships_tracks') || '[]'); }
+  try { return JSON.parse(lsGet('myairships_tracks') || '[]'); }
   catch { return []; }
 }
 
 export function saveCustomTrack(t) {
   const list = loadCustomTracks().filter((x) => x.id !== t.id);
   list.push(t);
-  localStorage.setItem('myairships_tracks', JSON.stringify(list));
+  lsSet('myairships_tracks', JSON.stringify(list));
 }

@@ -282,6 +282,112 @@
     .msg { font-size:13px; }
   }
 </style>
+<!-- The boot guard. Deliberately a plain, old-fashioned script: no modules, no
+     arrow functions, no const — it has to survive on a browser too old to run
+     anything else, because that is exactly when it is needed. If the game fails
+     to start, this is the only thing that can say why. -->
+<script>
+(function () {
+  var faults = [], shown = false, panel = null;
+
+  function line(t) { var d = document.createElement('div'); d.textContent = t; return d; }
+
+  function report() {
+    if (!document.body) { setTimeout(report, 60); return; }
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.setAttribute('style', 'position:fixed;left:0;right:0;top:0;z-index:9999;'
+        + 'background:rgba(30,22,14,.97);color:#e9dcc4;font:13px/1.5 Georgia,serif;'
+        + 'padding:16px 18px;max-height:70vh;overflow:auto;border-bottom:1px solid #7a6647');
+      var h = document.createElement('div');
+      h.setAttribute('style', 'color:#e8c477;font-style:italic;font-size:18px;margin-bottom:6px');
+      h.textContent = 'She will not leave the shed';
+      panel.appendChild(h);
+      panel.appendChild(line('Something stopped the game loading. The details below are '
+        + 'what the works needs — the Copy button puts them on your clipboard.'));
+      var pre = document.createElement('pre');
+      pre.id = '__faultText';
+      pre.setAttribute('style', 'white-space:pre-wrap;word-break:break-word;font:12px/1.45 '
+        + 'ui-monospace,Menlo,Consolas,monospace;background:rgba(0,0,0,.3);padding:10px;margin:10px 0');
+      panel.appendChild(pre);
+      var btn = document.createElement('button');
+      btn.setAttribute('style', 'background:transparent;border:1px solid #e8c477;color:#e8c477;'
+        + 'font:inherit;padding:7px 14px;margin-right:8px');
+      btn.textContent = 'Copy the details';
+      btn.onclick = function () {
+        var t = document.getElementById('__faultText').textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(t);
+          btn.textContent = 'Copied';
+        } else {
+          var r = document.createRange(); r.selectNodeContents(document.getElementById('__faultText'));
+          var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+          btn.textContent = 'Selected — copy it';
+        }
+      };
+      panel.appendChild(btn);
+      var dis = document.createElement('button');
+      dis.setAttribute('style', 'background:transparent;border:1px solid rgba(122,102,71,.6);'
+        + 'color:#a89163;font:inherit;padding:7px 14px');
+      dis.textContent = 'Dismiss';
+      dis.onclick = function () { panel.parentNode.removeChild(panel); shown = false; panel = null; };
+      panel.appendChild(dis);
+      document.body.appendChild(panel);
+    }
+    document.getElementById('__faultText').textContent = facts();
+    shown = true;
+  }
+
+  function facts() {
+    var out = [];
+    out.push('page      ' + location.href);
+    out.push('browser   ' + navigator.userAgent);
+    out.push('screen    ' + (window.innerWidth + 'x' + window.innerHeight)
+      + ' @' + (window.devicePixelRatio || 1));
+    out.push('importmap ' + (window.HTMLScriptElement && HTMLScriptElement.supports
+      ? (HTMLScriptElement.supports('importmap') ? 'yes' : 'NO — three.js cannot be found')
+      : 'unknown'));
+    out.push('modules   ' + ('noModule' in document.createElement('script') ? 'yes' : 'NO'));
+    var gl = 'no';
+    try {
+      var c = document.createElement('canvas');
+      gl = (c.getContext('webgl2') && 'webgl2') || (c.getContext('webgl') && 'webgl') || 'NONE';
+    } catch (e) { gl = 'threw: ' + e; }
+    out.push('webgl     ' + gl);
+    var ls = 'no';
+    try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); ls = 'yes'; }
+    catch (e) { ls = 'NO — ' + (e && e.name) + ' (private browsing?)'; }
+    out.push('storage   ' + ls);
+    out.push('booted    ' + (window.__maBooted ? 'yes' : 'NO — no frame was ever drawn'));
+    out.push('');
+    out.push(faults.length ? faults.join('\n')
+      : (window.__maBooted ? '(no faults recorded)'
+        : '(nothing threw — a module most likely failed to load, or to parse on this browser)'));
+    return out.join('\n');
+  }
+
+  window.addEventListener('error', function (e) {
+    // capture phase, so a <script> or module that fails to LOAD is caught too
+    var src = e.filename || (e.target && (e.target.src || e.target.href)) || '';
+    var msg = e.message || (e.error && e.error.message) || 'failed to load';
+    faults.push(msg + (src ? '   [' + src.replace(/^.*\//, '') + (e.lineno ? ':' + e.lineno : '') + ']' : ''));
+    report();
+  }, true);
+
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    faults.push('unresolved: ' + ((r && (r.message || r)) || 'unknown'));
+    report();
+  });
+
+  // nothing may have thrown at all — a module that never parses is silent. If no
+  // frame has been drawn by then, say so anyway.
+  setTimeout(function () { if (!window.__maBooted && !shown) report(); }, 9000);
+
+  window.__faultFacts = facts;
+})();
+</script>
+
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",

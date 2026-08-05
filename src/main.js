@@ -16,6 +16,16 @@ import * as net from './net.js';
 import * as live from './live.js';
 import { courseLength, shipTopSpeed } from './anticheat.js';
 
+// ---------------------------------------------------------------- the drawer
+// iOS Safari in private browsing has a localStorage that THROWS on write, and
+// Firefox can refuse it outright. Every read and write goes through here, so a
+// pilot who cannot save a best time can still fly.
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* nothing to do */ } },
+};
+
 // ---------------------------------------------------------------- the fault book
 // Kept from the first line, before anything else can throw: a pilot reporting
 // a fault should not have to reproduce it with the console open.
@@ -136,7 +146,7 @@ function loadBest(t) {
     return;
   }
   chaseGhost = null;
-  try { ghostBest = JSON.parse(localStorage.getItem(bestKey(t)) || 'null'); }
+  try { ghostBest = JSON.parse(store.get(bestKey(t)) || 'null'); }
   catch { ghostBest = null; }
   updateGhostMesh();
 }
@@ -255,7 +265,7 @@ function loadWorld(loc) {
   race.state = 'idle'; race.t = 0; race.gate = 0;
   // each course keeps its own record: the Deutsch half-hour and the St. Louis
   // ten minutes are not the same achievement
-  race.best = +(localStorage.getItem(bestRaceKey()) || 0);
+  race.best = +(store.get(bestRaceKey()) || 0);
   setCenter('', '');
   spawnShip(currentShip);
   camPos.set(world.padPos.x - 90, 45, world.padPos.z + 90);
@@ -400,7 +410,7 @@ function setTouchUI(on) {
   document.body.classList.toggle('touch', on);
   if (on) wireTouchControls();
   else { touchPitch = 0; touchHelm = 0; throttleLever = false; }   // give the keys back the motor
-  localStorage.setItem('myairships_touchui', on ? '1' : '0');
+  store.set('myairships_touchui', on ? '1' : '0');
 }
 
 // capturing the pointer is a convenience, never a precondition: if the
@@ -492,7 +502,7 @@ function drawThrottleLever() {
 }
 
 // on-screen controls default ON everywhere; the menu toggle remembers "off"
-const touchPref = localStorage.getItem('myairships_touchui');
+const touchPref = store.get('myairships_touchui');
 if (touchPref !== '0') setTouchUI(true);
 
 let touchPitch = 0;      // trim sliders: they hold their setting, like real weights
@@ -641,7 +651,7 @@ function buildMenuButtons() {
   // scenarios column
   const scenDiv = document.getElementById('menuScens');
   scenDiv.innerHTML = '';
-  const doneMap = JSON.parse(localStorage.getItem('myairships_scen') || '{}');
+  const doneMap = JSON.parse(store.get('myairships_scen') || '{}');
   for (const def of SCENARIOS) {
     menuButton(scenDiv, (doneMap[def.id] ? '✓ ' : '') + def.title, def.sub, () => startScenario(def));
   }
@@ -658,7 +668,7 @@ function buildMenuButtons() {
   }
   for (const t of [...TRACKS, ...loadCustomTracks()]) {
     let best = null;
-    try { best = JSON.parse(localStorage.getItem(bestKey(t)) || 'null'); } catch { /* noop */ }
+    try { best = JSON.parse(store.get(bestKey(t)) || 'null'); } catch { /* noop */ }
     // warn before the flight, not at the moment the tank runs dry
     const P = ship.spec.physics;
     const vTop = shipTopSpeed(ship.spec);
@@ -1440,14 +1450,14 @@ function resetShip() {
 // half-hour at Paris and Monaco, the ten minutes of the St. Louis prize)
 function bestRaceKey() { return `myairships_best_${currentLocation}`; }
 (function migrateOldBest() {
-  const old = localStorage.getItem('myairships_best');
-  if (old && !localStorage.getItem('myairships_best_paris')) {
-    localStorage.setItem('myairships_best_paris', old);   // it can only have been Paris
-    localStorage.removeItem('myairships_best');
+  const old = store.get('myairships_best');
+  if (old && !store.get('myairships_best_paris')) {
+    store.set('myairships_best_paris', old);   // it can only have been Paris
+    store.del('myairships_best');
   }
 })();
 const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult: null,
-  best: +(localStorage.getItem('myairships_best_paris') || 0) };
+  best: +(store.get('myairships_best_paris') || 0) };
 
 function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
@@ -1609,7 +1619,7 @@ function finishRace() {
     const beatRivals = !rivals.some((r) => r.beatPlayer);
     race.lastResult = { won, beatSantos, beatRivals, t };
     if (won && (!race.best || t < race.best)) {
-      race.best = t; localStorage.setItem(bestRaceKey(), String(t));
+      race.best = t; store.set(bestRaceKey(), String(t));
     }
     let sub;
     if (!encircled) {
@@ -1630,12 +1640,12 @@ function finishRace() {
   // best still comes from your own ledger, not from the rival's trace
   const rival = ghostBest && ghostBest.foreign ? ghostBest : null;
   let prev = ghostBest;
-  if (rival) { try { prev = JSON.parse(localStorage.getItem(bestKey(track)) || 'null'); } catch { prev = null; } }
+  if (rival) { try { prev = JSON.parse(store.get(bestKey(track)) || 'null'); } catch { prev = null; } }
   const run = { t, splits: race.splits.slice(), dt: GHOST_DT, p: ghostRec.slice(),
     pilot: net.pilotName(), ship: currentShip };
   const improved = !prev || t < prev.t;
   if (improved) {
-    try { localStorage.setItem(bestKey(track), JSON.stringify(run)); } catch { /* full */ }
+    try { store.set(bestKey(track), JSON.stringify(run)); } catch { /* full */ }
     if (!rival) { ghostBest = run; updateGhostMesh(); }
     submitBest(track, run);            // fire and forget; failures are toasts
   }
@@ -1712,9 +1722,9 @@ function startScenario(def) {
 }
 
 function scenComplete(text) {
-  const done = JSON.parse(localStorage.getItem('myairships_scen') || '{}');
+  const done = JSON.parse(store.get('myairships_scen') || '{}');
   done[scenario.id] = true;
-  localStorage.setItem('myairships_scen', JSON.stringify(done));
+  store.set('myairships_scen', JSON.stringify(done));
   scenRing.visible = false;
   if (scenBeacon) scenBeacon.visible = false;
   clearRoute();
@@ -2126,11 +2136,37 @@ addEventListener('resize', () => {
   if (composer) composer.setSize(innerWidth, innerHeight);
 });
 
-net.ensurePilotName();   // every pilot is entered in the register on arrival
-wireBugBook();           // no office configured, no fault book — see net_config.js
-loadWorld('paris');
-toggleMenu(true);   // start screen: choose your ship and your sky
-document.getElementById('help').classList.add('hidden');
+// ---------------------------------------------------------------- casting off
+// Each step stands on its own. A fault in the register, or in the fault book
+// itself, used to take the whole flight with it: the world never loaded, the
+// frame loop at the foot of this file was never reached, and the pilot got a
+// salmon screen with the instruments painted on it. Now one step failing costs
+// only that step, and says so.
+function step(what, fn) {
+  try { fn(); return true; } catch (e) {
+    console.error('[boot] ' + what, e);
+    bootFaults.push(what + ': ' + ((e && e.message) || e));
+    return false;
+  }
+}
+const bootFaults = [];
+
+step('the register', () => net.ensurePilotName());
+const flying = step('the world', () => loadWorld('paris'));
+step('the fault book', () => wireBugBook());
+step('the menu', () => {
+  toggleMenu(true);   // start screen: choose your ship and your sky
+  document.getElementById('help').classList.add('hidden');
+});
+if (bootFaults.length) {
+  // the guard in index.html is the only thing a pilot on a telephone can read
+  addEventListener('load', () => {
+    if (!flying) console.error('[boot] she never left the shed:', bootFaults.join(' | '));
+  });
+  setTimeout(() => {
+    addMsg('boot', 'Some of the works did not start: ' + bootFaults.join('; '), 0);
+  }, 1200);
+}
 
 // debug handle
 window.__game = { get ship() { return ship; }, get camMode() { return camMode; }, get world() { return world; },
@@ -2144,6 +2180,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
+  window.__maBooted = true;      // tells the boot guard she is drawing
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
