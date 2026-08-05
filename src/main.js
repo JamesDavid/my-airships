@@ -16,6 +16,7 @@ import { TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, l
 import * as net from './net.js';
 import * as live from './live.js';
 import { courseLength, shipTopSpeed } from './anticheat.js';
+import { GAMES, gameById, pickPlaces, hiddenPlace, warmth, KID_WIND, TAG_GRACE, FOLLOW_RANGE } from './games.js';
 
 // ---------------------------------------------------------------- the drawer
 // iOS Safari in private browsing has a localStorage that THROWS on write, and
@@ -305,11 +306,12 @@ let camMode = 0, muted = false;
 addEventListener('keydown', (e) => {
   initAudio();
   if (e.code === 'Escape') {
-    if (bugBookOpen()) closeBugBook(); else if (boardOpen()) closeBoard(); else toggleMenu();
+    if (albumOpen()) closeAlbum();
+    else if (bugBookOpen()) closeBugBook(); else if (boardOpen()) closeBoard(); else toggleMenu();
     return;
   }
   // while a panel is up the simulation is paused: don't fly the ship behind it
-  if (menuOpen || boardOpen() || bugBookOpen()) return;
+  if (menuOpen || boardOpen() || bugBookOpen() || albumOpen()) return;
   keys[e.code] = true;
   if (e.code === 'Space') { ship.dropBallast(); e.preventDefault(); }
   if (e.code === 'KeyF') input.coax = true;
@@ -812,6 +814,11 @@ function buildMenuButtons() {
         () => { submitBest(track, ghostBest); toggleMenu(false); });
     }
   }
+  {
+    const n = albumGet().length;
+    menuButton(trDiv, 'Your postcards', n ? `${n} collected` : 'none yet — fly a postcard hunt',
+      () => { toggleMenu(false); openAlbum(); });
+  }
   menuButton(trDiv, 'Load a track code', 'paste a friend’s circuit', () => {
     const code = prompt('Paste the track code:');
     if (!code) return;
@@ -957,10 +964,35 @@ function buildTogether() {
       toggleMenu(false);
       tryStartRace();
     });
+    // ---- the games a child can be handed the controls for ----
+    const gh = document.createElement('div');
+    gh.className = 'officeline';
+    gh.innerHTML = play.id
+      ? `<b>Playing ${escapeHtml((gameById(play.id) || {}).name || play.id)}</b> — half the day’s wind`
+      : '<b>Games</b> — gentler than a trial, and nobody is knocked out';
+    div.appendChild(gh);
+    for (const g of GAMES) {
+      const few = live.roster().filter((r) => !r.spectating).length < g.minPilots;
+      menuButton(div, g.name, few ? `${g.sub} · wants ${g.minPilots} pilots` : g.sub, () => {
+        if (few) { addMsg('game', `${g.name} wants at least ${g.minPilots} aboard.`, 5); return; }
+        live.callGame(g.id, 1);
+        if (g.id === 'tag') {                    // somebody has to be it to begin with
+          const all = live.roster().filter((r) => !r.spectating);
+          live.startIt(all[Math.floor(Math.random() * all.length)].key);
+        }
+        toggleMenu(false);
+      }, play.id === g.id);
+    }
+    if (play.id) menuButton(div, 'Call the game off', 'back to free flight', () => {
+      live.callGame(null); toggleMenu(false);
+    });
   } else {
     const line = document.createElement('div');
     line.className = 'officeline';
-    line.innerHTML = 'Waiting on the host to call the race — fly about until they do.';
+    line.innerHTML = play.id
+      ? `<b>Playing ${escapeHtml((gameById(play.id) || {}).name || play.id)}</b> — `
+        + escapeHtml((gameById(play.id) || {}).sub || '')
+      : 'Waiting on the host to call the race or a game — fly about until they do.';
     div.appendChild(line);
   }
   menuButton(div, 'Copy the room code', info.code, () => {
@@ -995,6 +1027,291 @@ function bearingTag(r) {
   const far = d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d / 5) * 5 + ' m';
   return ` <span class="brg" style="transform:rotate(${deg.toFixed(0)}deg)">➤</span>`
     + `<span style="opacity:.5"> ${far}</span>`;
+}
+
+// ---------------------------------------------------------------- the games
+// Tag, the postcard hunt, hot-and-cold and follow-the-leader. What is being
+// played is the host's word, broadcast; WHERE everything is is worked out
+// locally from the day and the room code, so nothing but "I found one" is sent.
+const play = {
+  id: null, round: 1,          // which game, and which hunt within it
+  places: [],                  // the hunt's list, or the single hidden place
+  got: new Set(),              // what I have collected this round
+  gems: [],                    // the shining things, as meshes
+  itSince: 0, itTimes: new Map(),   // tag: who is it, and for how long each has been
+  lastTag: 0,                  // the no-tag-backs grace
+  ping: 0, pause: 0,           // hot-and-cold: the next bell, and the pause after a find
+  kept: 0, lost: 0,            // follow: seconds with the leader and without
+  said: '',                    // the line under the instruments
+};
+
+function kidGame() { return !!play.id; }
+
+function clearGems() {
+  for (const g of play.gems) { scene.remove(g); g.geometry.dispose(); g.material.dispose(); }
+  play.gems = [];
+}
+
+/** A gem turning in the air over a place, bright enough to see from a way off. */
+function makeGem(p) {
+  const m = new THREE.Mesh(new THREE.OctahedronGeometry(7, 0),
+    new THREE.MeshBasicMaterial({ color: 0x7fe3c4, transparent: true, opacity: 0.92, fog: false }));
+  m.position.set(p.x, p.y, p.z);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(15, 12, 10),
+    new THREE.MeshBasicMaterial({ color: 0x7fe3c4, transparent: true, opacity: 0.14,
+      depthWrite: false, fog: false }));
+  m.add(halo);
+  m.userData.place = p;
+  scene.add(m);
+  play.gems.push(m);
+  return m;
+}
+
+function startGame(id, round) {
+  clearGems();
+  play.id = id; play.round = round || 1;
+  play.got = new Set(); play.ping = 0; play.pause = 0; play.kept = 0; play.lost = 0;
+  play.itTimes = new Map(); play.lastTag = 0; play.said = '';
+  const code = live.inRoom() ? live.roomInfo().code : 'solo';
+  if (id === 'postcards') {
+    play.places = pickPlaces(world, code, play.round, 6);
+    for (const p of play.places) makeGem(p);
+    setCenter('The postcard hunt', 'Six gems are turning over the famous places. '
+      + 'Fly through one and a postcard is made of it, with your ship in the picture.');
+  } else if (id === 'hotcold') {
+    play.places = [hiddenPlace(world, code, play.round)].filter(Boolean);
+    setCenter('Hot and cold', 'Something is hidden over one of the places. '
+      + 'The bell rings faster as you get warmer — there is nothing to read.');
+  } else if (id === 'tag') {
+    play.places = [];
+    setCenter('Tag', 'Fly into another ship to pass it on. Silk on silk: nobody is hurt.');
+  } else if (id === 'follow') {
+    play.places = [];
+    setCenter('Follow the leader', `Stay within ${FOLLOW_RANGE} metres of the ship in front.`);
+  }
+  if (id) addMsg('game', gameById(id) ? gameById(id).how : '', 0);
+  buildMenuButtons();
+}
+
+function stopGame(quiet) {
+  clearGems();
+  play.id = null; play.places = []; play.got = new Set(); play.said = '';
+  if (!quiet) setCenter('', '');
+  buildMenuButtons();
+}
+
+// ---------------------------------------------------------------- postcards
+// The reward for finding a gem: a photograph of the place with your own ship in
+// it, framed and captioned like a card of the period.
+//
+// It is rendered to an offscreen target rather than to the screen, so nothing
+// flickers and the pilot never sees the camera jump. That also means it misses
+// the bloom pass, so the warmth is put back with a wash in the 2D frame.
+const CARD_W = 760, CARD_H = 500;
+let cardTarget = null, cardCam = null;
+
+function shootPostcard(place) {
+  try {
+    if (!cardTarget) {
+      // sRGB on the target: rendering to the screen gets the output conversion
+      // for free, rendering to a target does not, and without it every postcard
+      // came out as a dark brown evening
+      cardTarget = new THREE.WebGLRenderTarget(CARD_W, CARD_H,
+        { colorSpace: THREE.SRGBColorSpace });
+      cardCam = new THREE.PerspectiveCamera(52, CARD_W / CARD_H, 0.5, 20000);
+    }
+    // stand off along the line from the place to the ship, and take them both in
+    const at = new THREE.Vector3(place.x, place.y * 0.62, place.z);
+    const away = ship.pos.clone().sub(at); away.y = 0;
+    if (away.lengthSq() < 1) away.set(1, 0, 0);
+    away.normalize();
+    // Stand off behind the ship, on the far side from the place, and only as far
+    // as is needed to hold them both: 62 m put the ship in the middle distance
+    // and the postcard was of some rooftops. She is the subject.
+    const d = Math.hypot(ship.pos.x - place.x, ship.pos.z - place.z);
+    const back = Math.min(95, Math.max(38, d * 0.95));
+    cardCam.position.copy(ship.pos).addScaledVector(away, back)
+      .add(new THREE.Vector3(0, back * 0.3, 0));
+    cardCam.lookAt(ship.pos.clone().lerp(at, 0.5));
+    cardCam.updateProjectionMatrix();
+
+    const wasRope = ship.ropeLine && ship.ropeLine.visible;
+    renderer.setRenderTarget(cardTarget);
+    renderer.render(scene, cardCam);
+    renderer.setRenderTarget(null);
+    if (wasRope) ship.ropeLine.visible = true;
+
+    const buf = new Uint8Array(CARD_W * CARD_H * 4);
+    renderer.readRenderTargetPixels(cardTarget, 0, 0, CARD_W, CARD_H, buf);
+    return frameCard(buf, place);
+  } catch (e) {
+    console.warn('[postcard]', e);
+    return null;
+  }
+}
+
+/** The picture, turned the right way up and given a border and a caption. */
+function frameCard(buf, place) {
+  const raw = document.createElement('canvas');
+  raw.width = CARD_W; raw.height = CARD_H;
+  const rg = raw.getContext('2d');
+  const img = rg.createImageData(CARD_W, CARD_H);
+  // WebGL hands the pixels back bottom-up
+  for (let y = 0; y < CARD_H; y++) {
+    const src = (CARD_H - 1 - y) * CARD_W * 4, dst = y * CARD_W * 4;
+    img.data.set(buf.subarray(src, src + CARD_W * 4), dst);
+  }
+  rg.putImageData(img, 0, 0);
+
+  const M = 26, c = document.createElement('canvas');
+  c.width = CARD_W + M * 2; c.height = CARD_H + M * 2 + 44;
+  const g = c.getContext('2d');
+  g.fillStyle = '#efe3c8'; g.fillRect(0, 0, c.width, c.height);      // the card stock
+  g.drawImage(raw, M, M);
+  g.fillStyle = 'rgba(196,150,74,0.16)';                             // the warmth of the day
+  g.fillRect(M, M, CARD_W, CARD_H);
+  g.strokeStyle = '#8a6d3b'; g.lineWidth = 2;
+  g.strokeRect(M - 1, M - 1, CARD_W + 2, CARD_H + 2);
+
+  g.fillStyle = '#4a3a24';
+  g.font = 'italic 27px Georgia, serif';
+  g.textBaseline = 'middle';
+  g.fillText(place.name, M, CARD_H + M + 24);
+  g.font = 'italic 15px Georgia, serif';
+  g.fillStyle = '#7a6647';
+  const who = net.pilotName() || 'a pilot';
+  const line = `${(SHIPS[currentShip] || SHIPS.no6).name} · ${who}`;
+  g.textAlign = 'right';
+  g.fillText(line, c.width - M, CARD_H + M + 24);
+  g.textAlign = 'left';
+  return c.toDataURL('image/jpeg', 0.74);
+}
+
+// ---- the album ----------------------------------------------------------
+const LS_CARDS = 'myairships_cards';
+const CARD_MAX = 24;
+function albumGet() { const a = store.json(LS_CARDS, []); return Array.isArray(a) ? a : []; }
+function albumAdd(place, url) {
+  if (!url) return;
+  const a = albumGet().filter((c) => c.id !== place.id || c.place !== currentLocation);
+  a.unshift({ id: place.id, name: place.name, place: currentLocation, url });
+  while (a.length > CARD_MAX) a.pop();
+  // the drawer is not infinite: drop the oldest until it will go in
+  while (a.length && !store.set(LS_CARDS, JSON.stringify(a))) a.pop();
+}
+
+// ---------------------------------------------------------------- playing
+function tickGames(dt) {
+  if (!play.id || !ship) return;
+  for (const g of play.gems) {                       // they turn and breathe
+    g.rotation.y += dt * 1.1;
+    g.position.y = g.userData.place.y + Math.sin(windGustT * 1.6 + g.userData.place.x) * 2.2;
+  }
+  if (play.id === 'postcards') return tickHunt(dt);
+  if (play.id === 'hotcold') return tickHotCold(dt);
+  if (play.id === 'tag') return tickTag(dt);
+  if (play.id === 'follow') return tickFollow(dt);
+}
+
+function tickHunt() {
+  for (let i = play.gems.length - 1; i >= 0; i--) {
+    const gem = play.gems[i];
+    const p = gem.userData.place;
+    if (play.got.has(p.id)) continue;
+    if (ship.pos.distanceTo(gem.position) > 26) continue;
+    play.got.add(p.id);
+    scene.remove(gem); play.gems.splice(i, 1);
+    blip(880); setTimeout(() => blip(1180), 110);
+    const url = shootPostcard(p);
+    albumAdd(p, url);
+    addMsg('card', `${p.name} — a postcard is made of her.`, 6);
+    if (live.inRoom()) live.callClaim(p.id, { name: p.name });
+    if (play.got.size >= play.places.length) {
+      setCenter('All of them!', 'Every gem found — your postcards are in the menu, under Solo.');
+      blip(1320);
+    }
+  }
+  play.said = `Gems: ${play.got.size} of ${play.places.length}`;
+}
+
+function tickHotCold(dt) {
+  // a moment to enjoy having found it before the next one begins
+  if (play.pause > 0) {
+    play.pause -= dt;
+    if (play.pause <= 0) startGame('hotcold', play.round + 1);
+    return;
+  }
+  const p = play.places[0];
+  if (!p) return;
+  const d = Math.hypot(ship.pos.x - p.x, ship.pos.z - p.z);
+  const w = warmth(d, p.r, 1800);
+  play.said = w > 0.92 ? 'BURNING' : w > 0.75 ? 'very warm' : w > 0.5 ? 'warm'
+    : w > 0.28 ? 'cool' : 'cold';
+  // the bell: a slow toll a long way off, a chatter when you are on top of it
+  play.ping -= dt;
+  if (play.ping <= 0) {
+    play.ping = 1.6 - w * 1.45;
+    blip(520 + w * 900);
+  }
+  if (d < p.r) {
+    blip(1320); setTimeout(() => blip(1600), 120);
+    addMsg('found', `Found it — ${p.name}!`, 7);
+    if (live.inRoom()) live.callClaim(p.id, { name: p.name });
+    play.said = `FOUND IT — ${p.name}!`;
+    play.pause = 3.5;                                // then the next one
+  }
+}
+
+function tickTag(dt) {
+  const meIt = live.isIt();
+  const it = live.itNow();
+  if (it) {
+    play.itTimes.set(it, (play.itTimes.get(it) || 0) + dt);
+  }
+  play.lastTag = Math.max(0, play.lastTag - dt);
+  if (meIt && play.lastTag <= 0) {
+    const hit = live.touchedNow();
+    if (hit.length) {
+      live.passIt(hit[0]);
+      play.lastTag = TAG_GRACE;
+      blip(760);
+    }
+  }
+  const who = live.roster().find((r) => r.key === it);
+  play.said = !it ? 'Nobody is it yet' : meIt ? 'YOU ARE IT — catch somebody!'
+    : `${who ? who.pilot : 'Someone'} is it — keep away!`;
+}
+
+function tickFollow(dt) {
+  const host = live.hostSeat();
+  if (host === live.seat()) { play.said = 'You lead — they are following you.'; return; }
+  const lead = live.roster().find((r) => r.key === host);
+  if (!lead || !lead.pos) { play.said = 'Waiting for the leader…'; return; }
+  const d = Math.hypot(ship.pos.x - lead.pos.x, ship.pos.z - lead.pos.z);
+  if (d <= FOLLOW_RANGE) { play.kept += dt; play.said = `With her — ${Math.round(d)} m`; }
+  else { play.lost += dt; play.said = `Falling behind — ${Math.round(d)} m`; }
+}
+
+function albumOpen() { return !document.getElementById('album').classList.contains('hidden'); }
+function closeAlbum() { document.getElementById('album').classList.add('hidden'); }
+function openAlbum() {
+  const rows = document.getElementById('albumRows');
+  const cards = albumGet();
+  document.getElementById('albumSub').textContent = cards.length
+    ? 'Tap one to see it whole. They are kept on this machine.'
+    : 'None yet. Fly a postcard hunt and they will collect here.';
+  rows.innerHTML = '';
+  for (const c of cards) {
+    const f = document.createElement('figure');
+    const i = document.createElement('img');
+    i.src = c.url; i.alt = c.name;
+    i.onclick = () => window.open(c.url, '_blank');
+    const cap = document.createElement('figcaption');
+    cap.textContent = c.name;
+    f.append(i, cap);
+    rows.appendChild(f);
+  }
+  document.getElementById('album').classList.remove('hidden');
 }
 
 let roomTick = 0;
@@ -1115,6 +1432,22 @@ async function createOrJoinRoom(trackId, code, hosting, listed = true) {
       drawRoom();
     },
     onGate: () => drawRoom(),
+    onGame: (p) => {
+      if (!p.game) { stopGame(); addMsg('game', `${p.by} calls the game off.`, 0); return; }
+      addMsg('game', `${p.by} calls ${(gameById(p.game) || {}).name || p.game}!`, 0);
+      startGame(p.game, p.round);
+    },
+    onClaim: (p) => {
+      if (p.k === live.seat()) return;
+      addMsg('claim', `${p.pilot} has found ${p.name || 'one'}.`, 6);
+      drawRoom();
+    },
+    onTag: (p) => {
+      const mine = p.it === live.seat();
+      addMsg('tag', mine ? 'You are IT!' : `${p.by} tags ${(live.roster().find((r) => r.key === p.it) || {}).pilot || 'someone'}.`, 5);
+      if (mine) { play.lastTag = TAG_GRACE; blip(420); }
+      drawRoom();
+    },
     onNotice: (p) => addMsg('roomsay', `${p.pilot}: ${p.text}`, 0),
   });
   if (!res.ok) {
@@ -1559,8 +1892,20 @@ function tryStartRace() {
     addMsg('roomgo', 'You call “Let go all!” — the room is away in eight.', 0);
     return;
   }
-  // in a lap trial, Enter is instant restart
-  if (track && !track.historic && race.state !== 'idle') { startTrack(track); return; }
+  // In a lap trial Enter is instant restart — which is exactly what you want
+  // between attempts and exactly what you do not want mid-flight, where one
+  // stray press throws away the lap you were on. Ask, once.
+  if (track && !track.historic && race.state !== 'idle') {
+    const now = performance.now();
+    if (race.state === 'run' && (!tryStartRace._askedAt || now - tryStartRace._askedAt > 4000)) {
+      tryStartRace._askedAt = now;
+      addMsg('restart', 'You are flying the trial — press GO again to throw this run away and start afresh.', 4);
+      return;
+    }
+    tryStartRace._askedAt = 0;
+    startTrack(track);
+    return;
+  }
   if (race.state !== 'idle' || ship.wrecked) return;
   if (ship.pos.distanceTo(world.startRing) > 150) {
     addMsg('far', 'Convoke the Commission at the gold start ring, above the aerodrome.', 6);
@@ -2262,6 +2607,7 @@ function updateHUD() {
   // true-wind arrow, relative to your heading (up = blowing the way you point)
   const rel = Math.atan2(-w.z, w.x) - ship.yaw;
   el('windArrow').style.transform = `rotate(${-90 - rel * 180 / Math.PI}deg)`;
+  el('play').textContent = play.id ? play.said : '';
   el('gasBar').style.width = ship.gas + '%';
   el('gasPct').textContent = Math.round(ship.gas) + '%';
   const fMax = ship.spec.physics.fuel;
@@ -2370,6 +2716,7 @@ step('the register', () => net.ensurePilotName());
 const flying = step('the world', () => loadWorld('paris'));
 step('the fault book', () => wireBugBook());
 step('the sound', () => wireSound());
+step('the album', () => { document.getElementById('albumClose').onclick = closeAlbum; });
 step('the menu', () => {
   toggleMenu(true);   // start screen: choose your ship and your sky
   document.getElementById('help').classList.add('hidden');
@@ -2402,7 +2749,7 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  if (menuOpen || boardOpen() || bugBookOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
+  if (menuOpen || boardOpen() || bugBookOpen() || albumOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
 
   // the sky runs on its own clock, not on how long this page has been open:
   // otherwise two pilots at the same instant get different gusts and different
@@ -2410,6 +2757,10 @@ function frame(now) {
   windGustT = skyTime();
   wind.x = dailyWind.x + Math.sin(windGustT * 0.13) * 0.7 + Math.sin(windGustT * 0.041 + 2) * 0.9;
   wind.z = dailyWind.z + Math.sin(windGustT * 0.07 + 1) * 0.5;
+  // A children's game is flown in half the day's wind. Not none of it: riding
+  // it high and crawling home low against it is the whole lesson of the book,
+  // and a dead calm teaches nothing at all. Half lets a small pilot get home.
+  if (kidGame()) wind.multiplyScalar(KID_WIND);
 
   pollInput();
   const env = {
@@ -2529,6 +2880,7 @@ function frame(now) {
     if (u.flowUv) { u.flowUv.value.x += wind.x * dt; u.flowUv.value.y += wind.z * dt; }
   }
 
+  tickGames(dt);
   updateCamera(dt);
   updateHUD();
   // the blocks above change size as the wind, the trial and the roster change:

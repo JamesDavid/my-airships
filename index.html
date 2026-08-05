@@ -25,6 +25,8 @@
   #panelTL { top:calc(14px + env(safe-area-inset-top, 0px));
     left:calc(16px + env(safe-area-inset-left, 0px)); font-size:15px; line-height:1.5; }
   #panelTL b { font-size:13px; letter-spacing:.12em; opacity:.65; }
+  /* how the game is going, under the instruments */
+  #play { font-size:14px; font-style:italic; color:#6b4a1e; margin-top:3px; min-height:17px; }
   #panelTR { top:calc(14px + env(safe-area-inset-top, 0px));
     right:calc(18px + env(safe-area-inset-right, 0px)); text-align:right; }
   #timer { font-size:30px; font-variant-numeric:tabular-nums; }
@@ -35,7 +37,8 @@
   #objective { font-size:14px; font-style:italic; opacity:.85; max-width:300px; }
   #best { font-size:12px; opacity:.6; }
   #wr { font-size:12.5px; color:#c9a437; opacity:.9; min-height:15px; }
-  #room { position:fixed; top:calc(120px + env(safe-area-inset-top, 0px));
+  /* below the instruments AND the game's line under them */
+  #room { position:fixed; top:calc(146px + env(safe-area-inset-top, 0px));
     left:calc(16px + env(safe-area-inset-left, 0px)); font-size:13px; color:#3a2c1e;
     text-shadow:0 1px 0 rgba(255,255,255,.35); pointer-events:none; }
   #room .rhead { font-size:11.5px; letter-spacing:.12em; opacity:.7; }
@@ -148,6 +151,21 @@
   #boardBtns button { background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
     font-family:inherit; font-size:13px; padding:6px 12px; cursor:pointer; }
   #boardBtns button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
+
+  /* the album of postcards */
+  #album { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.95);
+    color:#e9dcc4; padding:22px 28px 0; border:1px solid #7a6647; width:720px; max-width:94vw;
+    max-height:88vh; overflow-y:auto; overflow-x:hidden; box-sizing:border-box; z-index:60; }
+  #album h2 { margin:0 0 4px; font-weight:normal; font-style:italic; font-size:22px; color:#e8c477; }
+  #albumRows { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  #albumRows figure { margin:0; width:214px; }
+  #albumRows img { width:100%; display:block; border:1px solid rgba(122,102,71,.5); cursor:pointer; }
+  #albumRows figcaption { font-size:11.5px; font-style:italic; opacity:.7; margin-top:3px; }
+  #albumBtns { position:sticky; bottom:0; margin-top:14px; padding:12px 0 18px;
+    background:rgba(30,22,14,.97); display:flex; gap:8px; }
+  #albumBtns button { background:transparent; border:1px solid rgba(122,102,71,.45); color:#e9dcc4;
+    font-family:inherit; font-size:13px; padding:6px 12px; cursor:pointer; }
+  #albumBtns button:hover { background:rgba(232,196,119,.14); border-color:#e8c477; }
 
   /* the fault book — only ever built when the record office is reachable */
   #bug { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.95);
@@ -496,6 +514,7 @@
   <b>SPEED</b> <span id="spd">0</span> km/h<br>
   <b>THROTTLE</b> <span id="thr">0</span>%<br>
   <b>WIND</b> <span id="windArrow" style="display:inline-block">➤</span> <span id="wind">—</span>
+  <div id="play"></div>
 </div>
 
 <div class="hud" id="panelTR">
@@ -572,6 +591,13 @@
 </div>
 
 <!-- world records: only ever shown when an online record office is configured -->
+<div id="album" class="hidden">
+  <h2>Your postcards</h2>
+  <div class="officeline" id="albumSub">The places you have found, and the day you found them.</div>
+  <div id="albumRows"></div>
+  <div id="albumBtns"><button id="albumClose">Close</button></div>
+</div>
+
 <div id="bug" class="hidden">
   <h2>The fault book</h2>
   <div class="officeline">Tell the works what went wrong — what you did, and what she did instead.</div>

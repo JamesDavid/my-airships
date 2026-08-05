@@ -288,6 +288,16 @@ async function connect(trackId, code) {
   });
   channel.on('broadcast', { event: 'done' }, ({ payload }) => handlers.onResult?.(payload));
   channel.on('broadcast', { event: 'said' }, ({ payload }) => handlers.onNotice?.(payload));
+  // the children's games: what is being played, and what has been found
+  channel.on('broadcast', { event: 'game' }, ({ payload }) => {
+    game = payload.game ? { id: payload.game, round: payload.round || 1, by: payload.by } : null;
+    handlers.onGame?.(payload);
+  });
+  channel.on('broadcast', { event: 'claim' }, ({ payload }) => handlers.onClaim?.(payload));
+  channel.on('broadcast', { event: 'tag' }, ({ payload }) => {
+    itSeat = payload.it || null;
+    handlers.onTag?.(payload);
+  });
 
   const status = await new Promise((resolve) => {
     let settled = false;
@@ -308,7 +318,7 @@ async function connect(trackId, code) {
 export function leave() {
   try { channel?.untrack(); channel?.unsubscribe(); } catch { /* going anyway */ }
   for (const key of [...remotes.keys()]) drop(key);
-  channel = null; room = null;
+  channel = null; room = null; game = null; itSeat = null;
   advertise();                         // take the room off the list
   if (!onLobby) stopLobby();           // nobody is reading it any more either
   maybeDisconnect();
@@ -366,6 +376,41 @@ export function callCourse(trackId) {
   advertise();
 }
 export function seat() { return SEAT; }
+
+// ---------------------------------------------------------------- the games
+let game = null, itSeat = null;
+export function gameNow() { return game; }
+export function itNow() { return itSeat; }
+export function isIt() { return !!itSeat && itSeat === SEAT; }
+
+/** Host only: start (or stop, with null) a game for the whole room. */
+export function callGame(id, round = 1) {
+  game = id ? { id, round, by: me.pilot } : null;
+  itSeat = null;
+  channel?.send({ type: 'broadcast', event: 'game',
+    payload: { game: id, round, by: me.pilot } });
+  handlers.onGame?.({ game: id, round, by: me.pilot });
+}
+
+/** "I have got number three" — or, in tag, "you are it now". */
+export function callClaim(what, extra = {}) {
+  channel?.send({ type: 'broadcast', event: 'claim',
+    payload: { k: me.key, pilot: me.pilot, what, ...extra } });
+}
+
+/**
+ * Tag is settled by whoever is IT: they are the one who knows they made the
+ * catch, and they are the only one allowed to say so. That makes a quarter
+ * second of lag harmless — nobody else can declare themselves caught, and no
+ * two pilots can pass it at once.
+ */
+export function passIt(toKey) {
+  itSeat = toKey;
+  channel?.send({ type: 'broadcast', event: 'tag',
+    payload: { it: toKey, by: me.pilot, from: me.key } });
+  handlers.onTag?.({ it: toKey, by: me.pilot, from: me.key });
+}
+export function startIt(key) { passIt(key); }
 
 /**
  * The host's presence record says what the room is flying, and whether it is
@@ -459,14 +504,21 @@ export function say(text) {
 // a thing this game should do.
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3();
 
+// who our hull was against on the last frame — tag is decided by contact, and
+// the pusher already knows exactly whom they pushed
+let touched = new Set();
+export function touchedNow() { return [...touched]; }
+
 export function bump(ship, dt) {
+  touched = new Set();
   if (!channel || !ship || ship.wrecked) return 0;
   const myR = ship.spec.envelope.diameter / 2, myHalf = ship.spec.envelope.length / 2;
   const myFwd = _n.set(Math.cos(ship.yaw), 0, -Math.sin(ship.yaw)).clone();
   let worst = 0;
-  for (const r of remotes.values()) {
+  for (const [rkey, r] of remotes) {
     const o = r.mesh;
     if (!o) continue;
+    r.key = rkey;
     const oR = o.spec.envelope.diameter / 2, oHalf = o.spec.envelope.length / 2;
     const oFwd = new THREE.Vector3(Math.cos(o.yaw), 0, -Math.sin(o.yaw));
     // three stations along each hull is plenty for two cigars in slow motion
@@ -477,6 +529,7 @@ export function bump(ship, dt) {
         const d = _a.distanceTo(_b);
         const touch = myR + oR;
         if (d >= touch || d < 0.001) continue;
+        touched.add(rkey);
         const n = _a.clone().sub(_b).divideScalar(d);
         ship.pos.addScaledVector(n, (touch - d) * Math.min(1, dt * 12));
         const vn = ship.vel.dot(n);
