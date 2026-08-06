@@ -1,6 +1,7 @@
 import { placeLegacy } from './paris_geo.js';
 import { ROTHSCHILD } from './paris_stcloud.js';
 import { inRiver } from './paris_terrain.js';
+import { PAD_POS } from './world.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -384,7 +385,11 @@ export const SCENARIOS = [
       // motor dies just short, and the wind carries her back down onto the
       // trees. That is the afternoon of 13 July 1901 in the right order.
       const sc = placeLegacy('stcloud');
-      const zone = { x: sc.x + 270, z: sc.z - 240, r: 240 };
+      // THE AERODROME ITSELF, not a hand-measured offset from the village.
+      // This was sc + (270, -240), which was the field's old position; when the
+      // field moved across the river to the bank the book puts it on (bug #49)
+      // the ring stayed behind, 800 m away and on the wrong side of the water.
+      const zone = { x: PAD_POS.x, z: PAD_POS.z, r: 240 };
       const dx = zone.x - ROTHSCHILD.x, dz = zone.z - ROTHSCHILD.z;
       const L = Math.hypot(dx, dz) || 1;
       const ux = dx / L, uz = dz / L;                 // park -> aerodrome: upwind

@@ -324,7 +324,22 @@ const _sc = placeLegacy('stcloud');
 // the park's hill, and two hundred metres from the water — the Aéro-Club's
 // ground lay on the plain between the hill and the Seine, which is why the
 // Deutsch runs began by crossing the river.
-export const PAD_POS = new THREE.Vector3(_sc.x + 400, 2.0, _sc.z - 200);
+// THE AERODROME IS ACROSS THE RIVER FROM LONGCHAMPS. It was +400 east of the
+// anchor, and the anchor stands 131 m from the water — so the field was on the
+// Bois bank, the same side as the racecourse. A pilot asked outright: "Was the
+// aero club here or on the other side of the river?" (bug #49).
+//
+// The book answers it. Ch. XV, coming home from the Tower: "I passed above
+// Longchamps, CROSSED THE SEINE, and continued on at full speed over the heads
+// of the Commission and the spectators" — and Ch. XII calls St Cloud "a slope
+// of the River Seine". Longchamps, then the water, then the field.
+//
+// Solved against the drawn river: this is the only quarter that is on the far
+// bank (one crossing to Longchamps), 244 m from the water, flat enough to walk
+// an air-ship out on (slope 0.028), and 772 m clear of the modelled hillside.
+// It also sets the Deutsch course at 5.4 km each way, against the 4.9 km the
+// old position gave, and the real St-Cloud-to-Tower distance is about 5.5.
+export const PAD_POS = new THREE.Vector3(_sc.x - 300, 2.0, _sc.z - 800);
 export const START_RING = new THREE.Vector3(PAD_POS.x + 220, 55, PAD_POS.z - 40);
 /**
  * The turn round the Eiffel Tower, cut to the tower.
@@ -1782,14 +1797,38 @@ function addBookPlaces(scene, buildings) {
     if (r <= HILL.rTop) return HILL.h;
     return HILL.h * Math.max(0, (HILL.rBot - r) / (HILL.rBot - HILL.rTop));
   };
+  // A CONE ON A SLOPE HAS TO BE TOLD WHERE ITS FOOT IS. The survey's west edge
+  // is x -5100, which catches the foot of the Saint-Cloud hill and no more, so
+  // this cone is still the hillside beyond it. But it was placed like anything
+  // on flat ground — base at local zero — and liftToTerrain then raised the
+  // whole disc by the ground under its AXIS, which is 32 m up the slope. The
+  // ground under its downhill edge is 5 m BELOW the river, so that edge hung
+  // thirty-seven metres in the air over the aerodrome: "Wtf is that hill
+  // floating above the aero club" (bug #48).
+  //
+  // Set from the LOWEST ground under its own footprint instead, and lifted by
+  // nobody. It rises out of the valley floor and buries its uphill side in the
+  // real slope, which is what a hill does.
+  let hillFoot = Infinity;
+  for (let a = 0; a < 12; a++) {
+    const th = (a / 12) * Math.PI * 2;
+    for (const rr of [HILL.rBot, HILL.rBot * 0.6, 0]) {
+      hillFoot = Math.min(hillFoot,
+        parisGround(HILL.x + Math.cos(th) * rr, HILL.z + Math.sin(th) * rr));
+    }
+  }
   const hillside = new THREE.Mesh(
     new THREE.CylinderGeometry(HILL.rTop, HILL.rBot, HILL.h, 24, 1),
     new THREE.MeshLambertMaterial({ color: 0x76854f }));
-  hillside.position.set(HILL.x, HILL.h / 2, HILL.z);
+  hillside.position.set(HILL.x, hillFoot + HILL.h / 2, HILL.z);
   hillside.receiveShadow = true;
+  hillside.userData.noLift = true;
   scene.add(hillside);
+  // the collider's `top` is relative — the grounding pass adds the terrain under
+  // the axis — so take that back out to land on the crown the cone really has
   buildings.push({ x: HILL.x, z: HILL.z, w: HILL.rBot * 1.5, d: HILL.rBot * 1.5,
-    h: HILL.h * 0.8, top: HILL.h * 0.8 });
+    h: hillFoot + HILL.h * 0.8 - parisGround(HILL.x, HILL.z),
+    top: hillFoot + HILL.h * 0.8 - parisGround(HILL.x, HILL.z) });
 
   // The park's terraces. Each is a RETAINING structure standing from the
   // ground up to its own level, so its face meets the slope; flat slabs laid
