@@ -1042,8 +1042,19 @@ export function buildWorld(scene) {
     // …but the Île de Puteaux is dry land in the middle of the reach
     isWater: (x, z) => !onPuteaux(x, z)
       && nearPolyline(riverPts, x, z, 71, RIVER_GAP),
+    /**
+     * The Bois de Boulogne — for the cool air under the trees, and for the
+     * "soft and safe" landing a pilot gets among them.
+     *
+     * This box used to reach east to x = -680, which is PASSY AND AUTEUIL: with
+     * the city surveyed, 1,823 real building footprints stood inside what the
+     * game called woodland, and a pilot over the rooftops was told he was over
+     * the Bois. The wood lies OUTSIDE THE FORTIFICATIONS — the same rule the
+     * street screen uses — and the westernmost surveyed building stands at
+     * x = -2410, so the edge belongs west of that and hard against the wall.
+     */
     isInBois(x, z) {
-      if (x < -3800 || x > -680 || Math.abs(z) > 1120) return false;
+      if (x < -3800 || x > -2420 || Math.abs(z) > 1120) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
       if (dx * dx + dz * dz < 1) return false;
       if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 150 * 150) return false;

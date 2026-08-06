@@ -2332,12 +2332,27 @@ function updateRace(dt) {
       const gg = gates[race.gate];
       // `off` is how far out you crossed, as a fraction of the opening: under 1
       // is through it, and under 3 is close enough to be worth telling you.
-      let off;
+      let off, missedWide = false;
       if (gg.gw) {
-        // a rectangular gate: across the opening and up it, separately
+        // A rectangular gate: across the opening and up it, separately — and
+        // THE GOAL IS THE WHOLE RING, right down to the ground.
+        //
+        // The frame is cut to the mast it stands off and its sill is a quarter
+        // of that height up: 78 m on the Eiffel Tower's gate. That lift is what
+        // makes the frame read against the tower's whole length, but it is not
+        // a hurdle — a pilot rounding at seventy metres, which is where the old
+        // 24 m hoop used to hang, went clean under it with the green face above
+        // him the whole way and no idea why it had not counted. He filed it.
+        //
+        // So the sill is scenery and the opening is everything under the head.
+        // You still have to be within the width, and you still have to cross
+        // the right way; you no longer have to climb to a line you cannot see.
         const gt = new THREE.Vector3(Math.cos(ring.rotation.y), 0, -Math.sin(ring.rotation.y));
-        off = Math.max(Math.abs(rel.dot(gt)) / (gg.gw / 2 + 6),
-          Math.abs(rel.y) / (gg.gh / 2 + 6));
+        const across = Math.abs(rel.dot(gt)) / (gg.gw / 2 + 6);
+        const head = gg.gh / 2 + 6;              // the top of the frame
+        const up = rel.y > 0 ? rel.y / head : 0;  // above the head misses; below never does
+        off = Math.max(across, up);
+        missedWide = across > 1;
       } else {
         off = Math.sqrt(Math.max(0, rel.lengthSq() - sd * sd)) / ((gg.r || 24) + 6);
       }
@@ -2375,6 +2390,8 @@ function updateRace(dt) {
           } else if (track.historic && gates.length > 1) {
             addMsg('gate', `Pylon ${race.gate} of ${gates.length} rounded!`, 0);
           }
+        } else if (missedWide) {
+          addMsg('miss', 'Wide of the gate — come round and through the opening.', 4);
         } else if (off < 3) {
           addMsg('miss', 'Missed the gate — come round and through it!', 4);
         }
