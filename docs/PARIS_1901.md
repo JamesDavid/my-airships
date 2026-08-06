@@ -213,11 +213,22 @@ and that a source has to settle rather than memory:
    [HELM.md](HELM.md), where the quote comes first and the geometry follows
    from it.
 
-6. **Close the Seine's 3.3 km gap.** Between Issy and Saint-Cloud the river
-   leaves the survey, loops south through Meudon and Sèvres, and comes back.
-   The walk joined the two ends with a straight line over the hills;
-   `RIVER_GAP` now stops that being drawn, but the honest fix is to fetch the
-   missing reach with a bbox that reaches far enough south to contain it.
+6. ~~**Close the Seine's 3.3 km gap**~~ — **RESOLVED, and it was never a hole
+   in the data.** Measured: the gap *starts* 18 m from the survey's southern
+   edge and *ends* 29 m from it, and the real reach between them runs **2,005 m
+   beyond** that edge — the Seine loops south through Meudon and Sèvres, right
+   out of the world, and comes back at Saint-Cloud.
+
+   So the river is not torn. It leaves the map and returns, which is what a map
+   edge looks like, and `RIVER_GAP` is the complete and correct treatment rather
+   than a patch over something missing. Actually closing it would mean extending
+   the survey two kilometres south — a re-fetch of the IGN model over a bigger
+   frame and a regeneration of `paris_terrain.js` — which is a different job
+   from this one and buys two kilometres of water nobody flies over.
+
+   `check_paris.py` now asserts the distinction, because it is the one that
+   matters: **a gap whose ends stand on the frame is the map ending; a gap with
+   an end in open country is a torn walk, and that would be a fault.**
 
 Steps 1 and 2 are the ones that pay for themselves immediately. Step 1 is also
 the only one of the six that any pilot has actually asked for, twice.

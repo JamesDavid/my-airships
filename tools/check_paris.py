@@ -115,9 +115,20 @@ check(dup == 0, 'no zero-length segment', '%d found' % dup)
 check(near == 0, 'the river never comes back on itself', '%d close pairs' % near)
 check(worst[0] < 100, 'no station turns more than 100 degrees',
       'worst %.0f at %d' % worst)
-print('   %d gap%s over %d m (a reach that leaves the survey and returns): %s'
+print('   %d gap%s over %d m: %s'
       % (len(gaps), '' if len(gaps) == 1 else 's', GAP,
          ', '.join('%d m at station %d' % (d, i) for i, d in gaps) or 'none'))
+# A gap is only allowable if it is the river LEAVING THE MAP. If both its ends
+# stand on the frame, the water ran off the edge of the survey and came back —
+# which is what really happens between Issy and Saint-Cloud, where the Seine
+# loops two kilometres south through Meudon and Sevres, outside the world. If
+# an end is in open country instead, the walk has torn and that IS a fault.
+for i, d in gaps:
+    for k, lbl in ((i - 1, 'starts'), (i, 'ends')):
+        p = S[k]
+        edge = min(p[0] - X0, X1 - p[0], p[1] - Z0, Z1 - p[1])
+        check(edge < 60, 'the gap %s on the frame, not in open country' % lbl,
+              '%.0f m from the edge at (%.0f, %.0f)' % (edge, p[0], p[1]))
 water = set(round(p[2], 2) for p in S)
 check(len(water) == 1, 'the water is one level', '%s' % sorted(water)[:4])
 wy = sorted(water)[0] - DATUM
