@@ -1889,8 +1889,14 @@ export function generateFrontages(streets, canPlace, rand, opts = {}) {
       while (t < len - 14) {
         const w = (opts.wMin ?? 18) + rand() * (opts.wVar ?? 14);
         const depth = (opts.dMin ?? 15) + rand() * (opts.dVar ?? 8);
+        // How thickly this street builds. A trunk boulevard is built up almost
+        // solid; a residential street off it gets a fraction, because the point
+        // of the minor network is that the CITY reads as a city — six hundred
+        // kilometres of street at boulevard density is fifty thousand buildings
+        // and a frozen renderer.
+        const skip = st.skip ?? 0.12;
         for (const side of [-1, 1]) {
-          if (rand() < 0.12) continue;
+          if (rand() < skip) continue;
           const off = st.w / 2 + depth / 2 + 1.5;
           const cx = x1 + dirx * (t + w / 2) + nx * off * side;
           const cz = z1 + dirz * (t + w / 2) + nz * off * side;

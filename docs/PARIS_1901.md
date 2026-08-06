@@ -145,13 +145,31 @@ and that a source has to settle rather than memory:
 
 ## Order of work
 
-1. **`tools/fetch_paris_streets.py`.** Put the query in the repository and
-   broaden the class screen to `tertiary|residential|unclassified` inside the
-   fortifications, keeping the existing name-based period screen and the
-   existing width table. This is the one change that fixes two bug reports, and
-   it should take the network from 65 km to something with a 5 in front of it.
-   **Check:** the coverage number above — the fraction of the city more than
-   600 m from a street should go from 30% to near zero.
+1. ~~**`tools/fetch_paris_streets.py`**~~ — **DONE.** The query is in the
+   repository now, broadened to `tertiary|residential|unclassified`, and it
+   writes `src/paris_streets_minor.js` rather than touching the existing 336
+   (whose own tool is missing, so re-deriving them would be guessing at a screen
+   that is already right). 4,122 ways, 546 km.
+
+   | | before | after |
+   |---|---|---|
+   | street | 65.4 km | **623.5 km** |
+   | ways | 336 | **4,462** |
+   | within 200 m of a street | 51% | **91%** |
+   | over 600 m from any street | 30% | **0.2%** |
+   | buildings | 3,268 | 5,967 |
+
+   The enceinte, which the screen needs and which was pulled down in 1919-29,
+   is traced off the **commune boundary** rather than the Périphérique — the
+   wall *was* the city limit, so the boundary still follows it, and it is one
+   closed ring instead of a hundred motorway ways. Selected by INSEE code
+   75056, not by relation id, because there are ten communes called Paris and
+   picking by id had it tracing the fortifications of **Paris, Tennessee**. A
+   sanity check on the ring's radius about Châtelet is what caught that.
+
+   The minor streets are drawn in full but build at a quarter of a boulevard's
+   density: at full density six hundred kilometres of street generates some
+   fifty thousand frontages.
 
 2. **`tools/check_paris.py`**, modelled on `check_stlouis.py`. In St. Louis the
    checking script found two real faults nothing else would have — a lagoon

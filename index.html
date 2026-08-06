@@ -503,9 +503,25 @@
     report();
   });
 
-  // nothing may have thrown at all — a module that never parses is silent. If no
+  // Nothing may have thrown at all — a module that never parses is silent. If no
   // frame has been drawn by then, say so anyway.
-  setTimeout(function () { if (!window.__maBooted && !shown) report(); }, 9000);
+  //
+  // But only while somebody is LOOKING. A browser throttles requestAnimationFrame
+  // to nothing in a hidden tab, so a backgrounded page never draws a frame and
+  // never will: open the game in a background tab — middle-click the link, or
+  // switch away while it loads — and this would announce that the works had
+  // failed when all that had happened was that nobody was watching. The clock
+  // only runs while the page is visible, and it starts again if you come back.
+  var watchdog = 0;
+  function armWatchdog() {
+    clearTimeout(watchdog);
+    if (document.hidden || window.__maBooted || shown) return;
+    watchdog = setTimeout(function () {
+      if (!window.__maBooted && !shown && !document.hidden) report();
+    }, 9000);
+  }
+  document.addEventListener('visibilitychange', armWatchdog);
+  armWatchdog();
 
   window.__faultFacts = facts;
 })();

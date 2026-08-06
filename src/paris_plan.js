@@ -11,6 +11,13 @@ import { place } from './paris_geo.js';
 //  - dirt: Bois carriage roads, unbuilt
 
 import { OSM_STREETS } from './paris_streets.js';
+// …and everything that is not a through route. The trunk network alone was
+// 65 km against the thousand Paris had inside the fortifications, so thirty per
+// cent of the city stood more than six hundred metres from any street — which
+// is what a pilot filed as "no roads in paris again?", and why the frontage
+// generator had to pack three thousand buildings onto the roads it did have.
+// See docs/PARIS_1901.md and tools/fetch_paris_streets.py.
+import { OSM_MINOR } from './paris_streets_minor.js';
 
 // What the survey does not carry: the earth carriage roads of the Bois, which
 // are paths in OpenStreetMap and not roads at all.
@@ -40,7 +47,12 @@ const HAND = (() => {
 // The hand-drawn avenues first — they carry the names and the deliberate
 // choices — then the whole surveyed network behind them. Together they give
 // the city streets everywhere instead of a few grand axes across bare ground.
-export const STREETS = [...HAND, ...OSM_STREETS];
+// The minor streets are DRAWN in full — that is the whole point of them — but
+// they build at a quarter of a boulevard's density. Measured: at boulevard
+// density six hundred kilometres of street generates some fifty thousand
+// frontages and the renderer stops. See generateFrontages' `skip`.
+export const STREETS = [...HAND, ...OSM_STREETS,
+  ...OSM_MINOR.map((s) => ({ ...s, skip: 0.74 }))];
 
 
 // building-free precincts: plazas, parks, monuments, water approaches

@@ -7,3 +7,4 @@ Thumbs.db
 .supabase_service_key
 bug-*.png
 bug-*.jpg
+tools/.cache/
