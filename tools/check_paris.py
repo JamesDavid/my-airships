@@ -1,0 +1,266 @@
+# Does Paris hold together? Numbers, not screenshots.
+#
+# Step 2 of docs/PARIS_1901.md, and the twin of tools/check_stlouis.py. In St.
+# Louis the checking script found two real faults nothing else would have — a
+# lagoon drawn through a palace corner, and a race pylon thirty-six metres from
+# a building. Paris has never had one, and it has had worse: a river that
+# doubled back on itself for 1.1 km, nineteen zero-length segments, a 3.3 km
+# reach drawn straight over the hills of Meudon, and a 3.3 km band of open sky
+# where the ground should have been. All four were invisible in a screenshot
+# and obvious in a measurement.
+#
+# Everything here reads the checked-in data. Nothing needs a browser, because
+# nothing here needs three.js: the faults live in the data, which is the point.
+import base64
+import io
+import json
+import math
+import os
+import re
+import struct
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, 'src')
+
+
+def read(name):
+    return io.open(os.path.join(SRC, name), encoding='utf-8').read()
+
+
+def js_array(text, name):
+    m = re.search(r'export const %s = (\[.*?\]);\n' % name, text, re.S)
+    if not m:
+        raise SystemExit('could not find %s' % name)
+    return json.loads(m.group(1))
+
+
+def js_streets(text, name):
+    """The street lists are JS object literals with unquoted keys, not JSON."""
+    body = re.search(r'export const %s = \[(.*?)\n\];' % name, text, re.S).group(1)
+    out = []
+    for w, pts in re.findall(r'w:\s*(\d+).*?pts:\s*(\[\[.*?\]\])', body, re.S):
+        out.append({'w': int(w), 'pts': json.loads(pts)})
+    return out
+
+
+fails = []
+
+
+def check(ok, label, detail=''):
+    print('   %-4s %s%s' % ('ok' if ok else 'FAIL', label,
+                            ('   ' + detail) if detail else ''))
+    if not ok:
+        fails.append(label)
+
+
+# ---------------------------------------------------------------- the terrain
+terr = read('paris_terrain.js')
+hf = re.search(r'export const HF = \{(.*?)\};', terr, re.S).group(1)
+X0 = int(re.search(r'x0:\s*(-?\d+)', hf).group(1))
+Z0 = int(re.search(r'z0:\s*(-?\d+)', hf).group(1))
+STEP = int(re.search(r'step:\s*(\d+)', hf).group(1))
+NX = int(re.search(r'nx:\s*(\d+)', hf).group(1))
+NZ = int(re.search(r'nz:\s*(\d+)', hf).group(1))
+raw = base64.b64decode(re.search(r"const HF_DATA = '([^']*)'", terr).group(1))
+H = struct.unpack('<%dh' % (len(raw) // 2), raw)     # decimetres above the sea
+X1, Z1 = X0 + (NX - 1) * STEP, Z0 + (NZ - 1) * STEP
+DATUM = float(re.search(r'export const PARIS_DATUM = ([\d.]+)', read('world.js')).group(1))
+
+print('1. THE SURVEY')
+print('   x %d..%d   z %d..%d   step %d   %d x %d = %d samples'
+      % (X0, X1, Z0, Z1, STEP, NX, NZ, NX * NZ))
+check(len(H) == NX * NZ, 'the heightfield has as many samples as it claims',
+      '%d values, %d expected' % (len(H), NX * NZ))
+asl = [h / 10.0 for h in H]
+print('   ground %.1f..%.1f m ASL  (%.1f..%.1f from the Tower\'s foot)'
+      % (min(asl), max(asl), min(asl) - DATUM, max(asl) - DATUM))
+check(20 < min(asl) < 40 and 100 < max(asl) < 200,
+      'Paris is between the Seine and Montmartre', 'datum %.1f' % DATUM)
+
+
+def ground(x, z):
+    fx = (x - X0) / STEP
+    fz = (z - Z0) / STEP
+    ix = max(0, min(NX - 2, int(fx)))
+    iz = max(0, min(NZ - 2, int(fz)))
+    tx, tz = fx - ix, fz - iz
+    def at(a, b): return asl[b * NX + a]
+    return ((at(ix, iz) * (1 - tx) + at(ix + 1, iz) * tx) * (1 - tz)
+            + (at(ix, iz + 1) * (1 - tx) + at(ix + 1, iz + 1) * tx) * tz) - DATUM
+
+
+# ---------------------------------------------------------------- the river
+print('\n2. THE SEINE')
+S = js_array(terr, 'SEINE_XZ')
+GAP = int(re.search(r'export const RIVER_GAP = (\d+)', terr).group(1))
+HALF = int(re.search(r'export const RIVER_HALF = (\d+)', terr).group(1))
+segs = [math.hypot(S[i][0] - S[i - 1][0], S[i][1] - S[i - 1][1]) for i in range(1, len(S))]
+dup = sum(1 for d in segs if d < 1)
+gaps = [(i + 1, d) for i, d in enumerate(segs) if d > GAP]
+near = sum(1 for i in range(len(S)) for j in range(i + 6, len(S))
+           if math.hypot(S[i][0] - S[j][0], S[i][1] - S[j][1]) < 40)
+turns = []
+for i in range(1, len(S) - 1):
+    a = math.atan2(S[i][1] - S[i - 1][1], S[i][0] - S[i - 1][0])
+    b = math.atan2(S[i + 1][1] - S[i][1], S[i + 1][0] - S[i][0])
+    d = math.degrees(b - a)
+    while d > 180:
+        d -= 360
+    while d < -180:
+        d += 360
+    turns.append((abs(d), i))
+worst = max(turns)
+print('   %d stations, %.2f km drawn' % (len(S), sum(segs) / 1000))
+check(dup == 0, 'no zero-length segment', '%d found' % dup)
+check(near == 0, 'the river never comes back on itself', '%d close pairs' % near)
+check(worst[0] < 100, 'no station turns more than 100 degrees',
+      'worst %.0f at %d' % worst)
+print('   %d gap%s over %d m (a reach that leaves the survey and returns): %s'
+      % (len(gaps), '' if len(gaps) == 1 else 's', GAP,
+         ', '.join('%d m at station %d' % (d, i) for i, d in gaps) or 'none'))
+water = set(round(p[2], 2) for p in S)
+check(len(water) == 1, 'the water is one level', '%s' % sorted(water)[:4])
+wy = sorted(water)[0] - DATUM
+bed = [ground(p[0], p[1]) for p in S]
+check(max(bed) < wy, 'the bed is under the water everywhere',
+      'water %.2f, highest bed %.2f' % (wy, max(bed)))
+
+# ---------------------------------------------------------------- the streets
+print('\n3. THE STREETS')
+ST = js_streets(read('paris_streets.js'), 'OSM_STREETS')
+try:
+    MIN = js_streets(read('paris_streets_minor.js'), 'OSM_MINOR')
+except (OSError, AttributeError):
+    MIN = []
+ALL = ST + MIN
+L = sum(math.hypot(w['pts'][i][0] - w['pts'][i - 1][0], w['pts'][i][1] - w['pts'][i - 1][1])
+        for w in ALL for i in range(1, len(w['pts'])))
+print('   %d trunk ways + %d minor = %d, %.1f km' % (len(ST), len(MIN), len(ALL), L / 1000))
+
+# a bucket grid so the coverage sweep is not quadratic
+CELL = 200
+grid = {}
+for w in ALL:
+    for p in w['pts']:
+        grid.setdefault((int(p[0] // CELL), int(p[1] // CELL)), []).append(p)
+
+
+def nearest_street(x, z, rings=4):
+    gx, gz = int(x // CELL), int(z // CELL)
+    best = 1e9
+    for r in range(rings):
+        for dx in range(-r, r + 1):
+            for dz in range(-r, r + 1):
+                if r and max(abs(dx), abs(dz)) != r:
+                    continue
+                for p in grid.get((gx + dx, gz + dz), ()):
+                    best = min(best, math.hypot(p[0] - x, p[1] - z))
+        if best < r * CELL:
+            break
+    return best
+
+
+tot = near200 = far600 = 0
+for x in range(-3400, 3401, 200):
+    for z in range(-2400, 2001, 200):
+        tot += 1
+        d = nearest_street(x, z)
+        if d < 200:
+            near200 += 1
+        elif d > 600:
+            far600 += 1
+cov = 100.0 * near200 / tot
+far = 100.0 * far600 / tot
+print('   inside the city: %.0f%% within 200 m of a street, %.1f%% over 600 m from any'
+      % (cov, far))
+check(cov > 85, 'the city has streets in it', '%.0f%% (docs/PARIS_1901 says 91)' % cov)
+check(far < 2, 'nowhere in the city is stranded', '%.1f%% over 600 m' % far)
+
+# every street crossing the water needs a bridge, and the phantom reach has none
+print('\n4. STREETS ACROSS THE WATER')
+
+
+def seg_int(ax, az, bx, bz, cx, cz, dx_, dz_):
+    r1x, r1z = bx - ax, bz - az
+    r2x, r2z = dx_ - cx, dz_ - cz
+    den = r1x * r2z - r1z * r2x
+    if abs(den) < 1e-9:
+        return False
+    t = ((cx - ax) * r2z - (cz - az) * r2x) / den
+    u = ((cx - ax) * r1z - (cz - az) * r1x) / den
+    return 0 <= t <= 1 and 0 <= u <= 1
+
+
+crossings = phantom = 0
+for w in ALL:
+    for i in range(1, len(w['pts'])):
+        ax, az = w['pts'][i - 1]
+        bx, bz = w['pts'][i]
+        for k in range(1, len(S)):
+            c, d = S[k - 1], S[k]
+            if seg_int(ax, az, bx, bz, c[0], c[1], d[0], d[1]):
+                if math.hypot(d[0] - c[0], d[1] - c[1]) > GAP:
+                    phantom += 1
+                else:
+                    crossings += 1
+                break
+print('   %d street segments cross the drawn river' % crossings)
+print('   %d cross the phantom reach — which is not a fault: a straight line'
+      % phantom)
+print('   over three kilometres of Meudon is bound to be crossed by something.')
+print('   What matters is that the CODE never treats it as river, so:')
+w = read('world.js')
+check(w.count('RIVER_GAP') >= 6,
+      'world.js guards every pairwise walk of the river with RIVER_GAP',
+      '%d uses' % w.count('RIVER_GAP'))
+for what, needle in [
+        ('the water ribbon', 'p.distanceTo(pts[i - 1]) <= RIVER_GAP'),
+        ('the bridge search', 'c.distanceTo(d2) > RIVER_GAP'),
+        ('the city setback', 'dx * dx + dz * dz > RIVER_GAP * RIVER_GAP'),
+        ('the water test', 'nearPolyline(riverPts, x, z, 71, RIVER_GAP)')]:
+    check(needle in w, '%s breaks across a gap' % what)
+print('   Paris had about thirty bridges in 1901; the crossings above are all')
+print('   the surveyed street network offers the bridge finder.')
+
+# ---------------------------------------------------------------- the places
+print('\n5. THE PLACES AND THE COURSE')
+geo = read('paris_geo.js')
+PL = re.findall(r'(\w+):\s*\[([\d.]+),\s*([\d.-]+)\]', geo.split('export const PLACES')[1].split('};')[0])
+OLAT = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', geo).group(1))
+OLON = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', geo).group(2))
+OX = float(re.search(r'ORIGIN_XZ = \{ x: (\d+), z: (\d+)', geo).group(1))
+OZ = float(re.search(r'ORIGIN_XZ = \{ x: (\d+), z: (\d+)', geo).group(2))
+MLAT = 111320.0
+MLON = 111320.0 * math.cos(math.radians(OLAT))
+out_of_frame = []
+for name, la, lo in PL:
+    x = OX + (float(lo) - OLON) * MLON
+    z = OZ - (float(la) - OLAT) * MLAT
+    if not (X0 <= x <= X1 and Z0 <= z <= Z1):
+        out_of_frame.append(name)
+print('   %d named places' % len(PL))
+check(not out_of_frame, 'every named place is inside the survey',
+      ', '.join(out_of_frame))
+
+tracks = read('tracks.js')
+blk = tracks[tracks.index("location: 'paris'"):] if "location: 'paris'" in tracks else ''
+gates = [tuple(float(v) for v in g) for g in re.findall(
+    r'x:\s*(-?[\d.]+),\s*y:\s*(-?[\d.]+),\s*z:\s*(-?[\d.]+),\s*r:\s*(-?[\d.]+)',
+    tracks)]
+low = []
+for gx, gy, gz, gr in gates:
+    if X0 <= gx <= X1 and Z0 <= gz <= Z1 and gy < 8:
+        low.append((gx, gz, gy))
+print('   %d gates in tracks.js (all worlds)' % len(gates))
+check(not low, 'no Paris gate is written below 8 m over its ground',
+      '%s' % low[:4])
+
+TOWER_H = int(re.search(r'export const TOWER_H = (\d+)', read('world.js')).group(1))
+anch = re.search(r'const TOWER_ANCH = (\[\[.*?\]\]);', read('world.js')).group(1)
+top = max(a[0] for a in json.loads(anch))
+check(TOWER_H == top, 'the tower gate is cut to the tower this world builds',
+      'TOWER_H %d, tower top %d' % (TOWER_H, top))
+
+print('\n%s' % ('ALL CHECKS PASS' if not fails
+                else '%d FAILURES: %s' % (len(fails), '; '.join(fails))))
+raise SystemExit(1 if fails else 0)

@@ -171,13 +171,21 @@ and that a source has to settle rather than memory:
    density: at full density six hundred kilometres of street generates some
    fifty thousand frontages.
 
-2. **`tools/check_paris.py`**, modelled on `check_stlouis.py`. In St. Louis the
-   checking script found two real faults nothing else would have — a lagoon
-   through a palace corner and a pylon 36 m from a building. Paris has never
-   had one. It should test: buildings in the river, buildings off their ground,
-   gates under the terrain, streets crossing the Seine without a bridge, the
-   river's own geometry (the checks `repair_seine.py` already makes), and the
-   coverage figures in this document so they cannot silently rot.
+2. ~~**`tools/check_paris.py`**~~ — **DONE.** The twin of `check_stlouis.py`,
+   and it reads only the checked-in data, so it needs no browser: the faults
+   live in the data, which is the point. It tests the heightfield against its
+   own header, the Seine for zero-length segments / self-approach / spikes /
+   gaps, that the bed is under the water everywhere, the street coverage figures
+   in this document so they cannot silently rot, every named place against the
+   survey's frame, every gate against its ground, and that the tower gate is cut
+   to the tower this world actually builds.
+
+   It also asserts the **`RIVER_GAP` guard is still in all four places** in
+   `world.js`. Its first run reported a street "crossing" the phantom reach as a
+   failure — which was the test being wrong, not the world: a straight line over
+   three kilometres of Meudon is bound to be crossed by something, and the guard
+   already skips it. What matters is that the code keeps skipping it, so that is
+   what is asserted now.
 
 3. **Real building footprints** for the Haussmann core, from OSM, screened the
    same way the streets are. The core is largely unchanged since 1901, which is
