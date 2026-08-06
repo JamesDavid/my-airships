@@ -1476,6 +1476,15 @@ function addBookPlaces(scene, buildings) {
     const q = H2(-2300 - scRand() * 110, -400 + scRand() * 800);
     const x = q.x, z = q.z;
     if (Math.hypot(x - PAD_POS.x, z - PAD_POS.z) < 340) continue;   // keep the field clear
+    // ...and out of the Seine. The village is scattered across a rectangle and
+    // was only ever asked to keep off the aerodrome, because the hand-drawn
+    // river of the time did not come anywhere near it. The real one does: its
+    // western loop runs right through here on its way past Suresnes, and four
+    // of these houses were standing in it.
+    {
+      const near = riverNear(x, z);
+      if (near && near.dist < RIVER_HALF + 20) continue;
+    }
     const w = 24 + scRand() * 20, d = 20 + scRand() * 16, h = 8 + scRand() * 7;
     const house = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), scWall);
     house.position.set(x, h / 2, z);
