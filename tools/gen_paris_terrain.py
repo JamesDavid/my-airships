@@ -74,10 +74,24 @@ for _ in range(14):
     sm = [sm[0]] + [(sm[i-1] + 2*sm[i] + sm[i+1]) / 4 for i in range(1, len(sm)-1)] + [sm[-1]]
 for i in range(1, len(sm)):
     sm[i] = min(sm[i], sm[i-1])
-WATER = sm
-print('Seine: %d points, water %.1f -> %.1f m (falls %.1f m over %.1f km)'
-      % (len(river), WATER[0], WATER[-1], WATER[0] - WATER[-1],
-         sum(dist(river[i], river[i+1]) for i in range(len(river)-1)) / 1000))
+
+# ...and then FLATTENED, deliberately.
+#
+# The measured fall is 3.4 m over 23 km — one part in seven thousand, which no
+# eye will ever catch. What the eye catches immediately is the alternative: the
+# game draws the Seine as a single reflecting sheet, because three.js's water
+# needs a plane to mirror in, and a sloping bed under a flat sheet leaves the
+# quays standing proud of the water upstream and the water standing over the
+# quays downstream. Four sheets would fix it and cost four reflection passes a
+# frame.
+#
+# So the surface is one level, the median of the measured profile. The profile
+# itself is what found the right centreline in the first place — a hand-traced
+# river read 26 to 48 m along its length, and this one reads 24 to 27.
+level = sorted(sm)[len(sm) // 2]
+print('Seine: %d points, measured %.1f -> %.1f m, laid flat at %.1f'
+      % (len(river), sm[0], sm[-1], level))
+WATER = [level] * len(sm)
 
 # ------------------------------------------------------- carve the channel
 # The bare-earth model already sits at water level in the channel, but it is not
@@ -85,6 +99,7 @@ print('Seine: %d points, water %.1f -> %.1f m (falls %.1f m over %.1f km)'
 # a flat band, so the ground under it is levelled to the water and graded back up
 # to the real bank over the next sixty metres.
 HALF, GRADE = 72.0, 60.0
+BED = 1.4          # the bed sits this far under the surface
 CELL = 200.0
 buck = {}
 for i, (x, z) in enumerate(river):
@@ -108,7 +123,7 @@ for k in range(NZ):
         if d > HALF + GRADE: continue
         w = WATER[idx]
         g = H[k * NX + i]
-        nv = w if d <= HALF else w + (g - w) * ((d - HALF) / GRADE)
+        nv = (w - BED) if d <= HALF else (w - BED) + (g - w + BED) * ((d - HALF) / GRADE)
         if abs(nv - g) > 0.05: carved += 1
         H[k * NX + i] = nv
 print('carved %d of %d samples for the channel' % (carved, NX * NZ))
