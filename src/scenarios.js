@@ -173,9 +173,21 @@ export const SCENARIOS = [
       ctx.setWind(wx * 7, wz * 7);
       ctx.ship.motorDead = true;
       ctx.ship.gas = 95;
-      ctx.setZone(V(t.x, 40, t.z), 140);
+      // THE RING GOES ON THE HOTELS, NOT ON THE PALACE.
+      //
+      // It used to sit on the Palais du Trocadero, which is 300 m PAST the
+      // roofs you have to come down on — so the scenario pointed at the palace
+      // while scoring the blocks short of it, and a pilot who flew to the
+      // marker overshot every time: "This is still downwind with the palace as
+      // the landing spot" (bug #52). He came down in the courtyard of the
+      // Trocadero HOTELS, on the Chaillot plateau, before the palace and the
+      // gardens and the river.
+      const hx = t.x - ux * 290, hz = t.z - uz * 290;
+      ctx.setZone(V(hx, 40, hz), 170);
       ctx.setCenter('August 8th, 1901',
-        'The motor is stopped and the wind has you. Ballast buys height and costs distance. (green ring)');
+        'The motor is stopped — so the head wind you fought all the way home is '
+        + 'behind you now, and carrying you back onto the Tower. Come down on the '
+        + 'roofs (green ring). Ballast buys height and costs distance.');
       this.warned = false;
     },
     tick(ctx, dt) {
@@ -186,9 +198,12 @@ export const SCENARIOS = [
       const along = rx * u.x + rz * u.z;          // + is toward the Tower
       const wide = Math.abs(-rx * u.z + rz * u.x);
 
-      if (!this.warned && ctx.ship.bags < 6) {
+      // fires on the FIRST bag, whatever the ship carries — this was written
+      // `bags < 6` and the No. 5 carries NINE, so it said nothing until you had
+      // thrown four and the advice arrived far too late to act on (bug #52)
+      if (!this.warned && ctx.ship.bags < ctx.ship.spec.physics.bags) {
         this.warned = true;
-        ctx.addMsg('sc2', 'Ballast gone — the fall eases, and the wind has that much longer to work. The Tower is downwind.', 8);
+        ctx.addMsg('sc2', 'The water runs out of the keel and the fall eases — and the wind now has that much longer to carry you. The Tower is downwind.', 8);
       }
       if (ctx.ship.wrecked) {
         return ctx.fail(along > this.u.L - 220

@@ -60,7 +60,8 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('');
   console.log('bags  outcome   ending');
   let wins = 0, roofWin = false;
-  for (let b = 0; b <= 6; b++) {
+  const NBAGS = SHIPS[sc.shipId].physics.bags;
+  for (let b = 0; b <= NBAGS; b++) {
     let n = 0;
     const r = play(sc, { pilot: (sh, t) => {
       if (t >= 15 && n < b) { sh.dropBallast(); n++; }
@@ -72,7 +73,7 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       (r.verdict ? r.verdict.msg : 'no verdict in 900 s').slice(0, 86));
   }
   console.log('');
-  console.log('   %d of 7 ballast choices win.', wins);
+  console.log('   %d of %d ballast choices win.', wins, NBAGS + 1);
   if (wins < 2) { console.log('   FAIL scenario II is all but unwinnable'); fails++; }
   // The one he actually flew: ballast untouched, down on the hotel roofs.
   if (!roofWin) {
