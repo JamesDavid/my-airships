@@ -315,6 +315,54 @@ print('   to anchor them to, so they are left where they were put.')
 check(_left <= 6, 'the half-frame placements are down to Bois scenery',
       '%d left' % _left)
 
+# ------------------------------------------------------- can it be flown at all
+print('\n7. SCENARIO VII — CAN IT BE FLOWN?')
+# It could not. It used to start beside the Tower, 4,069 m from the aerodrome,
+# with a motor scripted to quit after 34 to 60 seconds — 727 seconds of flying
+# against the day's headwind. Two pilots reported it on the same afternoon.
+_sc = read('scenarios.js')
+_sh = read('ships.js')
+_m = re.search(r"id: 'no5'.*?thrust: ([\d.]+), dragQ: ([\d.]+)", _sh, re.S)
+_thr, _dq = float(_m.group(1)), float(_m.group(2))
+_top = math.sqrt(_thr / _dq) * 3.6
+# the start is derived from the park and the aerodrome, so it can be recomputed
+_r = sc_const('ROTHSCHILD')
+_geo = read('paris_geo.js')
+_olat = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', _geo).group(1))
+_olon = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', _geo).group(2))
+_ox = float(re.search(r'ORIGIN_XZ = \{ x: (\d+), z: (\d+)', _geo).group(1))
+_oz = float(re.search(r'ORIGIN_XZ = \{ x: (\d+), z: (\d+)', _geo).group(2))
+_mlon = 111320.0 * math.cos(math.radians(_olat))
+_stl = re.search(r'stcloud:\s*\[([\d.]+),\s*([\d.-]+)\]', _geo)
+_sla, _slo = float(_stl.group(1)), float(_stl.group(2))
+_scx = _ox + (_slo - _olon) * _mlon
+_scz = _oz - (_sla - _olat) * 111320.0
+_zx, _zz = _scx + 270, _scz - 240
+_dx, _dz = _zx - _r[0], _zz - _r[1]
+_L = math.hypot(_dx, _dz)
+_ux, _uz = _dx / _L, _dz / _L
+_startx, _startz = _r[0] - _ux * 900, _r[1] - _uz * 900
+_run = math.hypot(_startx - _zx, _startz - _zz) - 240
+_hi = _run / ((_top - 16) / 3.6)          # at 120 m, in the scenario's own wind
+_lo = _run / ((_top - 16 * 0.42) / 3.6)   # down low, where the wind is 42%
+print('   No. 5 makes %.1f km/h; the scenario sets a %.1f km/h wind aloft' % (_top, 16.0))
+print('   start -> ring edge %.0f m:  %.0f s high, %.0f s low' % (_run, _hi, _lo))
+check(_hi < 420, 'the run home can be flown before anything else goes wrong',
+      '%.0f s' % _hi)
+check(_lo < _hi, 'flying LOW is rewarded, as the book and the world both advise',
+      '%.0f s saved' % (_hi - _lo))
+_park_gap = math.hypot((_zx - _ux * (240 + 180)) - _r[0],
+                       (_zz - _uz * (240 + 180)) - _r[1])
+print('   the motor dies 180 m outside the ring, %.0f m upwind of the park'
+      % _park_gap)
+check(_park_gap < _r[2] + 70 or _park_gap < 400,
+      'the park is within reach on the drift once the motor is dead',
+      '%.0f m, park half-extent %.0f' % (_park_gap, _r[2]))
+for _n, _w in (('ctx.setWind(', 'the scenario sets its own weather'),
+               ('ctx.ship.motorDead = true', 'the failure is irreparable'),
+               ('ROTHSCHILD.x - ux * 900', 'the start is derived from the park')):
+    check(_n in _sc, _w)
+
 # ---------------------------------------------------------------- the places
 print('\n7. THE PLACES AND THE COURSE')
 geo = read('paris_geo.js')

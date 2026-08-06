@@ -80,6 +80,10 @@ let splitUntil = 0;
 let currentLocation = 'paris', currentShip = 'no6';
 const wind = new THREE.Vector3(3.4, 0, 0.7);
 const dailyWind = new THREE.Vector3(3.4, 0, 0.7);
+// …and today's, kept aside. `dailyWind` is what the gusts are built on and a
+// historical scenario may replace it for the afternoon it reconstructs, so the
+// real one has to survive somewhere to be put back.
+const todaysWind = new THREE.Vector3(3.4, 0, 0.7);
 let windGustT = 0;      // seconds since midnight UTC — see skyTime()
 
 /**
@@ -408,6 +412,8 @@ function groundGates(t) {
 
 function startTrack(t0) {
   const t = groundGates(t0);
+  dailyWind.copy(todaysWind);    // …and not a scenario's borrowed weather
+  wind.copy(dailyWind);
   flightBegin('trial', t.id);
   track = t;
   scenario = null;
@@ -509,6 +515,7 @@ function loadWorld(loc) {
   const rc = Math.cos(rot), rs = Math.sin(rot);
   dailyWind.set((world.windBase.x * rc + world.windBase.z * rs) * mag, 0,
     (-world.windBase.x * rs + world.windBase.z * rc) * mag);
+  todaysWind.copy(dailyWind);
   wind.copy(dailyWind);
   race.state = 'idle'; race.t = 0; race.gate = 0;
   // each course keeps its own record: the Deutsch half-hour and the St. Louis
@@ -2454,6 +2461,15 @@ function scenCtx() {
   return {
     ship, world, addMsg, setCenter,
     wind: { x: wind.x, z: wind.z },     // so a scenario can set a pilot upwind
+    /**
+     * A historical scenario reconstructs ONE AFTERNOON, and one afternoon had
+     * its own weather. The daily wind is seeded by the date so that everybody
+     * flies the same sky today — which is right for the time trials, where the
+     * leaderboard has to be fair — and wrong for a scenario that is trying to
+     * reproduce something that happened, because today's sky can make the
+     * recorded outcome impossible. Loading any world resets it.
+     */
+    setWind(x, z) { dailyWind.set(x, 0, z); wind.set(x, 0, z); },
     // `y` is HEIGHT ABOVE THE GROUND in all three of these, which is what every
     // number in scenarios.js already meant: they were written against a world
     // whose ground was a plane at zero. Now that Paris has hills, reading them
@@ -2513,6 +2529,12 @@ function startScenario(def) {
   spawnShip(def.shipId);
   scenario = def;
   def._failed = false;
+  // Back to today's sky FIRST. A scenario may reconstruct its own afternoon
+  // with ctx.setWind — VII does — and loadWorld only runs when the location
+  // changes, so without this the next Paris scenario would inherit the weather
+  // of 13 July 1901 and never know why it could not be flown.
+  dailyWind.copy(todaysWind);
+  wind.copy(dailyWind);
   def.setup(scenCtx());
   // a scenario that is not a race shows no race rings — hide them at once
   // rather than waiting for the next frame to notice

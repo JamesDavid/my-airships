@@ -273,22 +273,52 @@ export const SCENARIOS = [
     brief: 'The Tower is rounded and the timekeepers are waiting at St. Cloud — but the wind has turned against you and the motor is failing. Get her home over the Bois, or come down in M. Edmond de Rothschild’s park as you really did, standing in your basket at the top of the tallest chestnut with the propeller touching the ground.',
     setup(ctx) {
       // homeward from the Tower, into the head wind, motor already sickening
-      { const t = placeLegacy('eiffel'); ctx.place(t.x - 1040, 165, t.z - 220, Math.PI); }
+      // THE WHOLE SCENARIO IS A VECTOR PROBLEM, and it was never solved.
+      //
+      // It used to start beside the Tower — 4,069 m from the aerodrome. The
+      // No. 5 makes 39.3 km/h, so into the day's headwind that is 727 seconds
+      // of flying, and the motor was scripted to quit after 34 to 60. You lost
+      // power three and a half kilometres short and then drifted EAST, away
+      // from the aerodrome AND away from the park. It could not be won by
+      // anybody, ever, and two pilots said so on the same afternoon.
+      //
+      // So it is laid out from its own geography now. The aerodrome is upwind,
+      // the park lies 549 m downwind of it, and the ship starts 900 m beyond
+      // the park on that same line — so she flies UP the wind toward home, the
+      // motor dies just short, and the wind carries her back down onto the
+      // trees. That is the afternoon of 13 July 1901 in the right order.
+      const sc = placeLegacy('stcloud');
+      const zone = { x: sc.x + 270, z: sc.z - 240, r: 240 };
+      const dx = zone.x - ROTHSCHILD.x, dz = zone.z - ROTHSCHILD.z;
+      const L = Math.hypot(dx, dz) || 1;
+      const ux = dx / L, uz = dz / L;                 // park -> aerodrome: upwind
+      ctx.place(ROTHSCHILD.x - ux * 900, 165, ROTHSCHILD.z - uz * 900,
+        Math.atan2(-uz, ux));
+      ctx.setZone(V(zone.x, 12, zone.z), zone.r);
+
+      // The day's own weather, not today's. The shared daily wind is seeded by
+      // the date so that every pilot flies the same sky — right for a
+      // leaderboard, wrong for a scenario reconstructing one afternoon, because
+      // today's sky can make the recorded outcome impossible. Blowing from the
+      // aerodrome toward the park, at a strength the No. 5 can just fight: 4.4
+      // m/s aloft is 16 km/h against her 39, and 42% of that at the surface —
+      // which is why the world's own advice is to come home LOW.
+      ctx.setWind(-ux * 4.4, -uz * 4.4);
       ctx.ship.motorHealth = 0.62;
-      { const sc = placeLegacy('stcloud');
-        ctx.setZone(V(sc.x + 270, 12, sc.z - 240), 240); }
       ctx.setCenter('July 13th, 1901', 'Home to St. Cloud against the wind — the motor is going. (green ring)');
-      this.quit = 34 + Math.random() * 26;    // she stops somewhere over the Bois
-      this.t = 0; this.told = false;
+      this.dead = false;
     },
-    tick(ctx, dt) {
-      this.t += dt;
-      if (!this.told && this.t > this.quit) {
-        this.told = true;
-        ctx.ship.sputtering = true;
-        ctx.addMsg('sc7', 'The capricious motor stops — "the air-ship, bereft of its power, was carried off." Work the levers, or pick your tree.', 0);
-      }
+    tick(ctx) {
       const d = ctx.zoneDist();
+      // "just short of it": she gives out with the ring in sight and no more.
+      // zoneDist() is to the CENTRE, so this is 180 m outside a 240 m ring —
+      // and 129 m upwind of the park, which is the drift she has left.
+      if (!this.dead && d < ctx.zoneR() + 180) {
+        this.dead = true;
+        ctx.ship.motorDead = true;
+        ctx.ship.sputtering = true;
+        ctx.addMsg('sc7', 'The motor stops for good — “the air-ship, bereft of its power, was carried off.” The wind has you now. Pick your tree.', 0);
+      }
       if (ctx.ship.wrecked) {
         return ctx.fail('Down hard. The chestnut would have been kinder.');
       }

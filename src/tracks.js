@@ -30,7 +30,7 @@ export const TRACKS = [
       return ellipse(L.x, L.z, 600, 380, 6, 60, 20); })(),
   },
   {
-    id: 'gymkhana', location: 'paris', laps: 2, v: 2,
+    id: 'gymkhana', location: 'paris', laps: 2, v: 3,
     name: 'The Aerial Gymkhana',
     sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
     // Hung off the landmarks themselves rather than written out: the places
@@ -41,7 +41,12 @@ export const TRACKS = [
       const roue = P('roue'), twr = P('eiffel'), troc = P('trocadero'), arc = P('etoile');
       const ec = P('ecolemil');
       return [
-        { x: roue.x + 52, y: 42, z: roue.z, r: 30 },              // skirt the rim of the Roue
+        // SKIRT the rim — outside it. The Grande Roue's rim radius is 46 m and
+        // this gate stood 52 m from its axis with a radius of 30, so its inner
+        // edge was twenty-two metres INSIDE the wheel and the rim ran straight
+        // through the hoop: "the first target is kinda smooshed into the Ferris
+        // wheel" (bug #33). 88 m out leaves twelve metres of daylight.
+        { x: roue.x + 88, y: 42, z: roue.z, r: 30 },
         { x: (twr.x + ec.x) / 2, y: 25, z: (twr.z + ec.z) / 2, r: 34 }, // low over the Champ de Mars
         { x: twr.x, y: 35, z: twr.z - 150, r: 34 },               // the Tower's shoulder
         { x: troc.x, y: 50, z: troc.z, r: 34 },                   // over the Trocadéro dome

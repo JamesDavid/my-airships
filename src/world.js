@@ -1318,7 +1318,13 @@ function addLandmarks(scene) {
   { const _p = placeLegacy('roue'); roue.position.set(_p.x, 0, _p.z); }
   roue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roue);
-  lmColliders.push({ x: 400, z: 560, w: 10, d: 10, h: 30, top: 30 }); // wheel legs only
+  // Collide with the LEGS only — daring pilots may thread the wheel. Taken from
+  // where the wheel is actually drawn: this was written out as (400, 560) in the
+  // old half frame and stayed there when the Roue moved onto its true
+  // coordinates, so for a long while the wheel could be flown clean through and
+  // there was an invisible obstacle 240 m away from it.
+  { const _p = placeLegacy('roue');
+    lmColliders.push({ x: _p.x, z: _p.z, w: 34, d: 12, h: 30, top: 30 }); }
 
   // ---------- the eleven that were only coordinates ----------
   // paris_geo.PLACES named twenty-seven landmarks and this file modelled

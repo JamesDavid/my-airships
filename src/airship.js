@@ -223,6 +223,11 @@ export class Airship {
     this.heat = 1.0;
     this.motorHealth = 1.0;
     this.sputtering = false;
+    // A motor that will not come back. `sputtering` can be coaxed alight again
+    // with the spark lever, which is the whole drama of the Deutsch run; this
+    // is the other thing that happened to him — "the air-ship, bereft of its
+    // power, was carried off" — and no amount of working the levers helps.
+    this.motorDead = false;
     this.wrecked = false;
     this.landed = true;
     this.foulTime = 0;
@@ -869,7 +874,7 @@ export class Airship {
       this.fuel = Math.max(0, this.fuel - this.throttle * dt);
       if (this.fuel === 0) this.events.push('fuelOut');
     }
-    this.motorOn = P.thrust > 0 && this.fuel > 0;
+    this.motorOn = P.thrust > 0 && this.fuel > 0 && !this.motorDead;
     this.rudderInput = input.rudder;
     this.pitchTarget = input.pitch * P.pitchMax;
     // a folding hull answers the shifting weights sluggishly
