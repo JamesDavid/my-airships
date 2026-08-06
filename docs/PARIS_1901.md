@@ -324,6 +324,18 @@ Said plainly so nobody spends a week on it:
 
 ## Backlog
 
+- **THE SHIPS FLY TWICE AS FAST AS THEY DID.** The book gives one hard airspeed:
+  Puteaux and back, "about 3 kilometres (2 miles), done in nine minutes" on the
+  No. 5 — **20 km/h**. The game's No. 5 makes 39.3 km/h and the No. 6 41.0. The
+  *records* are honest (the Deutsch record of 29:31 over 9.9 km is 20.1 km/h,
+  exactly his pace) but the ships can fly at twice that, so every course has far
+  more slack than history did.
+
+  Left alone deliberately: changing `thrust`/`dragQ` rebalances every scenario,
+  every time trial and every leaderboard at once, and that is a decision about
+  what the game is for, not a bug fix. `tools/check_paris.py` now records the
+  figures so the gap is visible rather than forgotten.
+
 - **Ballast by ship: sand or water.** The UI button says SAND for every ship.
   The book does not use one material throughout — check `docs/BOOK_REFERENCE.md`
   and the memoir per vessel, and label the button with what that ship actually

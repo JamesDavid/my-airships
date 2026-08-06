@@ -1,6 +1,11 @@
 import { placeLegacy } from './paris_geo.js';
 import { place as placeMC, groundAt as groundMC } from './monaco_geo.js';
 import { LONGCHAMP } from './paris_stcloud.js';
+
+/** "…a distance of about 35 kilometres (22 miles)" for ten circuits of
+ *  Longchamps, 12 July 1901 (Ch. XII). A lap round the traced course measures
+ *  3,585 m; this trims it to his 3,500. */
+const LAP_INSET = 0.976;
 // storage can throw outright (iOS private browsing) — never let it stop a flight
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not saved */ } }
@@ -18,14 +23,23 @@ export const TRACKS = [
     id: 'longchamps', location: 'paris', laps: 3, v: 2,
     name: 'The Longchamps Circuit',
     sub: '“Ten times in succession I made the circuit of Longchamps” — 3 laps',
-    // ON the racecourse, and the right way round. This was a 600 x 380 ellipse
-    // typed by hand; the real course is 418 x 705 — TALLER THAN IT IS WIDE — so
-    // the circuit was turned through ninety degrees and stood wider than the
-    // ground it was named for: "the rings seem wider than the track" (bug #44).
-    // Taken from the course itself now (src/paris_stcloud.js), inset so the
-    // gates sit over the track rather than outside the rail.
+    // ON the racecourse, the right way round, AND THE RIGHT LENGTH.
+    //
+    // This was a 600 x 380 ellipse typed by hand; the real course is 418 x 705
+    // — taller than it is wide — so the circuit stood turned through ninety
+    // degrees and wider than the ground it was named for.
+    //
+    // And the book says how long a lap was. Ch. XII, 12 July 1901: "Ten times
+    // in succession I made the circuit of Longchamps, stopping each time at a
+    // point designed beforehand. After these first evolutions, which altogether
+    // made up a distance of about 35 kilometres (22 miles)…" — 3.5 km a lap.
+    //
+    // A lap right round the traced outline comes to 3,585 m, which agrees with
+    // his figure to 2.4%: the racecourse OpenStreetMap holds and the distance
+    // he recorded in 1901 are the same ground. LAP_INSET trims that last 2.4%
+    // so the lap IS 3.5 km, and the gates sit just inside the outer rail.
     gates: ellipse(LONGCHAMP.x, LONGCHAMP.z,
-      LONGCHAMP.rx * 0.86, LONGCHAMP.rz * 0.86, 6, 60, 20),
+      LONGCHAMP.rx * LAP_INSET, LONGCHAMP.rz * LAP_INSET, 6, 60, 20),
   },
   {
     // his own exercise of 12 July 1901, and the hardest kind of flying there is:
@@ -34,7 +48,7 @@ export const TRACKS = [
     name: 'The Longchamps Ten',
     sub: '“stopping each time at a point designed beforehand” — halt in the first ring each lap',
     gates: ellipse(LONGCHAMP.x, LONGCHAMP.z,
-      LONGCHAMP.rx * 0.86, LONGCHAMP.rz * 0.86, 6, 60, 20),
+      LONGCHAMP.rx * LAP_INSET, LONGCHAMP.rz * LAP_INSET, 6, 60, 20),
   },
   {
     id: 'gymkhana', location: 'paris', laps: 2, v: 4,

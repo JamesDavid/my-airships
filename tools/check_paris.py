@@ -363,8 +363,32 @@ for _n, _w in (('ctx.setWind(', 'the scenario sets its own weather'),
                ('ROTHSCHILD.x - ux * 900', 'the start is derived from the park')):
     check(_n in _sc, _w)
 
+# ------------------------------------------------- against the book's own figure
+print('\n8. LONGCHAMPS — THE ONE LAP HE MEASURED')
+# Ch. XII, 12 July 1901: "Ten times in succession I made the circuit of
+# Longchamps… which altogether made up a distance of about 35 kilometres."
+BOOK_LAP = 3500.0
+_lrx, _lrz = sc_const('LONGCHAMP')[2], sc_const('LONGCHAMP')[3]
+
+
+def ellipse_perimeter(a, b):
+    return math.pi * (3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b)))
+
+
+_full = ellipse_perimeter(_lrz, _lrx)
+_inset = float(re.search(r'const LAP_INSET = ([\d.]+)', read('tracks.js')).group(1))
+_lap = ellipse_perimeter(_lrz * _inset, _lrx * _inset)
+print('   the traced course is %.0f x %.0f m; right round it is %.0f m'
+      % (_lrx * 2, _lrz * 2, _full))
+print('   the book says 35 km for ten circuits — %.0f m a lap' % BOOK_LAP)
+check(abs(_full - BOOK_LAP) / BOOK_LAP < 0.05,
+      'the traced racecourse and the 1901 memoir are the same ground',
+      'they differ by %.1f%%' % (100 * abs(_full - BOOK_LAP) / BOOK_LAP))
+check(abs(_lap - BOOK_LAP) < 60, 'the circuit flown is his 3.5 km',
+      '%.0f m at LAP_INSET %.3f' % (_lap, _inset))
+
 # -------------------------------------------------- can the prize be won at all
-print('\n8. THE DEUTSCH PRIZE — CAN IT BE WON?')
+print('\n9. THE DEUTSCH PRIZE — CAN IT BE WON?')
 _m6 = re.search(r"id: 'no6'.*?thrust: ([\d.]+), dragQ: ([\d.]+)", _sh, re.S)
 _v6 = math.sqrt(float(_m6.group(1)) / float(_m6.group(2)))
 _twr = re.search(r'eiffel:\s*\[([\d.]+),\s*([\d.-]+)\]', _geo)
@@ -393,7 +417,7 @@ for _n, _w in (('dailyWind.copy(todaysWind)', "a scenario's weather is put back"
           _w, '%d restore sites' % read('main.js').count(_n))
 
 # ---------------------------------------------------------------- the places
-print('\n7. THE PLACES AND THE COURSE')
+print('\n10. THE PLACES AND THE COURSE')
 geo = read('paris_geo.js')
 PL = re.findall(r'(\w+):\s*\[([\d.]+),\s*([\d.-]+)\]', geo.split('export const PLACES')[1].split('};')[0])
 OLAT = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', geo).group(1))

@@ -174,6 +174,21 @@ it justifies.
 - The crowd answers "Have I won?" — "Yes!"
 - GRAPHICS: small crowds at Longchamps/Bagatelle/aerodrome that gather beneath the ship.
 
+### A13. Longchamps, 12 July 1901 — the one lap he measured
+> "Ten times in succession I made the circuit of Longchamps, stopping each time
+> at a point designed beforehand. After these first evolutions, which altogether
+> made up a **distance of about 35 kilometres (22 miles)**, I set out for
+> Puteaux, and after an excursion of about **3 kilometres (2 miles), done in
+> nine minutes**, I steered back again to Longchamps." — Ch. XII
+
+- **3.5 km a lap.** A lap round the racecourse as OpenStreetMap holds it
+  measures 3,585 m — his figure and the modern outline agree to 2.4%, which is
+  as good a check on the traced course as exists. `tracks.js` trims the last of
+  it with `LAP_INSET` so the circuit IS 3.5 km.
+- **3 km in nine minutes is 20 km/h**, on the No. 5. That is a rare hard number
+  for airspeed and it does not match the game: the ships make about 40 km/h.
+  See the note in docs/PARIS_1901.md — it is a real discrepancy, not a rounding.
+
 ---
 
 ## PART B — HANDLING: how the balloons flew
