@@ -674,15 +674,21 @@ if (isTouch) {
   document.getElementById('help').addEventListener('pointerdown', () => {
     document.getElementById('help').classList.add('hidden');
   });
-  touchHelp();
+  touchHelp(true);
 }
 
 // Rebuilt whenever the ship changes, because the ballast button is not always
 // called the same thing: the first five ships throw sand and the rest open a
 // spigot on a water cylinder.
-function touchHelp() {
+// `install` on the one call that puts the touch scheme up; afterwards it only
+// REFRESHES text that is already there. That way it needs no reference to
+// `isTouch`, which is declared further down this file than spawnShip's first
+// call — reading it from here would be a temporal dead zone and would take the
+// whole game down at boot.
+function touchHelp(install) {
   const q = document.querySelector('#help .quote');
-  if (!q || !isTouch) return;
+  if (!q) return;
+  if (!install && !/^On touch:/.test(q.textContent || '')) return;
   q.textContent =
     'On touch: the CARB lever is the throttle — set it and it stays, like the brass lever aboard. '
     + 'The HELM slider steers and stays where you lash it; '
