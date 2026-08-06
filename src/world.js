@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { geo, place, placeLegacy, SEINE, ORIGIN_XZ, LEGACY_ORIGIN, LEGACY_SCALE } from './paris_geo.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
-import { STREETS, SITES, inSite, distToStreets } from './paris_plan.js';
+import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_plan.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -243,8 +243,13 @@ export function buildWorld(scene) {
 
   // paved city base (east of the Seine)
   addFlat(scene, 665, 0, 970, 1700, 0x847d70, 0.05);
-  // Champ de Mars green beside the tower
-  addFlat(scene, 300, 330, 150, 320, 0x7f9159, 0.12);
+  // The Champ de Mars runs from the Tower down to the École Militaire, on that
+  // axis — it is not a rectangle lying square to the compass, which is why the
+  // Tower and its park did not line up. Drawn as a strip between the two.
+  {
+    const t = placeLegacy('eiffel'), e = placeLegacy('ecolemil');
+    addStrip(scene, t.x, t.z, e.x, e.z, 112, 0x7f9159, 0.12);
+  }
   // Longchamps pelouse
   addOval(scene, LONGCHAMPS.x, LONGCHAMPS.z, LONGCHAMPS.rx, LONGCHAMPS.rz, 0x86a05e, 0.12);
   // aerodrome grounds
@@ -614,13 +619,14 @@ function addOval(scene, x, z, rx, rz, color, y) {
   scene.add(m);
 }
 
-function addStrip(scene, x1, z1, x2, z2, w, color) {
+function addStrip(scene, x1, z1, x2, z2, w, color, y = 0.09) {
   const dx = x2 - x1, dz = z2 - z1;
   const len = Math.hypot(dx, dz);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(len, w), new THREE.MeshLambertMaterial({ color }));
   m.rotation.x = -Math.PI / 2;
   m.rotation.z = -Math.atan2(dz, dx); // plane local +x along strip after x-rot
-  m.position.set((x1 + x2) / 2, 0.09, (z1 + z2) / 2);
+  m.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
+  m.receiveShadow = true;
   scene.add(m);
 }
 
@@ -1412,6 +1418,22 @@ export function generateFrontages(streets, canPlace, rand, opts = {}) {
           const cx = x1 + dirx * (t + w / 2) + nx * off * side;
           const cz = z1 + dirz * (t + w / 2) + nz * off * side;
           if (!canPlace(cx, cz)) continue;
+          // Clear of every OTHER street, not just the one it faces. Testing the
+          // centre against a radius rejects the building against its own street
+          // — it is set back from that one by construction — and threw away
+          // three quarters of the city. The corners are what must not be in a
+          // roadway, and the near ones sit a metre and a half outside the kerb.
+          {
+            const hw = w / 2, hd = depth / 2;
+            const ux = dirx, uz = dirz;      // along the street; n is across it
+            let intrudes = false;
+            for (const su of [-1, 1]) for (const sv of [-1, 1]) {
+              const px = cx + ux * hw * su + nx * hd * sv;
+              const pz = cz + uz * hw * su + nz * hd * sv;
+              if (streetClearance(px, pz) < -1) { intrudes = true; break; }
+            }
+            if (intrudes) continue;
+          }
           let h = hMin + rand() * hVar;
           if (rand() < 0.05) h *= 1.5;
           push(cx, cz, w, depth, h, ry, rand());
@@ -1446,7 +1468,7 @@ function buildCity(scene, riverPts) {
     for (let gz = -760; gz <= 760; gz += 54) {
       const x = gx + (rand() - 0.5) * 14, z = gz + (rand() - 0.5) * 14;
       if (!canPlace(x, z)) continue;
-      if (distToStreets(x, z) < 34) continue;
+      if (streetClearance(x, z) < 12) continue;   // the fill keeps out of the road
       if (rand() < 0.25) continue;
       const w = 30 + rand() * 14, d = 30 + rand() * 14, r = rand();
       list.push({ x, z, w, d, h: 13 + rand() * 9, rw: w, rd: d, ry: 0, r, nChim: 2 });

@@ -101,3 +101,53 @@ export function distToStreets(x, z) {
   }
   return best;
 }
+
+
+// ---------------------------------------------------------------------------
+// How far a point is from the nearest street EDGE — negative when it is in the
+// roadway. generateFrontages sets a building clear of the street it faces, but
+// knew nothing of the other three hundred, so blocks landed in the middle of
+// crossing roads. Everything that places a building asks this first.
+//
+// A coarse bucket grid, because this is asked a few thousand times at load and
+// there are some seven hundred segments to try against.
+const CELL = 120;
+let grid = null;
+function buildGrid() {
+  grid = new Map();
+  for (const st of STREETS) {
+    for (let i = 0; i < st.pts.length - 1; i++) {
+      const [x1, z1] = st.pts[i], [x2, z2] = st.pts[i + 1];
+      const seg = { x1, z1, x2, z2, hw: st.w / 2 };
+      const pad = st.w / 2 + CELL;
+      const gx0 = Math.floor((Math.min(x1, x2) - pad) / CELL);
+      const gx1 = Math.floor((Math.max(x1, x2) + pad) / CELL);
+      const gz0 = Math.floor((Math.min(z1, z2) - pad) / CELL);
+      const gz1 = Math.floor((Math.max(z1, z2) + pad) / CELL);
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gz = gz0; gz <= gz1; gz++) {
+          const k = gx + ',' + gz;
+          let b = grid.get(k);
+          if (!b) grid.set(k, b = []);
+          b.push(seg);
+        }
+      }
+    }
+  }
+}
+
+export function streetClearance(x, z) {
+  if (!grid) buildGrid();
+  const bucket = grid.get(Math.floor(x / CELL) + ',' + Math.floor(z / CELL));
+  if (!bucket) return Infinity;
+  let best = Infinity;
+  for (const s of bucket) {
+    const dx = s.x2 - s.x1, dz = s.z2 - s.z1;
+    const L2 = dx * dx + dz * dz || 1;
+    let t = ((x - s.x1) * dx + (z - s.z1) * dz) / L2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const d = Math.hypot(x - (s.x1 + dx * t), z - (s.z1 + dz * t)) - s.hw;
+    if (d < best) best = d;
+  }
+  return best;
+}
