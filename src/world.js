@@ -1972,8 +1972,22 @@ export function addBuildingMeshes(scene, list, colorOf) {
 // the white pavilions of the 1900 Exposition, domed, along the riverfront
 function addExpoPavilions(scene, riverPts, list, rand) {
   const pav = [];
-  for (let i = 60; i <= 94; i += 3) {
-    const p = riverPts[i], q2 = riverPts[i + 1];
+  // BY PLACE, not by index.
+  //
+  // This used to walk riverPts[60..94], which picked out the Champ de Mars
+  // reach when the river was a hand-drawn curve sampled at two hundred points.
+  // The Seine is the real one now — different points, different spacing — and
+  // the same indices landed four pavilions in the water out by Suresnes, five
+  // kilometres from the Exposition they belong to.
+  //
+  // They stand where the Exposition of 1900 stood: the riverfront either side
+  // of the Pont d'Iena, under the Tower. So that is what is asked for.
+  const twr = placeLegacy('eiffel');
+  const REACH = 1300;                       // the Exposition's stretch of quay
+  for (let i = 1; i < riverPts.length - 1; i += 3) {
+    const p = riverPts[i];
+    if (Math.hypot(p.x - twr.x, p.z - twr.z) > REACH) continue;
+    const q2 = riverPts[i + 1];
     const tx = q2.x - p.x, tz = q2.z - p.z;
     const tl = Math.hypot(tx, tz) || 1;
     const nx = -tz / tl, nz = tx / tl;
@@ -1982,6 +1996,12 @@ function addExpoPavilions(scene, riverPts, list, rand) {
       if (rand() < 0.2) continue;
       const cx = p.x + nx * 128 * side, cz = p.z + nz * 128 * side;
       if (inSite(cx, cz)) continue;
+      // A hundred and twenty-eight metres along ONE station's tangent is not
+      // a hundred and twenty-eight metres from the river: on the inside of a
+      // bend it is a good deal less, and on a tight one it is back in the
+      // water. Ask the river how far off this actually is.
+      const near = riverNear(cx, cz);
+      if (near && near.dist < RIVER_HALF + 24) continue;
       pav.push({ x: cx, z: cz, ry, r: rand() });
       const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
       list.push({ x: cx, z: cz, w: 28 * c + 16 * s, d: 28 * s + 16 * c, h: 14, top: 21, nChim: 0, r: 0 });
