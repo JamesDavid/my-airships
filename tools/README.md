@@ -15,4 +15,17 @@ python gen_monaco.py           # -> src/monaco_geo.js, src/monaco_streets.js
 `gen_monaco.py` prints what it kept and what it threw away. Read that output:
 it is the record of which streets were screened out of 1902 and why.
 
-Paris was built the same way; see `docs/PERIOD_NOTES.md`.
+Paris is the same idea with different data:
+
+```
+python fetch_paris_dem.py      # IGN RGE ALTI bare earth -> paris_dem.json
+python fetch_paris_seine.py    # Overpass -> paris_water_osm.json
+python gen_paris_terrain.py    # -> src/paris_terrain.js
+```
+
+Paris does NOT use the terrain tiles Monaco uses. They are a surface model and
+see rooftops; over a 550 m mountain that is nothing, but Paris's whole relief is
+about a hundred metres and the same data puts the Seine sixteen metres above its
+own quays. `fetch_paris_dem.py` says so at the top, with the numbers.
+
+See `docs/PERIOD_NOTES.md` for the method and how it was checked.
