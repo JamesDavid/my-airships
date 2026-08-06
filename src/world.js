@@ -877,7 +877,7 @@ export function buildWorld(scene) {
     raceLimit: 1800, raceRecord: 1771,
     hints: {
       idleNear: 'The Commission waits — call “Let go all!” when you are ready.',
-      idleFar: 'Free flight — the start ring waits above the Aéro Club at St. Cloud.',
+      idleFar: 'Free flight — the Commission is convoked over the Aéro-Club at St. Cloud.',
       out: 'Round the Eiffel Tower — ride the wind high.',
       back: 'Home to St. Cloud — less wind down low.',
       turnMsg: '“I turned with a sudden movement of the rudder, round the Tower’s lightning conductor.” Now home — against the wind. Fly LOW.',

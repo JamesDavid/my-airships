@@ -362,8 +362,12 @@ function startTrack(t0) {
 
 function endTrack() {
   track = null;
+  // The gates are rebuilt so a fresh call has them ready, and left HIDDEN —
+  // updateRace draws them only while a course is being flown. Setting them
+  // visible here is what put the Deutsch turn ring beside the Tower, and the
+  // start ring over the aerodrome, for pilots who were only out flying.
   buildRings(historicTrack().gates, world.startRing);
-  startRing.visible = true;
+  startRing.visible = false;
   if (ghostMesh) ghostMesh.visible = false;
   race.state = 'idle'; race.t = 0; race.gate = 0;
 }
@@ -1220,7 +1224,7 @@ function nextMark() {
     if (g) return { x: g.x, z: g.z, name: `gate ${(race.gate % gates.length) + 1} of ${gates.length}` };
   }
   if (track && race.state === 'idle' && world.startRing) {
-    return { x: world.startRing.x, z: world.startRing.z, name: 'the start ring' };
+    return { x: world.startRing.x, z: world.startRing.z, name: 'the starting line' };
   }
   return null;
 }
@@ -2144,7 +2148,8 @@ function tryStartRace() {
   }
   if (race.state !== 'idle' || ship.wrecked) return;
   if (ship.pos.distanceTo(world.startRing) > 150) {
-    addMsg('far', 'Convoke the Commission at the gold start ring, above the aerodrome.', 6);
+    // No ring to point at any more, so say the place instead of the marker.
+    addMsg('far', 'Convoke the Commission over the aerodrome, where the ground crew are waiting.', 6);
     return;
   }
   startTrack(historicTrack());
@@ -2184,11 +2189,12 @@ function updateRace(dt) {
   // and which free flight answered no to.
   const showGates = !!track || !!editing;
   for (const r of gateRings) r.visible = showGates;
-  // The gold start ring over the aerodrome stays: it is where you stand to call
-  // the Commission. It only goes away when the pilot is busy with something
-  // that is not a race.
-  const otherBusiness = (!!scenario && !track) || (!track && !!play.id);
-  if (otherBusiness) startRing.visible = false;
+  // The gold start ring goes with them. It marks where the Deutsch run begins
+  // and ends, and it belongs to that run — hanging over the aerodrome in free
+  // flight it is one more hoop in the sky with nothing to do with what the
+  // pilot is doing. It comes back when the historic course is actually called.
+  startRing.visible = (!!track && !!track.historic)
+    || (!!scenario && !!scenario.usesStartRing);   // III sends the pilot to it
   const go = document.getElementById('btnGo');
   if (go) go.classList.toggle('off', !track && !!play.id);
   if (!track) return;

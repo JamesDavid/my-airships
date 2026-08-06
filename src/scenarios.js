@@ -131,6 +131,9 @@ export const SCENARIOS = [
     title: 'III. Winning the Deutsch Prize (Oct 19, 1901)',
     sub: 'No. 6 — the Tower, the clock, the capricious motor',
     location: 'paris', shipId: 'no6',
+    // this one tells the pilot to fly to the gold ring before calling the
+    // Commission, so the ring has to be drawn for it
+    usesStartRing: true,
     brief: 'The Commission is assembled. Round the Eiffel Tower and return within the time limit. The motor WILL falter on the way home — work the spark lever and fly low against the wind.',
     setup(ctx) {
       // the Commission is convoked when the PILOT is ready over the ring —

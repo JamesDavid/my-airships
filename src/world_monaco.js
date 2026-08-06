@@ -587,7 +587,7 @@ export function buildWorldMonaco(scene) {
     limitNoteLong: 'Cap Martin and back: 11.1 km, and the No. 6 makes 22 km/h.',
     hints: {
       idleNear: 'The run to Cap Martin waits — call “Let go all!” when you are ready.',
-      idleFar: 'Free flight — the start ring waits over the landing-stage of La Condamine.',
+      idleFar: 'Free flight — the run begins over the landing-stage of La Condamine.',
       out: 'Down the coast to Cap Martin — into the teeth of the breeze. Guide-rope low over the waves.',
       back: 'Home to the bay of Monaco — the wind behind you now.',
       turnMsg: 'Round Cap Martin! “The air-ship swung round like a boat” — now home on the wind, like an eagle.',
