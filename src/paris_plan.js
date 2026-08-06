@@ -1,3 +1,4 @@
+import { place } from './paris_geo.js';
 // The street skeleton of western Paris, 1900-1901, adapted to the game's
 // half-scale frame (+x east, -z north; the Tower at 260,150; the Étoile at
 // 420,-420). Traced against the period plans catalogued in PERIOD_NOTES.md:
@@ -11,47 +12,30 @@
 
 import { OSM_STREETS } from './paris_streets.js';
 
-const HAND = [
-  // ---- the grand axis ----
-  { name: 'Avenue des Champs-Élysées', w: 60, pts: [[840, -840], [1800, -360]], frontage: true },
-  { name: 'Rue de Rivoli', w: 48, pts: [[1800, -360], [2520, -220]], frontage: true },
-  { name: 'Grands Boulevards', w: 52, pts: [[1620, -760], [2000, -1000], [2360, -900], [2580, -700]], frontage: true },
-  { name: 'Avenue de l’Opéra', w: 40, pts: [[1400, -1120], [1760, -600]], frontage: true },
+// What the survey does not carry: the earth carriage roads of the Bois, which
+// are paths in OpenStreetMap and not roads at all.
+//
+// The city avenues that used to be here have gone. They were traced by hand
+// against period plans in the old half frame, and when the world went to full
+// scale their coordinates were merely doubled — so the Champs-Élysées began at
+// (840,-840) while the Étoile stands at (559,-1428), and every one of them lay
+// across open country beside the real street it was meant to be. The surveyed
+// network carries all of them, in the right places and at 1901 widths.
+const HAND = (() => {
+  const B = place('bagatelle'), L = place('longchamp'), A = place('autueil'), E = place('etoile');
+  const P = (x, z) => [Math.round(x), Math.round(z)];
+  return [
+    { name: 'Allée de Longchamp', w: 16, dirt: true,
+      pts: [P(E.x - 700, E.z + 500), P(B.x + 500, B.z + 700), P(L.x + 350, L.z - 250)] },
+    { name: 'Allée de Bagatelle', w: 14, dirt: true,
+      pts: [P(E.x - 900, E.z - 100), P(B.x + 200, B.z - 150), P(B.x, B.z)] },
+    { name: 'Allée des Lacs', w: 14, dirt: true,
+      pts: [P(E.x - 800, E.z + 1100), P(B.x + 900, B.z + 1400), P(A.x + 400, A.z - 300)] },
+    { name: 'Route de la Cascade', w: 14, dirt: true,
+      pts: [P(L.x + 350, L.z - 250), P(L.x - 100, L.z + 500), P(L.x + 700, L.z + 800), P(A.x, A.z - 200)] },
+  ];
+})();
 
-  // ---- the twelve avenues of the Étoile, by name and true destination ----
-  { name: 'Avenue du Bois (Foch)', w: 52, pts: [[840, -840], [-280, -760]] },
-  { name: 'Avenue de la Grande-Armée', w: 44, pts: [[840, -840], [480, -1480]], frontage: true },
-  { name: 'Avenue de Wagram', w: 36, pts: [[840, -840], [1220, -1400]], frontage: true },
-  { name: 'Avenue Hoche', w: 32, pts: [[840, -840], [1380, -1160]], frontage: true },
-  { name: 'Avenue de Friedland', w: 36, pts: [[840, -840], [1540, -900]], frontage: true },
-  { name: 'Avenue Marceau', w: 32, pts: [[840, -840], [1120, -280]], frontage: true },
-  { name: 'Avenue d’Iéna', w: 32, pts: [[840, -840], [600, -120]], frontage: true },
-  { name: 'Avenue Kléber', w: 36, pts: [[840, -840], [40, 280]], frontage: true },
-  { name: 'Avenue Victor-Hugo', w: 32, pts: [[840, -840], [240, -1120]], frontage: true },
-  { name: 'Avenue MacMahon', w: 28, pts: [[840, -840], [660, -1320]], frontage: true },
-  { name: 'Avenue Carnot', w: 28, pts: [[840, -840], [440, -1200]], frontage: true },
-
-  // ---- the quays (riverside rows survive only on the dry side) ----
-  { name: 'Quai (right bank)', w: 36, pts: [[-80, -600], [-140, -120], [60, 360], [340, 840], [420, 1280]], frontage: true },
-  { name: 'Quai (left bank)', w: 36, pts: [[-400, -560], [-320, -80], [-120, 440], [100, 940], [160, 1320]], frontage: true },
-
-  // ---- Trocadéro, the Champ, the École Militaire ----
-  { name: 'Axe Trocadéro–École Militaire', w: 44, pts: [[40, 280], [920, 660]] },
-  { name: 'Avenue de Suffren', w: 32, pts: [[390, 360], [490, 1080]], frontage: true },
-  { name: 'Avenue de la Bourdonnais', w: 32, pts: [[790, 350], [860, 1040]], frontage: true },
-  { name: 'Avenue de la Motte-Picquet', w: 32, pts: [[440, 960], [1120, 860]], frontage: true },
-
-  // ---- Passy, between the river and the Bois ----
-  { name: 'Rue de Passy', w: 28, pts: [[-140, -120], [-460, -460]], frontage: true },
-  { name: 'Avenue Mozart', w: 28, pts: [[-460, -460], [-660, -100]], frontage: true },
-  { name: 'Rue de Boulainvilliers', w: 24, pts: [[-460, -100], [-240, 240]], frontage: true },
-
-  // ---- the Bois de Boulogne carriage roads (dirt, unbuilt) ----
-  { name: 'Allée de Longchamp', w: 28, dirt: true, pts: [[-320, -1000], [-1400, -320], [-1980, 80]] },
-  { name: 'Allée de Bagatelle', w: 24, dirt: true, pts: [[-900, -280], [-1640, 200]] },
-  { name: 'Allée des Lacs', w: 24, dirt: true, pts: [[-740, 940], [-840, 320], [-1040, -240]] },
-  { name: 'Route de la Cascade', w: 24, dirt: true, pts: [[-1980, 80], [-2240, 640], [-1960, 960], [-1400, 840], [-1120, 600]] },
-];
 
 // The hand-drawn avenues first — they carry the names and the deliberate
 // choices — then the whole surveyed network behind them. Together they give
@@ -60,21 +44,36 @@ export const STREETS = [...HAND, ...OSM_STREETS];
 
 
 // building-free precincts: plazas, parks, monuments, water approaches
-export const SITES = [
-  { x: 520, z: 300, r: 270 },   // the Tower and her plaza
-  { x: 600, z: 660, r: 370 },   // the Champ de Mars
-  { x: 840, z: -840, r: 128 },   // the Étoile
-  { x: 1800, z: -360, r: 170 },   // Place de la Concorde
-  { x: 40, z: 280, r: 150 },     // the Trocadéro palace
-  { x: 1240, z: 520, r: 144 },    // Les Invalides
-  { x: 1120, z: -620, r: 156 },   // the Grand Palais
-  { x: 800, z: 1120, r: 170 },    // the Grande Roue
-  { x: 1400, z: -1120, r: 116 },   // the Opéra
-  { x: 1620, z: -760, r: 96 },   // the Madeleine
-  { x: 2080, z: 280, r: 156 },   // Notre-Dame
-  { x: 1840, z: 920, r: 124 },    // the Panthéon
-  { x: 1960, z: -1440, r: 500 },  // Montmartre hill
-];
+// The ground each landmark stands on, which no building may be placed in.
+//
+// These were written as numbers, and when the places moved onto their true
+// coordinates the numbers were merely DOUBLED — so every exclusion ended up in
+// the wrong field. Blocks were built on top of the Arc, the Grand Palais, the
+// Trocadéro and the Invalides, while empty circles were cleared in open country
+// where nothing stood. Two reported faults, one cause.
+//
+// Derived now, so a site cannot be anywhere but on its own landmark.
+export const SITES = (() => {
+  const P = (id) => place(id);
+  const t = P('eiffel'), e = P('ecolemil');
+  const S = (id, r) => { const p = P(id); return { x: p.x, z: p.z, r }; };
+  return [
+    S('eiffel', 270),
+    { x: (t.x + e.x) / 2, z: (t.z + e.z) / 2, r: 370 },   // the Champ de Mars
+    S('etoile', 200),           // the Étoile: twelve avenues meet in it
+    S('concorde', 190),
+    S('trocadero', 190),
+    S('invalides', 150),
+    S('grandpalais', 160),
+    S('roue', 120),
+    S('opera', 116),
+    S('madeleine', 96),
+    S('notredame', 156),
+    S('pantheon', 124),
+    S('montmartre', 420),
+  ];
+})();
+
 
 export function inSite(x, z, pad = 0) {
   for (const s of SITES) {

@@ -1659,10 +1659,18 @@ function buildCity(scene, riverPts) {
   const list = generateFrontages(STREETS, canPlace, rand);
 
   // interior fill: the deep-city backdrop east of the race line
-  for (let gx = 960; gx <= 2480; gx += 108) {
-    for (let gz = -1520; gz <= 1520; gz += 108) {
-      const x = gx + (rand() - 0.5) * 14, z = gz + (rand() - 0.5) * 14;
+  // Over the WHOLE city, not a box in the middle of it. The fill used to run
+  // x 960..2480 and z -1520..1520 — a patch east of the Tower — so everything
+  // beyond it had houses along the avenues and open ground behind them, which
+  // is the "why is this area of city empty" a pilot reported. The clearance
+  // test keeps them out of the roads and off the landmarks; the built-up bound
+  // is what the fortifications enclosed.
+  for (let gx = -700; gx <= 3500; gx += 96) {
+    for (let gz = -2300; gz <= 2000; gz += 96) {
+      const x = gx + (rand() - 0.5) * 22, z = gz + (rand() - 0.5) * 22;
       if (!canPlace(x, z)) continue;
+      // the Bois and the western parks were not built over
+      if (x < -560 && Math.abs(z) < 1700) continue;
       if (rand() < 0.25) continue;
       const w = 52 + rand() * 26, d = 52 + rand() * 26, r = rand();
       // the fill blocks are 52-78 m across, so a fixed margin on the CENTRE let
