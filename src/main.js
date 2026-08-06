@@ -267,7 +267,28 @@ function updateGhostMesh() {
 }
 
 // start any course: the historic trial or a lap circuit (instant restart)
-function startTrack(t) {
+/**
+ * A circuit's gates, lifted onto the ground.
+ *
+ * Every gate height in tracks.js — 13 m under the Arc, 16 down the
+ * Champs-Elysees, 50 over the Trocadero — was written when the ground was a
+ * plane at zero, and means "so far up in the air". Paris has hills now: the
+ * Etoile stands twenty-five metres over the Tower's feet and the Chaillot bluff
+ * twenty-six, so read as absolute heights those gates would be half buried in
+ * their own hillsides.
+ *
+ * Lifted HERE, at the one place a track becomes the active one, so the ring you
+ * see, the pass test and the run validator go on using a single definition of
+ * "through the gate" — and lifted into a COPY, so loading a track twice cannot
+ * raise it twice.
+ */
+function groundGates(t) {
+  if (!world || !world.groundAt) return t;
+  return { ...t, gates: t.gates.map((g) => ({ ...g, y: g.y + world.groundAt(g.x, g.z) })) };
+}
+
+function startTrack(t0) {
+  const t = groundGates(t0);
   flightBegin('trial', t.id);
   track = t;
   scenario = null;
@@ -2274,9 +2295,15 @@ function scenCtx() {
   return {
     ship, world, addMsg, setCenter,
     wind: { x: wind.x, z: wind.z },     // so a scenario can set a pilot upwind
+    // `y` is HEIGHT ABOVE THE GROUND in all three of these, which is what every
+    // number in scenarios.js already meant: they were written against a world
+    // whose ground was a plane at zero. Now that Paris has hills, reading them
+    // as absolute would spawn the No. 9 seventeen metres over the Cascade lawn
+    // and sink the Trocadero ring into the Chaillot bluff.
     place(x, y, z, yaw) {
-      ship.reset(new THREE.Vector3(x, y, z), yaw);
-      ship.landed = y <= restAt(x, z) + 0.8;
+      const gy = world && world.groundAt ? world.groundAt(x, z) : 0;
+      ship.reset(new THREE.Vector3(x, gy + y, z), yaw);
+      ship.landed = gy + y <= restAt(x, z) + 0.8;
     },
     // a line of faint hoops marking the way, each fading out as it is passed
     setRoute(points) {
@@ -2284,12 +2311,15 @@ function scenCtx() {
       for (const p of points) {
         const r = makeRing(0x6fc48a);
         r.position.copy(p);
+        if (world && world.groundAt) r.position.y += world.groundAt(p.x, p.z);
         r.material.opacity = 0.34;
         r.scale.setScalar(0.75);
         routeRings.push(r);
       }
     },
-    setZone(pos, r) {
+    setZone(pos0, r) {
+      const pos = pos0.clone();
+      if (world && world.groundAt) pos.y += world.groundAt(pos.x, pos.z);
       // remembered, so a scenario's tick can ASK where its ring is instead of
       // repeating the coordinates. Repeating them meant that when the places
       // moved onto their true positions, rings moved and the checks did not:
