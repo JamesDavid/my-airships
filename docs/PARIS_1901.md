@@ -187,10 +187,29 @@ and that a source has to settle rather than memory:
    already skips it. What matters is that the code keeps skipping it, so that is
    what is asserted now.
 
-3. **Real building footprints** for the Haussmann core, from OSM, screened the
-   same way the streets are. The core is largely unchanged since 1901, which is
-   the whole reason this is possible; the point is to stop the Louvre being a
-   procedural box the size of a Louvre-shaped block.
+3. ~~**Real building footprints**~~ — **DONE.** `src/paris_buildings.js`:
+   **12,450 real footprints** off OpenStreetMap, each reduced to its
+   *smallest-area oriented box* — not an axis-aligned one, because a Haussmann
+   block sits at whatever angle its street does and an axis-aligned box round a
+   diagonal building is half again too fat.
+
+   | | |
+   |---|---|
+   | buildings | 5,917 procedural → **15,745** (12,450 real + procedural outside the box) |
+   | median height | **20.4 m** — a Haussmann six storeys |
+   | median footprint | **299 m²** |
+
+   Bounded to a 5.2 × 3.8 km box round the Tower, the Champ de Mars, the
+   Trocadéro, the Invalides, the Champs-Élysées, the Étoile, both Palais, the
+   Madeleine and the Opéra — the theatre of every scenario. A count query over
+   the whole frame times out, and outside the box the procedural frontages are
+   no longer thin now that the minor streets are in. **Inside the box the
+   frontage generator is switched off entirely**: two cities on the same ground
+   would interleave invented houses through the real blocks.
+
+   Screened because today's footprints are not all 1901's: 687 dropped over
+   eight storeys (the cornice line), 2,611 under 40 m², 18 slivers, 14 standing
+   on a landmark, 14 in the Seine.
 
 4. ~~**The Thiers enceinte**~~ — **DONE.** `src/paris_wall.js`, 5.6 km of
    rampart in two runs, built as a bastioned earthwork with a parapet and

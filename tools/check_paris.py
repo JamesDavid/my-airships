@@ -233,8 +233,38 @@ for what, needle in [
 print('   Paris had about thirty bridges in 1901; the crossings above are all')
 print('   the surveyed street network offers the bridge finder.')
 
+# ------------------------------------------------------------ the real blocks
+print('\n5. THE SURVEYED CITY')
+try:
+    _bl = read('paris_buildings.js')
+    _rows = [tuple(float(v) for v in m) for m in re.findall(
+        r'\[(-?[\d.]+),(-?[\d.]+),([\d.]+),([\d.]+),(-?[\d.]+),([\d.]+)\]', _bl)]
+except OSError:
+    _rows = []
+if _rows:
+    _h = sorted(r[5] for r in _rows)
+    _a = sorted(r[2] * r[3] for r in _rows)
+    _xs = [r[0] for r in _rows]
+    _zs = [r[1] for r in _rows]
+    print('   %d real footprints   x %.0f..%.0f   z %.0f..%.0f'
+          % (len(_rows), min(_xs), max(_xs), min(_zs), max(_zs)))
+    print('   height median %.1f m, tallest %.1f;  footprint median %.0f m2'
+          % (_h[len(_h) // 2], _h[-1], _a[len(_a) // 2]))
+    # Paris is a city of six storeys — the Haussmann cornice, capped by by-law.
+    # If the median drifts up, the modern screen has stopped working.
+    check(17 < _h[len(_h) // 2] < 24,
+          'the median block is a Haussmann six storeys',
+          '%.1f m' % _h[len(_h) // 2])
+    check(_h[-1] < 32, 'nothing modern got through the eight-storey screen',
+          'tallest %.1f m' % _h[-1])
+    _in = sum(1 for r in _rows
+              if min(math.hypot(p[0] - r[0], p[1] - r[1]) for p in S) < 74)
+    check(_in == 0, 'no surveyed block stands in the Seine', '%d do' % _in)
+else:
+    print('   src/paris_buildings.js is not present — step 3 has not been run.')
+
 # --------------------------------------------------------------- Saint-Cloud
-print('\n5. SAINT-CLOUD, AND THE THINGS THAT USED TO STAND IN A FIELD')
+print('\n6. SAINT-CLOUD, AND THE THINGS THAT USED TO STAND IN A FIELD')
 sc = read('paris_stcloud.js')
 
 
@@ -286,7 +316,7 @@ check(_left <= 6, 'the half-frame placements are down to Bois scenery',
       '%d left' % _left)
 
 # ---------------------------------------------------------------- the places
-print('\n6. THE PLACES AND THE COURSE')
+print('\n7. THE PLACES AND THE COURSE')
 geo = read('paris_geo.js')
 PL = re.findall(r'(\w+):\s*\[([\d.]+),\s*([\d.-]+)\]', geo.split('export const PLACES')[1].split('};')[0])
 OLAT = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', geo).group(1))

@@ -38,6 +38,7 @@ import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_
 import { WALL_RUNS, WALL } from './paris_wall.js';
 import { PONT, AVRE, CHURCH, PARK, LONGCHAMP as LC_REAL, AUTEUIL as AU_REAL } from './paris_stcloud.js';
 import { LANDMARKS } from './paris_landmarks.js';
+import { OSM_BUILDINGS } from './paris_buildings.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -2207,9 +2208,31 @@ function buildCity(scene, riverPts) {
     ((x - o.x) / (o.rx + pad)) ** 2 + ((z - o.z) / (o.rz + pad)) ** 2 < 1;
   const inBois = (x, z) => (x >= -3800 && x <= -680 && Math.abs(z) <= 1120)
     || inOval(LONGCHAMPS, x, z) || inOval(AUTEUIL, x, z);
-  const canPlace = (x, z) => !inSite(x, z) && !inBois(x, z) && distToRiver(x, z) > 116;
+
+  // ---------- the real blocks, where there are real blocks ----------
+  // src/paris_buildings.js holds 12,464 footprints off OpenStreetMap, covering
+  // the theatre of every scenario. Inside that box the procedural frontage
+  // generator is switched OFF entirely: two cities on the same ground would
+  // interleave rows of invented houses through the real blocks.
+  const OSM_BOX = { x0: -2410, x1: 2771, z0: -1935, z1: 1828 };
+  const inSurveyedCity = (x, z) => x > OSM_BOX.x0 && x < OSM_BOX.x1
+    && z > OSM_BOX.z0 && z < OSM_BOX.z1;
+  const canPlace = (x, z) => !inSite(x, z) && !inBois(x, z)
+    && !inSurveyedCity(x, z) && distToRiver(x, z) > 116;
 
   const list = generateFrontages(STREETS, canPlace, rand);
+
+  // …and the surveyed blocks themselves. `w`/`d` are the world-axis extents the
+  // collider wants; `rw`/`rd`/`ry` are the real ones the mesh is built from.
+  for (const [bx, bz, bw, bl, bry, bh] of OSM_BUILDINGS) {
+    if (inSite(bx, bz) || distToRiver(bx, bz) < 74) continue;
+    const c = Math.abs(Math.cos(bry)), sn = Math.abs(Math.sin(bry));
+    list.push({
+      x: bx, z: bz, w: bl * c + bw * sn, d: bl * sn + bw * c, h: bh,
+      rw: bl, rd: bw, ry: bry, r: ((bx * 7 + bz * 13) % 1000) / 1000,
+      nChim: bw * bl > 220 ? 3 : 2,
+    });
+  }
 
   // interior fill: the deep-city backdrop east of the race line
   // Over the WHOLE city, not a box in the middle of it. The fill used to run
@@ -2224,6 +2247,7 @@ function buildCity(scene, riverPts) {
       if (!canPlace(x, z)) continue;
       // the Bois and the western parks were not built over
       if (x < -560 && Math.abs(z) < 1700) continue;
+      if (inSurveyedCity(x, z)) continue;      // the real blocks are there
       if (rand() < 0.25) continue;
       const w = 52 + rand() * 26, d = 52 + rand() * 26, r = rand();
       // the fill blocks are 52-78 m across, so a fixed margin on the CENTRE let
