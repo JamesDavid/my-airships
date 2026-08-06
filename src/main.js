@@ -86,6 +86,20 @@ const dailyWind = new THREE.Vector3(3.4, 0, 0.7);
 const todaysWind = new THREE.Vector3(3.4, 0, 0.7);
 let windGustT = 0;      // seconds since midnight UTC — see skyTime()
 
+// The button said SAND for every ship in the fleet, and only five of them
+// threw sand. From the No. 5 on it is a spigot on a brass water cylinder —
+// Ch. XI, "the first time in aeronautics, I used liquid ballast" — so the
+// button says WATER and the messages talk about the spigot. See src/ships.js.
+function ballastWord() {
+  return (ship && ship.spec.ballast === 'water') ? 'WATER' : 'SAND';
+}
+
+function labelBallast() {
+  const b = document.getElementById('btnSand');
+  if (b) b.textContent = ballastWord();
+  touchHelp();
+}
+
 /**
  * @param where  null to start from the shed, or a place aloft to take her over
  *               at — a free-flying pilot changing ships does not fall out of
@@ -105,6 +119,7 @@ function spawnShip(specId, where = null) {
   }
   ship.eyeNear = measureEyeNear(ship);
   setCenter('', '');   // clear any wreck notice from the previous ship
+  labelBallast();
   document.getElementById('helpTitle').textContent = `My Airships — ${ship.spec.name}`;
   addMsg('ship', `${ship.spec.name} — ${ship.spec.sub}`, 0);
 }
@@ -659,12 +674,21 @@ if (isTouch) {
   document.getElementById('help').addEventListener('pointerdown', () => {
     document.getElementById('help').classList.add('hidden');
   });
-  document.querySelector('#help .quote').textContent =
+  touchHelp();
+}
+
+// Rebuilt whenever the ship changes, because the ballast button is not always
+// called the same thing: the first five ships throw sand and the rest open a
+// spigot on a water cylinder.
+function touchHelp() {
+  const q = document.querySelector('#help .quote');
+  if (!q || !isTouch) return;
+  q.textContent =
     'On touch: the CARB lever is the throttle — set it and it stays, like the brass lever aboard. '
-    + 'The HELM slider steers and stays where you lash it; ' +
-    'the TRIM slider is the shifting weights and holds too — center either to run straight ' +
-    'and level. SAND drops ballast, VENT descends, FIX coaxes the motor, GO starts the trial. ' +
-    'Drag the sky to look around. Tap this panel to close it.';
+    + 'The HELM slider steers and stays where you lash it; '
+    + 'the TRIM slider is the shifting weights and holds too — center either to run straight '
+    + `and level. ${ballastWord()} drops ballast, VENT descends, FIX coaxes the motor, `
+    + 'GO starts the trial. Drag the sky to look around. Tap this panel to close it.';
 }
 
 // the on-screen controls work anywhere — touch devices get them by default,
@@ -2809,15 +2833,30 @@ const EVENT_TEXT = {
   sagWarn:  ['sagWarn', 'The envelope sags — the wires reach toward the propeller! Throttle down!', 12],
   fouling:  ['fouling', 'The propeller is cutting and tearing at the wires!', 6],
   rearing:  ['rearing', 'The gas rushes to the up-pointed stem — the ship rears like an aerial steed!', 15],
-  ballast:  ['ballast', 'A sack of sand goes over the side.', 2],
-  noballast:['noballast', 'Not a handful of sand remains.', 8],
+  // text chosen per ship at show time — sand goes over the side, water runs out
+  ballast:  ['ballast', null, 2],
+  noballast:['noballast', null, 8],
   treetops: ['treetops', 'Caught in the tree-tops — “a kind of insurance against more terrible accidents.”', 22],
   roughLanding: ['rough', 'A rough landing — the keel groans.', 8],
   motorFixed: ['motorfixed', 'The motor takes heart and rumbles on!', 4],
   fuelOut: ['fuelout', 'The petroleum is spent! The motor dies away — you are a free balloon now.', 0],
-  folding: ['folding', 'The balloon is folding in the middle like a pocket knife! Throttle down, level off, drop sand!', 8],
+  folding: ['folding', 'The balloon is folding in the middle like a pocket knife! Throttle down, level off, drop ballast!', 8],
   pumpFail: ['pumpfail', 'The rotary ventilator has stopped — the air balloon is emptying and she will go slack! (tap F)', 0],
   pumpFixed: ['pumpfixed', 'The ventilator picks up again and the balloon draws taut.', 5],
+};
+
+// A sack over the side, or a spigot opened on a brass cylinder in the keel.
+// Ch. XI, of the No. 5's new keel: "their two spigots were so arranged that
+// they could be opened and shut from my basket by means of two steel wires."
+const BALLAST_TEXT = {
+  ballast: {
+    sand:  'A sack of sand goes over the side.',
+    water: 'A spigot opens, and the water runs out of the keel in a bright rope.',
+  },
+  noballast: {
+    sand:  'Not a handful of sand remains.',
+    water: 'The cylinders are dry — not a litre left to let go.',
+  },
 };
 
 function drainEvents() {
@@ -2829,7 +2868,7 @@ function drainEvents() {
       continue;
     }
     const e = EVENT_TEXT[ev];
-    if (e) addMsg(e[0], e[1], e[2]);
+    if (e) addMsg(e[0], e[1] === null ? BALLAST_TEXT[ev][ship.spec.ballast] : e[1], e[2]);
   }
   ship.events.length = 0;
 }

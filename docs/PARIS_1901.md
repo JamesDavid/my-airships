@@ -324,17 +324,38 @@ Said plainly so nobody spends a week on it:
 
 ## Backlog
 
-- **THE SHIPS FLY TWICE AS FAST AS THEY DID.** The book gives one hard airspeed:
-  Puteaux and back, "about 3 kilometres (2 miles), done in nine minutes" on the
-  No. 5 — **20 km/h**. The game's No. 5 makes 39.3 km/h and the No. 6 41.0. The
-  *records* are honest (the Deutsch record of 29:31 over 9.9 km is 20.1 km/h,
-  exactly his pace) but the ships can fly at twice that, so every course has far
-  more slack than history did.
+- ~~**THE SHIPS FLY TWICE AS FAST AS THEY DID.**~~ **They do not — this entry was
+  wrong, and it was wrong because it used the wrong figure.**
 
-  Left alone deliberately: changing `thrust`/`dragQ` rebalances every scenario,
-  every time trial and every leaderboard at once, and that is a decision about
-  what the game is for, not a bug fix. `tools/check_paris.py` now records the
-  figures so the gap is visible rather than forgotten.
+  It rested on one number: Puteaux and back, "about 3 kilometres (2 miles), done
+  in nine minutes" on the No. 5, which is 20 km/h. But that was an excursion, in
+  wind, and the book gives a *measured* airspeed four paragraphs earlier in the
+  same chapter — the one occasion he ever got a clean reading. Ch. XIII:
+
+  > "Mr Maurice Farman followed me round the racecourse in his automobile at its
+  > second speed. His estimate was between **26 and 30 kilometres** (16 and 18½
+  > miles) per hour **with my guide rope dragging**... Our calculation at the
+  > time was about **5 kilometres (3 miles) per hour** [for the rope's braking],
+  > which would have brought my **proper speed up to between 30 and 35
+  > kilometres** (18½ and 21½ miles) per hour."
+
+  Flown headless in `tools/check_scenarios.mjs` over the real model:
+
+  | | the game | the book |
+  |---|---|---|
+  | No. 5, rope clear | 37.2 km/h | 30–35 ("proper speed") |
+  | No. 5, rope dragging | 33.4 km/h | 26–30 (Farman's motor-car) |
+  | what the rope costs | 3.7 km/h | "about 5" |
+  | No. 9 runabout | 23.3 km/h | 20–25 |
+  | No. 7 racer | 64.0 km/h | 70–80 by design, never realised |
+
+  So the fleet runs **6–11% fast**, not 100%, and the No. 9 and No. 7 are inside
+  the book's own figures. Six per cent is inside the uncertainty of an estimate
+  made in 1901 from a moving car, and `check_scenarios.mjs` now asserts each ship
+  against the range the book gives, so a real drift would be caught.
+
+  **Not rebalanced**, and now for a better reason than before: there is no longer
+  a discrepancy worth paying for it with every leaderboard record in the game.
 
 - **Ballast by ship: sand or water.** The UI button says SAND for every ship.
   The book does not use one material throughout — check `docs/BOOK_REFERENCE.md`

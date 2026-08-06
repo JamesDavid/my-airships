@@ -10,6 +10,7 @@ import './headless.mjs';
 import { buildWorld } from '../src/world.js';
 import { SCENARIOS } from '../src/scenarios.js';
 import { makeShip } from './sim.mjs';
+import { SHIPS } from '../src/ships.js';
 
 const scene = { children: [], add(...o) { this.children.push(...o); },
   remove() {}, traverse(f) { f(this); } };
@@ -94,6 +95,65 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       ok ? (r.verdict.ok ? 'won ' : 'lost') + ': ' + r.verdict.msg.slice(0, 52)
         : 'landed=' + r.landed + ' wrecked=' + r.wrecked + ' and still no verdict');
   }
+  console.log('');
+  console.log('EVERY SHIP KNOWS WHAT IT THREW');
+  console.log('   Sand to the No. 4; water from the No. 5, whose keel carried the');
+  console.log('   first liquid ballast ever flown (Ch. XI).');
+  console.log('');
+  const WANT = { brazil: 'sand', no1: 'sand', no2: 'sand', no3: 'sand', no4: 'sand',
+    no5: 'water', no6: 'water', no7: 'water', no9: 'water', no10: 'water',
+    villedeparis: 'water' };
+  for (const [id, spec] of Object.entries(SHIPS)) {
+    const want = WANT[id];
+    const got = spec.ballast;
+    const ok = want ? got === want : !!got;
+    if (!ok) fails++;
+    console.log('   %s  %s  %s', ok ? 'ok  ' : 'FAIL', id.padEnd(13),
+      got ? got + (want && got === want ? '' : '  (expected ' + want + ')') : 'NO BALLAST FIELD');
+  }
+
+  console.log('');
+  console.log('SHIP SPEEDS AGAINST THE ONES HE WROTE DOWN');
+  console.log('   Ch. XIII, the No. 5 round Longchamps with Maurice Farman keeping');
+  console.log('   pace in his motor-car: "between 26 and 30 kilometres per hour with');
+  console.log('   my guide rope dragging"... "which would have brought my proper');
+  console.log('   speed up to between 30 and 35".');
+  console.log('');
+  const env2 = { groundAt: () => 0, buildings: [], underCloud: false, inBois: false };
+  const topSpeed = (id, alt) => {
+    const sh0 = makeShip(id); sh0.reset({ x: 0, y: alt, z: 0 }, 0);
+    let best = 0;
+    const dt = 1 / 30;
+    for (let k = 0; k * dt < 400; k++) {
+      sh0.update(dt, { throttle: 1, rudder: 0,
+        pitch: Math.max(-1, Math.min(1, (alt - sh0.pos.y) * 0.05)), vent: 0, coax: 0 },
+        { x: 0, y: 0, z: 0 }, env2);
+      if (sh0.pos.y > 4) best = Math.max(best, Math.hypot(sh0.vel.x, sh0.vel.z));
+      if (sh0.wrecked) break;
+    }
+    return best * 3.6;
+  };
+  // Only the ships the book gives a figure for, with the tolerance a 1901
+  // estimate from a moving automobile deserves.
+  const BOOK = [
+    ['no5', 30, 35, 'Ch. XIII, proper speed at Longchamps'],
+    ['no9', 20, 25, 'Ch. XXII, the runabout'],
+    ['no7', 55, 80, 'Ch. XVI, the racer, 70-80 by design and never realised'],
+  ];
+  for (const [id, lo, hi, src] of BOOK) {
+    const v = topSpeed(id, 150);
+    const slack = 0.15;
+    const ok = v >= lo * (1 - slack) && v <= hi * (1 + slack);
+    if (!ok) fails++;
+    console.log('   %s  %s  %s km/h   book %d-%d   (%s)', ok ? 'ok  ' : 'FAIL',
+      id.padEnd(5), v.toFixed(1).padStart(5), lo, hi, src);
+  }
+  {
+    const clear = topSpeed('no5', 150), drag = topSpeed('no5', 37);
+    console.log('   ---  no5    the guide rope costs %s km/h; he reckoned about 5',
+      (clear - drag).toFixed(1));
+  }
+
   console.log('');
   console.log('%s', fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');
   process.exit(fails ? 1 : 0);

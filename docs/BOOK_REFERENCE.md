@@ -185,9 +185,13 @@ it justifies.
   measures 3,585 m — his figure and the modern outline agree to 2.4%, which is
   as good a check on the traced course as exists. `tracks.js` trims the last of
   it with `LAP_INSET` so the circuit IS 3.5 km.
-- **3 km in nine minutes is 20 km/h**, on the No. 5. That is a rare hard number
-  for airspeed and it does not match the game: the ships make about 40 km/h.
-  See the note in docs/PARIS_1901.md — it is a real discrepancy, not a rounding.
+- **3 km in nine minutes is 20 km/h**, on the No. 5 — but do not use this as
+  her airspeed, which is the mistake the backlog made for a while. It was an
+  excursion to Puteaux and back in wind. The clean reading is in the same
+  chapter: Maurice Farman pacing him round Longchamps in a motor-car gave 26–30
+  km/h with the guide rope down, and **30–35 km/h** with the rope's ~5 km/h of
+  braking added back. The game's No. 5 makes 37.2 clear and 33.4 dragging, which
+  is 6–11% fast, not double. See docs/PARIS_1901.md.
 
 ### A14. The Trocadéro, 8 August 1901 — the ballast he did not throw
 > "I saw the propeller cutting and tearing at the wires. **I stopped the motor

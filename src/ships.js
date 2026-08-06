@@ -6,12 +6,30 @@
 // keel.type: basket-long | pole | saddle | truss | minimal | double
 // prop: none | bow | stern | both
 
+// BALLAST: SAND OR WATER, and it changes ship by ship.
+//
+// The spherical balloons and the first four air-ships threw sand — Ch. III is
+// full of it: "we are masters of our altitude by the possession of a few pounds
+// of sand", "we threw out a few handfuls of sand to leap up and pass over it".
+//
+// The change came with the keel built for the No. 5. Ch. XI: "For the first
+// time in these experiments, as well as the first time in aeronautics, I used
+// liquid ballast. Two brass reservoirs, very thin, and holding altogether 54
+// litres (12 gallons), were filled with water and fixed in the keel... their two
+// spigots were so arranged that they could be opened and shut from my basket by
+// means of two steel wires."
+//
+// So it is a spigot from the No. 5 on, not a sack over the side — and Ch. XVII
+// confirms it still is at Monaco in the No. 6: "I let out the overplus of water
+// ballast". The No. 9's material is not stated anywhere; it inherits the keel's
+// cylinders, which is an inference and the only one here.
 export const SHIPS = {
 
   // "Brazil" — the beloved little spherical balloon (valise-packable).
   // No motor, no rudder: ballast, valve, and guide rope only. The tutorial.
   brazil: {
     id: 'brazil', name: 'The "Brazil"', sub: 'smallest of spherical balloons — drift with the wind',
+    ballast: 'sand',
     envelope: { shape: 'sphere', length: 8, diameter: 8, color: 0xdfd3b4 },
     keel: { type: 'basket-long', length: 3.5, drop: 7.5 },
     prop: 'none', rudderScale: 0,
@@ -28,6 +46,7 @@ export const SHIPS = {
   // Folds like a pocket knife when starved — it nearly killed him at Bagatelle.
   no1: {
     id: 'no1', name: 'Santos-Dumont No. 1', sub: 'the first air-ship — handle with care',
+    ballast: 'sand',
     // an interior air balloon, fed by a fan off the motor, to hold her form:
     // "the little interior air balloon… sewed inside to the bottom of the great
     // balloon like a kind of closed pocket" (Ch. X). Only the first two had one.
@@ -46,6 +65,7 @@ export const SHIPS = {
   // Doubled up in a rain gust on its first trial.
   no2: {
     id: 'no2', name: 'Santos-Dumont No. 2', sub: 'the ventilated cylinder',
+    ballast: 'sand',
     envelope: { shape: 'cylinder', length: 25, diameter: 4.1, color: 0xc8bb9d, ballonnet: true },
     keel: { type: 'basket-long', length: 4, drop: 10 },
     prop: 'stern', rudderScale: 0.8,
@@ -61,6 +81,7 @@ export const SHIPS = {
   // 10 m bamboo pole keel (Fig. 6). No fold risk, but clumsy; ~25 km/h.
   no3: {
     id: 'no3', name: 'Santos-Dumont No. 3', sub: 'the big-bellied one — slow but sure',
+    ballast: 'sand',
     envelope: { shape: 'stubby', length: 20, diameter: 7.5, color: 0xb9ab8c },
     keel: { type: 'pole', length: 10, drop: 6.5 },
     prop: 'stern', rudderScale: 0.9,
@@ -76,6 +97,7 @@ export const SHIPS = {
   // propeller at the BOW pulling, 7 hp (photo p.135, Fig. 7).
   no4: {
     id: 'no4', name: 'Santos-Dumont No. 4', sub: 'the bicycle saddle — bow propeller',
+    ballast: 'sand',
     envelope: { shape: 'cylinder', length: 33, diameter: 5.1, color: 0xd5c9aa },
     keel: { type: 'saddle', length: 14, drop: 7.5 },
     prop: 'bow', rudderScale: 0.9,
@@ -92,6 +114,7 @@ export const SHIPS = {
   // Trocadero. Its valves leak early — watch the pressure.
   no5: {
     id: 'no5', name: 'Santos-Dumont No. 5', sub: 'the pine truss — mind the weak valve',
+    ballast: 'water',
     envelope: { shape: 'ellipsoid', length: 33, diameter: 5.4, color: 0xd2c5a5 },
     keel: { type: 'truss', length: 18, drop: 8.5 },
     prop: 'stern', rudderScale: 0.95,
@@ -107,6 +130,7 @@ export const SHIPS = {
   // 630 m^3, 12 hp water-cooled, interior compensator. Balanced and honest.
   no6: {
     id: 'no6', name: 'Santos-Dumont No. 6', sub: 'the Deutsch Prize winner',
+    ballast: 'water',
     envelope: { shape: 'ellipsoid', length: 33, diameter: 6, color: 0xd9c893 },
     keel: { type: 'truss', length: 18, drop: 8.5 },
     prop: 'stern', rudderScale: 1.0,
@@ -122,6 +146,7 @@ export const SHIPS = {
   // propellers bow + stern, valves at 12 cm water. 70-80 km/h design.
   no7: {
     id: 'no7', name: 'Santos-Dumont No. 7', sub: 'the racing air-ship',
+    ballast: 'water',
     envelope: { shape: 'slender', length: 42, diameter: 5.4, color: 0x4a3b2e },
     keel: { type: 'truss', length: 22, drop: 8.0 },
     prop: 'both', rudderScale: 0.9,
@@ -137,6 +162,7 @@ export const SHIPS = {
   // basket tucked close beneath. Slow, nimble, unfoldable; lands in streets.
   no9: {
     id: 'no9', name: 'Santos-Dumont No. 9', sub: 'the little runabout',
+    ballast: 'water',
     envelope: { shape: 'egg', length: 15, diameter: 6.2, color: 0xd3c9a8 },
     keel: { type: 'minimal', length: 5.5, drop: 4.2 },
     prop: 'stern', rudderScale: 0.8,
@@ -152,6 +178,7 @@ export const SHIPS = {
   // passenger baskets and the aid's basket. Stately; turns like a steamer.
   no10: {
     id: 'no10', name: 'Santos-Dumont No. 10', sub: 'the Omnibus — twelve passengers',
+    ballast: 'water',
     envelope: { shape: 'ellipsoid', length: 36, diameter: 9, color: 0xcdbf9d },
     keel: { type: 'double', length: 20, drop: 8.5 },
     prop: 'stern', rudderScale: 1.1,
@@ -167,6 +194,7 @@ export const SHIPS = {
   // the No. 6. The rival ship (AI only; not player-selectable).
   villedeparis: {
     id: 'villedeparis', name: 'La Ville de Paris', sub: 'M. Deutsch’s rival dirigible',
+    ballast: 'water',
     ai: true,
     envelope: { shape: 'ellipsoid', length: 32, diameter: 6.4, color: 0xb8ab5f },
     keel: { type: 'truss', length: 18, drop: 8.5 },
