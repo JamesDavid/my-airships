@@ -291,7 +291,23 @@ const _sc = placeLegacy('stcloud');
 // Deutsch runs began by crossing the river.
 export const PAD_POS = new THREE.Vector3(_sc.x + 400, 2.0, _sc.z - 200);
 export const START_RING = new THREE.Vector3(PAD_POS.x + 220, 55, PAD_POS.z - 40);
-export const TOWER_RING = new THREE.Vector3(_twr.x + 340, 70, _twr.z);
+/**
+ * The turn round the Eiffel Tower, cut to the tower.
+ *
+ * A 24 m hoop beside a 312 m tower reads as a bracelet on a lamp-post: it tells
+ * the pilot nothing about the thing he is being asked to round. So the gate is
+ * a rectangle the tower's own height, half that wide, standing off the ground
+ * by a quarter of it — you fly through a doorway the size of the tower, which
+ * is what rounding it actually feels like from the basket.
+ *
+ * 312 m is the tower as this world builds it (see TOWER_ANCH below, whose top
+ * station is 312). Change one and change the other.
+ */
+export const TOWER_H = 312;
+export const TOWER_RING = Object.assign(
+  new THREE.Vector3(_twr.x + 340, TOWER_H / 4 + TOWER_H / 2, _twr.z),
+  { gw: TOWER_H / 2, gh: TOWER_H },
+);
 
 const _lc = placeLegacy('longchamp');
 const LONGCHAMPS = { x: _lc.x, z: _lc.z, rx: 520, rz: 300 };

@@ -23,13 +23,20 @@ const PYLONS = [0, 1, 2].map((i) => {
   const a = -Math.PI / 2 + TRI_ROT + i * 2 * Math.PI / 3;
   return new THREE.Vector3(TRI_C.x + Math.cos(a) * TRI_R, 0, TRI_C.z + Math.sin(a) * TRI_R);
 });
-// …and the race gates: rings set ~40 m OUTSIDE each pylon, so flying the
-// hoop naturally rounds the tower (the ring is never on the pole itself)
+// …and the race gates: set ~40 m OUTSIDE each pylon, so flying the gate
+// naturally rounds the tower (it is never on the pole itself). Each gate is a
+// rectangle cut to the pylon it stands off — as tall as the pylon, half that
+// wide, its sill a quarter of the pylon's height off the ground — so the frame
+// reads against the mast's whole length instead of hanging beside it as a hoop.
+const PYLON_H = 76;                       // the flagstaffs built below
 const CENTROID = TRI_C;
 const GATES = PYLONS.map((p) => {
   const dx = p.x - CENTROID.x, dz = p.z - CENTROID.z;
   const len = Math.hypot(dx, dz) || 1;
-  return new THREE.Vector3(p.x + (dx / len) * 40, 58, p.z + (dz / len) * 40);
+  return Object.assign(
+    new THREE.Vector3(p.x + (dx / len) * 40, PYLON_H / 4 + PYLON_H / 2, p.z + (dz / len) * 40),
+    { gw: PYLON_H / 2, gh: PYLON_H },
+  );
 });
 
 export function buildWorldStLouis(scene) {
@@ -320,15 +327,15 @@ export function buildWorldStLouis(scene) {
   // ---------- the three race pylons, each flying a big flag ----------
   const flags = [];
   for (const p of PYLONS) {
-    const pylon = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 3.2, 76, 8), white);
-    pylon.position.set(p.x, 38, p.z);
+    const pylon = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 3.2, PYLON_H, 8), white);
+    pylon.position.set(p.x, PYLON_H / 2, p.z);
     pylon.castShadow = true;
     scene.add(pylon);
     const fl = makeStreamFlag(10, 5, 0xb5442f);
-    fl.position.set(p.x, 78, p.z);
+    fl.position.set(p.x, PYLON_H + 2, p.z);
     scene.add(fl);
     flags.push(fl.userData.flag);
-    buildings.push({ x: p.x, z: p.z, w: 7, d: 7, h: 76, top: 78 });
+    buildings.push({ x: p.x, z: p.z, w: 7, d: 7, h: PYLON_H, top: PYLON_H + 2 });
   }
   const homeFlag = makeStreamFlag(8, 4, 0x2b4a8c);
   homeFlag.position.set(PAD.x, 26, PAD.z + 30);

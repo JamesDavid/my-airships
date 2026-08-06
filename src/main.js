@@ -207,7 +207,8 @@ function measureEyeNear(s) {
  *   a wide, faint funnel ring standing off the ENTRY side only. From in front
  *   the gate reads as a mouth to fly into. From behind there is nothing.
  */
-function makeRing(color, arrows) {
+function makeRing(color, arrows, box) {
+  if (box) return makeGateFrame(color, arrows, box);
   const m = new THREE.Mesh(new THREE.TorusGeometry(24, 1.4, 10, 40),
     new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true }));
   m.rotation.y = Math.PI / 2;
@@ -239,6 +240,74 @@ function makeRing(color, arrows) {
   return m;
 }
 
+/**
+ * A gate you round a MAST through, rather than a hoop you thread.
+ *
+ * A 24 m ring is the right size for a turn buoy in open air. It is the wrong
+ * size for a pylon, and it is absurd for the Eiffel Tower: a hoop two ship
+ * lengths across, hung beside a three-hundred-metre iron tower, tells the pilot
+ * nothing about where the tower is. So the gates that stand off a mast are cut
+ * to the mast instead — as tall as the thing being rounded, half that wide, and
+ * lifted a quarter of its height clear of the ground so the frame reads against
+ * the mast's whole length and not against the crowd at its feet.
+ *
+ * Built in the local XY plane with its normal down +Z, exactly like the torus,
+ * so the heading, the pass test and the entry/exit colours are unchanged — only
+ * the shape and the extent are different. The pass test reads `gw`/`gh` off the
+ * gate and tests the rectangle; see the gate crossing in tick().
+ */
+function makeGateFrame(color, arrows, box) {
+  const m = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true });
+  // a Group has no .material, and the active gate is recoloured every frame —
+  // hand out the frame's own material so gateTint() has something to set.
+  m.userData.frameMat = mat;
+  const hw = box.w / 2, hh = box.h / 2;
+  const t = Math.max(1.4, Math.min(box.w, box.h) * 0.028);   // bar thickness
+  const bar = (w, h, x, y) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), mat);
+    b.position.set(x, y, 0);
+    m.add(b);
+  };
+  bar(box.w + t, t, 0, hh); bar(box.w + t, t, 0, -hh);        // head and sill
+  bar(t, box.h, hw, 0); bar(t, box.h, -hw, 0);                // jambs
+  if (arrows) {
+    // barbs at the middle of each side, pointing the way through
+    for (const [bx, by] of [[0, hh], [0, -hh], [hw, 0], [-hw, 0]]) {
+      const barb = new THREE.Mesh(new THREE.ConeGeometry(t * 2.2, t * 6.8, 7), mat);
+      barb.position.set(bx, by, t * 3.9);
+      barb.rotation.x = Math.PI / 2;
+      m.add(barb);
+    }
+    // the same green-in / red-out collars as the hoop, cut square. Each is
+    // single-sided and faces outward, so only one of them is ever visible.
+    const collar = (col, z, flip) => {
+      const ow = hw + t * 3.4, oh = hh + t * 3.4;
+      const sh = new THREE.Shape();
+      sh.moveTo(-ow, -oh); sh.lineTo(ow, -oh); sh.lineTo(ow, oh); sh.lineTo(-ow, oh);
+      sh.closePath();
+      const hole = new THREE.Path();                          // wound the other way
+      hole.moveTo(-hw, -hh); hole.lineTo(-hw, hh); hole.lineTo(hw, hh); hole.lineTo(hw, -hh);
+      hole.closePath();
+      sh.holes.push(hole);
+      const c = new THREE.Mesh(new THREE.ShapeGeometry(sh),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55,
+          side: THREE.FrontSide, fog: true, depthWrite: false }));
+      c.position.z = z;
+      if (flip) c.rotation.y = Math.PI;
+      m.add(c);
+    };
+    collar(0x5fbf6a, -t * 1.6, true);                         // entry: green
+    collar(0xc4544a, t * 1.6, false);                         // exit: red
+  }
+  scene.add(m);
+  return m;
+}
+
+// recolour a gate whichever shape it is — a hoop is one mesh, a frame is a
+// group whose bars share one material (the entry/exit collars keep their own)
+function gateTint(r, color) { (r.userData.frameMat || r.material).color.set(color); }
+
 function clearRivals() { rivals.forEach((r) => r.dispose()); rivals = []; }
 
 // the waypoint hoops of a scenario's route
@@ -259,7 +328,12 @@ function historicTrack() {
     name: world.name, location: currentLocation,
     // St. Louis is three laps of the triangle, as he proposed it
     laps: world.raceLaps || 1, historic: true,
-    gates: (world.gates || []).map((g) => ({ x: g.x, y: g.y, z: g.z, r: 24 })),
+    // gw/gh, when a world sets them, make the gate a rectangle cut to the mast
+    // it stands off (see makeGateFrame) instead of a 24 m hoop
+    gates: (world.gates || []).map((g) => ({
+      x: g.x, y: g.y, z: g.z, r: 24,
+      ...(g.gw ? { gw: g.gw, gh: g.gh } : {}),
+    })),
   };
 }
 
@@ -269,10 +343,12 @@ function buildRings(gates, originPos) {
   // server-side run validator all use one definition of "through the gate"
   const headings = gateHeadings(gates, originPos);
   gateRings = gates.map((g, i) => {
-    const r = makeRing(0x8a8a8a, true);
+    const r = makeRing(0x8a8a8a, true, g.gw ? { w: g.gw, h: g.gh } : null);
     r.position.set(g.x, g.y, g.z);
     r.rotation.y = headings[i];
-    r.scale.setScalar((g.r || 24) / 24);
+    // a rectangle is already cut to size; only the hoop scales off its radius
+    r.userData.s0 = g.gw ? 1 : (g.r || 24) / 24;
+    r.scale.setScalar(r.userData.s0);
     r.userData.r = g.r || 24;
     return r;
   });
@@ -2202,10 +2278,10 @@ function updateRace(dt) {
   const running = s === 'run';
   const homeward = track.historic && race.gate >= gates.length;
   startRing.material.color.set(!running || homeward ? 0xd9b24a : 0x8a8a8a);
-  gateRings.forEach((r, i) => r.material.color.set(running && i === race.gate ? 0xd9b24a : 0x8a8a8a));
+  gateRings.forEach((r, i) => gateTint(r, running && i === race.gate ? 0xd9b24a : 0x8a8a8a));
   const pulse = 1 + Math.sin(performance.now() * 0.004) * 0.05;
   startRing.scale.setScalar(running && homeward ? pulse : 1);
-  gateRings.forEach((r, i) => r.scale.setScalar((r.userData.r / 24) * (running && i === race.gate ? pulse : 1)));
+  gateRings.forEach((r, i) => r.scale.setScalar(r.userData.s0 * (running && i === race.gate ? pulse : 1)));
 
   if (s === 'count') {
     race.count -= dt;
@@ -2246,12 +2322,23 @@ function updateRace(dt) {
       const gn = new THREE.Vector3(Math.sin(ring.rotation.y), 0, Math.cos(ring.rotation.y));
       const rel = ship.pos.clone().sub(ring.position);
       const sd = rel.dot(gn);
-      const lateral = Math.sqrt(Math.max(0, rel.lengthSq() - sd * sd));
-      const passR = (gates[race.gate].r || 24) + 6;
+      const gg = gates[race.gate];
+      // `off` is how far out you crossed, as a fraction of the opening: under 1
+      // is through it, and under 3 is close enough to be worth telling you.
+      let off;
+      if (gg.gw) {
+        // a rectangular gate: across the opening and up it, separately
+        const gt = new THREE.Vector3(Math.cos(ring.rotation.y), 0, -Math.sin(ring.rotation.y));
+        off = Math.max(Math.abs(rel.dot(gt)) / (gg.gw / 2 + 6),
+          Math.abs(rel.y) / (gg.gh / 2 + 6));
+      } else {
+        off = Math.sqrt(Math.max(0, rel.lengthSq() - sd * sd)) / ((gg.r || 24) + 6);
+      }
+      const inside = off < 1;
       const prevSd = race._gateS;
       race._gateS = sd;
       if (prevSd !== undefined && prevSd < 0 && sd >= 0) {
-        if (lateral < passR) {
+        if (inside) {
           // "Ten times in succession I made the circuit of Longchamps, stopping
           // each time at a point designed beforehand" — on a stopping trial the
           // station gate only counts if she is very nearly at rest
@@ -2281,7 +2368,7 @@ function updateRace(dt) {
           } else if (track.historic && gates.length > 1) {
             addMsg('gate', `Pylon ${race.gate} of ${gates.length} rounded!`, 0);
           }
-        } else if (lateral < passR * 3) {
+        } else if (off < 3) {
           addMsg('miss', 'Missed the gate — come round and through it!', 4);
         }
       }
@@ -2925,7 +3012,11 @@ function updateHUD() {
   } else if (s === 'idle') {
     obj = ship.pos.distanceTo(world.startRing) < 150 ? world.hints.idleNear : world.hints.idleFar;
   } else if (s === 'run') {
-    const d = Math.round(ship.pos.distanceTo(raceTargetPos()));
+    // distance OVER THE GROUND to the turn. A gate cut to a 312 m tower has its
+    // centre 234 m up, and a straight-line distance to that would read as 250 m
+    // to go while you are still directly under it.
+    const _tp = raceTargetPos();
+    const d = Math.round(Math.hypot(_tp.x - ship.pos.x, _tp.z - ship.pos.z));
     if (track && !track.historic) {
       obj = `${track.name} — gate ${race.gate + 1}/${track.gates.length} · ${d} m`;
     } else {

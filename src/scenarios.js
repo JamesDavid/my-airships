@@ -44,7 +44,10 @@ export class Rival {
       const downwind = (w.x * toT.x + w.z * toT.z) > 0;
       const targetAlt = downwind ? 135 : 45;
       input.pitch = Math.max(-1, Math.min(1, (targetAlt - s.pos.y) * 0.05));
-      if (s.pos.distanceTo(target) < 45) {
+      // over the ground, not through the air: the tower gate's centre is 234 m
+      // up, and a 3-D test against it would never fire — the rival would circle
+      // the Eiffel Tower for ever and never round it.
+      if (Math.hypot(target.x - s.pos.x, target.z - s.pos.z) < 45) {
         if (homeward) this.finished = this.t;
         else this.gate++;
       }
