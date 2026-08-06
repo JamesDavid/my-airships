@@ -208,6 +208,32 @@ export const SHIPS = {
   },
 };
 
+// ---------------------------------------------------------------- the tanks
+// THE SHIPS COULD NOT REACH THE END OF THEIR OWN COURSES.
+//
+// Measured: the No. 6 ran full throttle for 1,101 s and 10.7 km, and then the
+// petroleum was gone. The Deutsch course is 10.8 km. The gymkhana is 11.2 km.
+// Both of the Paris time trials and the race the No. 6 actually WON were longer
+// than the ship could fly, and nobody had noticed because nobody had ever got
+// far enough round to run dry — the gymkhana's gates were under the pavement
+// and stopped them first. (My own 10% drag trim made it worse: same burn, less
+// speed, so 11.9 km of range became 10.7.)
+//
+// The book is unambiguous that fuel was never the constraint. Ch. XVI, of the
+// prize flight itself: "The actual winning of the Deutsch prize had cost only a
+// few litres of petroleum!" And Ch. XII has the No. 5 make TEN circuits of
+// Longchamps — "a distance of about 35 kilometres" — then set out for Puteaux,
+// "an excursion of about 3 kilometres, done in nine minutes", and steer back to
+// Longchamps again. Forty kilometres and more, on one filling.
+//
+// So the tanks are four times what they were, which puts the No. 5 at 43 km —
+// his 13 July outing — and makes the Deutsch cost about a quarter of a tank,
+// which is what "only a few litres" sounds like against a full supply.
+//
+// This costs nothing in lift: fuelWeight in airship.js is a FRACTION of
+// capacity, so a full tank weighs the same whatever the tank holds.
+export const FUEL_TRIM = 4;
+
 // ---------------------------------------------------------------- drag trim
 // THE FLEET RAN FAST, and the book says by how much.
 //
@@ -235,6 +261,7 @@ export const DRAG_TRIM = 1.2205;
 for (const s of Object.values(SHIPS)) {
   s.physics.dragQ *= DRAG_TRIM;
   s.physics.dragL *= DRAG_TRIM;
+  s.physics.fuel *= FUEL_TRIM;
 }
 
 // keyboard mapping for ship selection at the aerodrome

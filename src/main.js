@@ -12,7 +12,7 @@ import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
 import { SHIPS, SHIP_KEYS } from './ships.js';
 import { SCENARIOS, Rival } from './scenarios.js';
-import { TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
+import { gateOffset, TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 import * as net from './net.js';
 import * as live from './live.js';
 import { courseLength, shipTopSpeed } from './anticheat.js';
@@ -2398,30 +2398,8 @@ function updateRace(dt) {
       const gg = gates[race.gate];
       // `off` is how far out you crossed, as a fraction of the opening: under 1
       // is through it, and under 3 is close enough to be worth telling you.
-      let off, missedWide = false;
-      if (gg.gw) {
-        // A rectangular gate: across the opening and up it, separately — and
-        // THE GOAL IS THE WHOLE RING, right down to the ground.
-        //
-        // The frame is cut to the mast it stands off and its sill is a quarter
-        // of that height up: 78 m on the Eiffel Tower's gate. That lift is what
-        // makes the frame read against the tower's whole length, but it is not
-        // a hurdle — a pilot rounding at seventy metres, which is where the old
-        // 24 m hoop used to hang, went clean under it with the green face above
-        // him the whole way and no idea why it had not counted. He filed it.
-        //
-        // So the sill is scenery and the opening is everything under the head.
-        // You still have to be within the width, and you still have to cross
-        // the right way; you no longer have to climb to a line you cannot see.
-        const gt = new THREE.Vector3(Math.cos(ring.rotation.y), 0, -Math.sin(ring.rotation.y));
-        const across = Math.abs(rel.dot(gt)) / (gg.gw / 2 + 6);
-        const head = gg.gh / 2 + 6;              // the top of the frame
-        const up = rel.y > 0 ? rel.y / head : 0;  // above the head misses; below never does
-        off = Math.max(across, up);
-        missedWide = across > 1;
-      } else {
-        off = Math.sqrt(Math.max(0, rel.lengthSq() - sd * sd)) / ((gg.r || 24) + 6);
-      }
+      const _go = gateOffset(rel, gg, ring.rotation.y);
+      const off = _go.off, missedWide = _go.missedWide;
       const inside = off < 1;
       const prevSd = race._gateS;
       race._gateS = sd;

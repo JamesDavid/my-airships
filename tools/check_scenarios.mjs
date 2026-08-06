@@ -13,6 +13,7 @@ import { makeShip } from './sim.mjs';
 import { SHIPS } from '../src/ships.js';
 import { TRACKS } from '../src/tracks.js';
 import { inRiver } from '../src/paris_terrain.js';
+import { flyTrack } from './fly_track.mjs';
 
 const scene = { children: [], add(...o) { this.children.push(...o); },
   remove() {}, traverse(f) { f(this); } };
@@ -210,6 +211,19 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     if (inR > 0) { console.log('   FAIL trees growing in the river'); fails++; }
     else if (inB > 20) { console.log('   FAIL too many trees indoors'); fails++; }
     else console.log('   ok   nothing growing in the river, and next to nothing indoors');
+  }
+
+  console.log('');
+  console.log('EVERY COURSE CAN ACTUALLY BE FINISHED');
+  console.log('   Flown gate by gate with the shipped test — gateOffset() and');
+  console.log('   gatePlane() from src/tracks.js, the same two the race loop calls.');
+  console.log('');
+  for (const t of TRACKS.filter((x) => x.location === 'paris')) {
+    const r = flyTrack(t, world);
+    if (!r.ok) fails++;
+    console.log('   ' + (r.ok ? 'ok  ' : 'FAIL') + '  ' + t.id.padEnd(16)
+      + (r.ok ? 'round in ' + Math.round(r.t) + ' s, ' + r.log.length + ' gates'
+        : 'STUCK at lap ' + r.lap + ' gate ' + r.gate + ' (' + r.why + ')'));
   }
 
   console.log('');

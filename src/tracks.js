@@ -159,6 +159,39 @@ export function gateHeadings(gates, originPos) {
   });
 }
 
+/**
+ * How far OUTSIDE a gate's opening a crossing is, as a fraction of the opening:
+ * under 1 went through it. `rel` is the ship's position minus the gate's, and
+ * `rotY` is the ring's heading from gateHeadings().
+ *
+ * Lives here, with the gates themselves, so that main.js's race loop and
+ * tools/check_scenarios.mjs are asking the same question of the same code. A
+ * course that cannot be flown is not a thing to discover from the leaderboard.
+ */
+export function gateOffset(rel, g, rotY) {
+  if (g.gw) {
+    // A rectangular gate: across the opening and up it, separately — and the
+    // goal is the WHOLE ring, right down to the ground. The frame's sill sits a
+    // quarter of its height up so that it reads against the mast it stands off,
+    // but that lift is scenery: a pilot rounding below the sill has still
+    // rounded. Above the head misses; below never does.
+    const tx = Math.cos(rotY), tz = -Math.sin(rotY);
+    const across = Math.abs(rel.x * tx + rel.z * tz) / (g.gw / 2 + 6);
+    const up = rel.y > 0 ? rel.y / (g.gh / 2 + 6) : 0;
+    return { off: Math.max(across, up), missedWide: across > 1 };
+  }
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  const sd = rel.x * nx + rel.z * nz;
+  const lenSq = rel.x * rel.x + rel.y * rel.y + rel.z * rel.z;
+  return { off: Math.sqrt(Math.max(0, lenSq - sd * sd)) / ((g.r || 24) + 6),
+    missedWide: false };
+}
+
+/** The signed distance through a gate's plane: negative before, positive after. */
+export function gatePlane(rel, rotY) {
+  return rel.x * Math.sin(rotY) + rel.z * Math.cos(rotY);
+}
+
 function ellipse(cx, cz, rx, rz, n, y, r) {
   const g = [];
   for (let i = 0; i < n; i++) {
