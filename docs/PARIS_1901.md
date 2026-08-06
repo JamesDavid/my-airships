@@ -324,6 +324,45 @@ Said plainly so nobody spends a week on it:
 
 ## Backlog
 
+- **CAN THE DEUTSCH PRIZE BE WON INTO THE DAY'S WIND?** Unresolved, and it
+  matters, because it is the race the whole game is named around.
+
+  In still air the No. 6 goes round the 10.8 km course in 1,086 s against the
+  1,800 s limit. Into the seeded daily wind (4.3 m/s) no autopilot I have
+  written gets round at all. The arithmetic says it should: 35 km/h against
+  15.5 km/h of wind is 19.5 km/h over the ground outbound, 5.4 km at that is
+  16.6 minutes, and the homeward leg is fast — call it 22 minutes against a
+  30-minute limit.
+
+  So I believe the failure is the pilot and not the ship, but I have not
+  proved it, and until it is proved the honest statement is that **nobody has
+  demonstrated the Deutsch prize can be won in wind.**
+
+  What went wrong each time, so the next attempt need not rediscover it:
+
+  - **The throttle is a RATE, not a setting.** It is the brass lever:
+    `input.throttle` is added to the current position, so passing 0 means
+    "leave it where it is", not "shut it". A pilot that passes 0 to slow down
+    does not slow down.
+  - **Buoyancy, not thrust, is what beats you.** Fuel burns off, the ship
+    gets light, and she rises — and `windAt()` blends in the upper current
+    from 180 m, up to 67° veered and 30% stronger. Climbing into that on the
+    homeward leg turns a headwind into a beam wind and blows you back. My
+    first pilot drifted from 122 m to 224 m and went backwards over the
+    ground.
+  - **You cannot vent your way out of it.** My second pilot held altitude by
+    venting whenever it was high, dumped every cubic metre of hydrogen, and
+    sat down in a field. Venting is irreversible; ballast is the only lift
+    you get back, and there are six bags of it.
+  - The book's own advice is the answer and is already in the rival AI: ride
+    high downwind, hug the deck against it (`Rival.update` in scenarios.js
+    targets 135 m downwind and 45 m upwind). A pilot that does that, manages
+    trim rather than the valve, and drops ballast late should get round.
+
+  Worth doing as a proper autopilot in `tools/fly_track.mjs`, which already
+  flies the three time trials gate by gate with the shipped gate test.
+
+
 - ~~**THE SHIPS FLY TWICE AS FAST AS THEY DID.**~~ **DONE — but not for the
   reason this entry gave, which was wrong.**
 

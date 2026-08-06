@@ -206,11 +206,11 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       if (hit) inB++;
     }
     console.log('   ' + trees.length + ' trees; ' + inB + ' indoors, ' + inR + ' in the Seine');
-    // the survivors are one cluster in the Bois under a collider registered
-    // after the planting pass; it was 81 and 8 before the gardens got a filter
+    // 81 indoors and 8 midstream when the gardens first went in; then 12, once
+    // they were filtered but planted before the landmark colliders existed
     if (inR > 0) { console.log('   FAIL trees growing in the river'); fails++; }
-    else if (inB > 20) { console.log('   FAIL too many trees indoors'); fails++; }
-    else console.log('   ok   nothing growing in the river, and next to nothing indoors');
+    else if (inB > 2) { console.log('   FAIL trees growing indoors'); fails++; }
+    else console.log('   ok   nothing growing in the river and nothing indoors');
   }
 
   console.log('');

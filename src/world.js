@@ -825,9 +825,6 @@ export function buildWorld(scene) {
     bridgeCount = found.length;
   }
 
-  // ---------- the Bois ----------
-  const trees = addTrees(scene, buildings);
-
   // ---------- Eiffel Tower ----------
   const tower = makeTower();
   // She is square to the Champ de Mars, not to the compass: a face looks down
@@ -845,6 +842,13 @@ export function buildWorld(scene) {
   buildings.push(...lm.lmColliders);
   // the places the memoir names, and the 1900 maps put on the ground
   const bookPlaces = addBookPlaces(scene, buildings);
+
+  // ---------- the Bois, and the gardens ----------
+  // AFTER the landmarks, not before. Planting ran here first and the landmark
+  // colliders — the two Palais, the Trocadero's galleries, the Roue — were not
+  // yet in `buildings`, so nothing could be tested against them: four trees
+  // were growing inside the Petit Palais, which the gymkhana flies straight past.
+  const trees = addTrees(scene, buildings);
 
   // flags on the Tower and the Arc — wind vanes a pilot can see from afar
   const towerFlag = makeStreamFlag(9, 4.5, 0x2b4a8c);
@@ -1199,6 +1203,16 @@ const GARDENS = [
   ['plantes',     48.8455, 2.3565, 48.8432, 2.3635, 115, true,  false],
   ['invalides',   48.8628, 2.3135, 48.8574, 2.3120, 112, true,  false],
   ['palaisroyal', 48.8659, 2.3370, 48.8648, 2.3380,  45, true,  false],
+  // the wooded gardens flanking the lower Champs-Elysees, from the Concorde up
+  // to the Rond-Point, with the two Palais standing in them. Gymkhana gate 4 is
+  // flown down this, so it is the one a pilot sees closest.
+  ['champselysees',48.8656, 2.3212, 48.8690, 2.3097, 168, false, false],
+  ['vosges',      48.8558, 2.3648, 48.8552, 2.3662,  55, true,  false],
+  ['observatoire',48.8437, 2.3372, 48.8362, 2.3372,  52, true,  false],
+  ['temple',      48.8661, 2.3610, 48.8653, 2.3622,  45, false, false],
+  ['ranelagh',    48.8620, 2.2705, 48.8607, 2.2735,  88, false, false],
+  // the willow tip of the Ile de la Cite; the river filter takes most of it
+  ['vertgalant',  48.8572, 2.3392, 48.8568, 2.3408,  28, false, false],
 ];
 
 function gardenGeom(g) {
