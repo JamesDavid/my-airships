@@ -8,3 +8,7 @@ Thumbs.db
 bug-*.png
 bug-*.jpg
 tools/.cache/
+
+# A stub three.js so the physics can be run headless (tools/sim.mjs). The game
+# itself takes three from the CDN importmap; nothing here is ever served.
+node_modules/

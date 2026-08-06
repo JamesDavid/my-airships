@@ -189,6 +189,47 @@ it justifies.
   for airspeed and it does not match the game: the ships make about 40 km/h.
   See the note in docs/PARIS_1901.md — it is a real discrepancy, not a rounding.
 
+### A14. The Trocadéro, 8 August 1901 — the ballast he did not throw
+> "I saw the propeller cutting and tearing at the wires. **I stopped the motor
+> instantly.** Then, as a consequence, the air-ship was at once **driven back
+> toward the Tower by the wind, which was strong.**
+>
+> At the same time I was falling... **I might have thrown out ballast and greatly
+> diminished the fall, but then the wind would have time to blow me back on the
+> Eiffel Tower.** I, therefore, preferred to let the air-ship go down as it was
+> going." — Ch. XIII
+
+> "It had already carried me so far that I was **expecting to land on the Seine
+> embankment beyond the Trocadero**. My basket and the whole of the keel had
+> already passed the **Trocadero hotels**... the end of the long balloon that was
+> still full of gas came slapping down on the roof just before clearing it. It
+> exploded with a great noise — exactly like a paper bag struck after being
+> blown up... I had **made a mistake in my estimate of the wind's force by a few
+> yards.** Instead of being carried on to fall on the Seine embankment I now
+> found myself hanging in my wicker basket high up in the **courtyard of the
+> Trocadero hotels**, supported by my air-ship's keel." — Ch. XIII
+
+This is the whole of scenario II, and for a long time the game had it backwards:
+
+- **The motor was stopped, by him, on purpose.** That is *why* the wind was
+  behind him. The scenario used to give you a running motor and then add a tail
+  wind to compensate — inventing the one thing and contradicting the other.
+- **The ballast is the decision.** Throwing it slows the fall and buys the wind
+  more time to put you on the Tower. It is a real trade and it is the only
+  control a pilot with no motor has. `tools/check_scenarios.mjs` flies all seven
+  choices: nothing thrown puts you on the roofs at 234 m out, as it did him; one
+  or two bags reach the embankment he was aiming for; four or more and the wind
+  wins, exactly as he predicted.
+- **The hotels, not the palace.** He came down in the courtyard of the *Trocadéro
+  hotels* — the apartment blocks on the Chaillot plateau. The survey has 55 of
+  them with 23–26 m roofs from 400 m out to 200 m out, and then nothing at all
+  between the palace and the river: the Place du Trocadéro, the gardens, the
+  cascade, the quay. His account and OpenStreetMap describe the same ground.
+- **A headwind and a tail wind are the same wind.** Reports #45 and #46 read as a
+  contradiction — the pilot said the book gives a head wind, and the game gave a
+  tail wind of 18 km/h. Both are true: it fought him all the way home from the
+  Tower, and the moment he shut the motor down it carried him back.
+
 ---
 
 ## PART B — HANDLING: how the balloons flew

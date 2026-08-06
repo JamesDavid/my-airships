@@ -1248,33 +1248,45 @@ function addLandmarks(scene) {
   scene.add(inv);
 
   // Sacre-Coeur on the Montmartre mound (it was rising over Paris in 1901)
+  // The butte USED TO BE MODELLED here — a 55 m truncated cone with a turf
+  // crown, from when the ground was flat and the hill had to come from
+  // somewhere. The survey has the real butte now: 86 m above the Champ de Mars
+  // at the summit, falling to 32 m half a kilometre out. The cone was standing
+  // on top of that, so Montmartre rose 141 m instead of 86 and Sacre-Coeur
+  // floated at 148 m — a hill on a hill.
+  //
+  // The cone's stated job was to give the basilica level ground. The real crown
+  // is flat to 4 m over 80 m, so the hill can do its own job now.
   const mont = new THREE.Group();
-  // the butte is a truncated cone, not a spike: the basilica needs level
-  // ground to stand on, or its flat floor floats over a sloping point
-  const hill = new THREE.Mesh(new THREE.CylinderGeometry(74, 220, 55, 20, 1),
-    new THREE.MeshLambertMaterial({ color: 0x86895f }));
-  hill.position.y = 27.5; hill.receiveShadow = true; mont.add(hill);
-  // and the crown itself, so the church sits on turf rather than a rim
-  const crown = new THREE.Mesh(new THREE.CircleGeometry(74, 20),
-    new THREE.MeshLambertMaterial({ color: 0x8d9065 }));
-  crown.rotation.x = -Math.PI / 2; crown.position.y = 55.05; mont.add(crown);
-  const nave = new THREE.Mesh(new THREE.BoxGeometry(40, 18, 26), white); nave.position.y = 62; mont.add(nave);
-  const dome1 = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 9), white); dome1.position.y = 76; dome1.scale.y = 1.35; mont.add(dome1);
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(40, 18, 26), white); nave.position.y = 7; mont.add(nave);
+  const dome1 = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 9), white); dome1.position.y = 21; dome1.scale.y = 1.35; mont.add(dome1);
   for (const s of [-1, 1]) {
     const d = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8), white);
-    d.position.set(s * 14, 72, 0); d.scale.y = 1.4; mont.add(d);
+    d.position.set(s * 14, 17, 0); d.scale.y = 1.4; mont.add(d);
   }
   { const _p = placeLegacy('montmartre'); mont.position.set(_p.x, 0, _p.z); }
   scene.add(mont);
 
   // Old Palais du Trocadero (1878): rotunda, two slim ~80 m towers, curved wings —
   // "the Trocadero was seen through the base of the Eiffel Tower"
+  // THE PALACE HAD NO COLLIDER. Not a small one, not a wrong one — none: you
+  // could fly through the rotunda, through the towers and out the other side,
+  // and scenario II asks you to come down on this roof. "Went thru the roof"
+  // (bug #47) was this building. It is collided in its own shape below —
+  // rotunda, towers, and every bay of both galleries — because it is an arc
+  // 130 m across and one box round it would wall off the whole forecourt.
+  // Written FLAT, like every other collider: the grounding pass at the end of
+  // buildWorld sets b.y from the terrain and lifts `top` with it.
+  const _tp = placeLegacy('trocadero');
   const troc = new THREE.Group();
   const trocC = new THREE.Mesh(new THREE.CylinderGeometry(17, 18, 30, 14), cream); trocC.position.y = 15; troc.add(trocC);
+  lmColliders.push({ x: _tp.x, z: _tp.z, w: 34, d: 34, h: 30, top: 30 });
   const trocDome = new THREE.Mesh(new THREE.SphereGeometry(15, 12, 8), slate); trocDome.position.y = 32; trocDome.scale.y = 0.65; troc.add(trocDome);
   for (const s of [-1, 1]) {
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3, 62, 8), cream);
     tower.position.set(0, 31, s * 21); troc.add(tower);
+    lmColliders.push({ x: _tp.x, z: _tp.z + s * 21, w: 6, d: 6,
+      h: 62, top: 70 });                                   // the 70 m towers
     const cap = new THREE.Mesh(new THREE.ConeGeometry(3.4, 8, 8), slate);
     cap.position.set(0, 66, s * 21); troc.add(cap);
     // The curved galleries. These used to be six detached boxes stepped round an
@@ -1295,6 +1307,8 @@ function addLandmarks(scene) {
       corn.position.set(px, 15.6, pz);
       corn.rotation.y = bay.rotation.y;
       troc.add(corn);
+      lmColliders.push({ x: _tp.x + px, z: _tp.z + pz, w: chord, d: 13,
+        ry: bay.rotation.y, h: 15, top: 16.4 });
       // a pavilion where the gallery meets the rotunda, and again at its end
       if (w === 0 || w === BAYS - 1) {
         const pav = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 7, 21, 10), cream);
@@ -1306,7 +1320,49 @@ function addLandmarks(scene) {
       }
     }
   }
-  { const _p = placeLegacy('trocadero'); troc.position.set(_p.x, 0, _p.z); }
+  troc.position.set(_tp.x, 0, _tp.z);   // liftToTerrain puts it on the hill
+
+  // The great cascade, which is what the gardens were FOR: water off the
+  // terrace under the rotunda, down the Chaillot slope in steps, into a basin
+  // at the bottom. The slope is real (26 m at the palace, below zero at the
+  // quay), so each step is set to the ground it stands on, measured relative to
+  // the group's own footing because liftToTerrain will add that back.
+  {
+    const _te = placeLegacy('eiffel');
+    const cdx = _te.x - _tp.x, cdz = _te.z - _tp.z;
+    const cL = Math.hypot(cdx, cdz) || 1;
+    const cux = cdx / cL, cuz = cdz / cL;
+    const base = parisGround(_tp.x, _tp.z);
+    const casc = new THREE.Group();
+    const stone = new THREE.MeshLambertMaterial({ color: 0xcfc6ae });
+    const water = new THREE.MeshPhongMaterial({ color: 0x6f93a6, shininess: 90 });
+    for (let a = 34; a < 210; a += 22) {
+      const px = cux * a, pz = cuz * a;
+      const gy = parisGround(_tp.x + px, _tp.z + pz) - base;
+      const sill = new THREE.Mesh(new THREE.BoxGeometry(34, 2.2, 20), stone);
+      sill.position.set(px, gy + 1.1, pz);
+      sill.rotation.y = -Math.atan2(cuz, cux);
+      casc.add(sill);
+      const sheet = new THREE.Mesh(new THREE.BoxGeometry(26, 0.5, 17), water);
+      sheet.position.set(px, gy + 2.4, pz);
+      sheet.rotation.y = sill.rotation.y;
+      casc.add(sheet);
+    }
+    // the basin at the foot, where the water gathers before the quay
+    { const a = 232;
+      const px = cux * a, pz = cuz * a;
+      const gy = parisGround(_tp.x + px, _tp.z + pz) - base;
+      const basin = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 1.6, 24), water);
+      basin.position.set(px, gy + 0.8, pz);
+      casc.add(basin);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(30, 1.1, 6, 28), stone);
+      rim.rotation.x = -Math.PI / 2; rim.position.set(px, gy + 1.2, pz);
+      casc.add(rim);
+    }
+    casc.position.set(_tp.x, 0, _tp.z);
+    casc.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
+    scene.add(casc);
+  }
   troc.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(troc);
 
@@ -1459,7 +1515,12 @@ function addLandmarks(scene) {
       }
     }
 
-    g.position.set(L.x, parisGround(L.x, L.z), L.z);
+    // at zero: liftToTerrain() puts every top-level child on its own ground at
+    // the end of the build, so setting it here as well lifted these eleven
+    // TWICE. Each stood at double its ground height — the Bastille column 4.4 m
+    // above its own footing, and above its own collider, which is computed
+    // from the ground once and was therefore in the right place all along.
+    g.position.set(L.x, 0, L.z);
     g.rotation.y = L.ry;
     g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
     scene.add(g);
@@ -2441,6 +2502,33 @@ function addTrees(scene) {
     if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 320 * 320) continue;
     if (distToStreets(x, z) < 26) continue; // keep the carriage roads clear
     pts.push({ x, z, s: 3 + rand() * 3.4, r: rand() });
+  }
+
+  // THE JARDINS DU TROCADERO. The scatter above covers the Bois and nothing
+  // else, so the whole slope between the palace and the river — the showpiece
+  // of the 1878 Exposition, terraced, planted, with the great cascade down the
+  // middle — was bare ground. It is also the ground Santos-Dumont expected to
+  // clear on 8 August 1901 ("I was expecting to land on the Seine embankment
+  // beyond the Trocadero"), so it is under the flight path of scenario II.
+  //
+  // Planted in four rows flanking the cascade, thinning as the slope falls to
+  // the quay, and kept off the central axis where the water runs.
+  {
+    const t = placeLegacy('trocadero'), e = placeLegacy('eiffel');
+    const dx = e.x - t.x, dz = e.z - t.z, L = Math.hypot(dx, dz) || 1;
+    const ux = dx / L, uz = dz / L;
+    for (let a = 55; a < 300; a += 15) {
+      for (const side of [-1, 1]) {
+        for (const off of [46, 74]) {
+          const jitter = (rand() - 0.5) * 9;
+          const wOff = side * (off + jitter);
+          const px = t.x + ux * a - uz * wOff;
+          const pz = t.z + uz * a + ux * wOff;
+          if (rand() < 0.18) continue;               // gaps, not a plantation
+          pts.push({ x: px, z: pz, s: 3.4 + rand() * 2.6, r: rand() });
+        }
+      }
+    }
   }
   // Three instanced passes make a tree instead of a green ball: a rigid trunk,
   // the main crown, and a second smaller lobe that breaks the silhouette. Only

@@ -1066,9 +1066,40 @@ export class Airship {
     this.yawVel *= Math.pow(0.25, dt);
     this.yaw += this.yawVel * dt;
 
+    // broadphase: buildings near the ship, for the rope's rooftop draping and
+    // for the floor. It used to run AFTER the ground contact below, which is
+    // why the floor could not use it.
+    let roof = -Infinity;
+    if (env.buildings) {
+      this._nearBuildings = [];
+      const px0 = this.pos.x, pz0 = this.pos.z;
+      for (const b of env.buildings) {
+        if (Math.abs(b.x - px0) > 90 || Math.abs(b.z - pz0) > 90) continue;
+        this._nearBuildings.push(b);
+        // is the ship over this roof, and is the roof below her?
+        if (b.top === undefined || b.top > this.pos.y || b.top <= roof) continue;
+        const ry = b.ry || 0;
+        const hw = (b.rw !== undefined ? b.rw : b.w) / 2;
+        const hd = (b.rd !== undefined ? b.rd : b.d) / 2;
+        const cs = Math.cos(ry), sn = Math.sin(ry);
+        const dx = px0 - b.x, dz = pz0 - b.z;
+        const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+        if (Math.abs(lx) <= hw && Math.abs(lz) <= hd) roof = b.top;
+      }
+    }
+
     // ground contact (B9) — measured from the ground, which over Monaco is a
-    // mountain and not a plane
-    const keelClear = this.groundUnder(this.pos.x, this.pos.z) + this.restHeight();
+    // mountain and not a plane, and over Paris is a roof as often as not.
+    //
+    // THE FLOOR USED TO BE THE TERRAIN ALONE. Buildings were consulted for the
+    // guide rope eleven lines further down and never for the keel, so a ship
+    // settling on a roof had nothing to settle onto: the collider in main.js
+    // held her off the tiles and `landed` never came true, and she hung there
+    // for ever. You could not put her down on the housetops at all — which is
+    // the whole of 8 August 1901, and half of what this game is about.
+    const floor = Math.max(this.groundUnder(this.pos.x, this.pos.z), roof);
+    this.restingOnRoof = roof > -Infinity && roof >= floor;
+    const keelClear = floor + this.restHeight();
     if (this.pos.y < keelClear) {
       if (this.vel.y < -6) { this.wreck('hardLanding'); return; }
       if (this.vel.y < -2.5) this.events.push('roughLanding');
@@ -1077,14 +1108,6 @@ export class Airship {
       this.vel.x *= Math.pow(0.2, dt); this.vel.z *= Math.pow(0.2, dt);
       this.landed = true;
     } else this.landed = this.pos.y < keelClear + 0.5;
-
-    // broadphase for the rope: buildings near the ship (rooftop draping)
-    if (env.buildings) {
-      this._nearBuildings = [];
-      for (const b of env.buildings) {
-        if (Math.abs(b.x - this.pos.x) < 90 && Math.abs(b.z - this.pos.z) < 90) this._nearBuildings.push(b);
-      }
-    }
 
     this.updateRope(dt);
     this.updateTransforms(dt);

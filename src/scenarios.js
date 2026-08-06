@@ -1,5 +1,6 @@
 import { placeLegacy } from './paris_geo.js';
 import { ROTHSCHILD } from './paris_stcloud.js';
+import { inRiver } from './paris_terrain.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -104,37 +105,123 @@ export const SCENARIOS = [
   {
     id: 'no5-trocadero',
     title: 'II. A Fall Before a Rise (Aug 8, 1901)',
-    sub: 'No. 5 — the valve leaks; put her on the Trocadéro roof',
+    sub: 'No. 5 — the motor stopped, and the wind carrying you back onto the Tower',
     location: 'paris', shipId: 'no5',
-    brief: 'The balloon is losing hydrogen fast and you cannot make St. Cloud. The Tower stands between you and the Trocadéro hotels — round her, or dare the arch beneath her legs. The roof, not the street.',
+    brief: 'You turned the Tower in the ninth minute and started home, and the balloon has been bleeding hydrogen ever since. Now it sags so far that the propeller is cutting the suspension wires, and you have stopped the motor to save them. You are a free balloon, falling, and the wind that fought you all the way home is carrying you back toward the Eiffel Tower. Ballast would slow the fall — and give the wind that much longer to put you on the Tower. Choose.',
     setup(ctx) {
-      // Started UPWIND of the roof, as he was — he did not choose the Trocadéro,
-      // the wind gave it to him. At half scale the crossing was short enough
-      // that any breeze was survivable; at full scale a headwind on the slow
-      // No. 5 with a leaking valve made it simply unwinnable, which a pilot
-      // reported. Now the day's wind is always at her back.
-      {
-        const t = placeLegacy('trocadero');
-        const w = ctx.wind || { x: 1, z: 0 };
-        const L = Math.hypot(w.x, w.z) || 1;
-        ctx.place(t.x - (w.x / L) * 620, 150, t.z - (w.z / L) * 620,
-          Math.atan2(w.z / L, w.x / L) * -1);
-      }
-      ctx.ship.gas = 80;
-      { const t = placeLegacy('trocadero'); ctx.setZone(V(t.x, 40, t.z), 140); }
-      ctx.setCenter('August 8th, 1901', 'The valve is gone. The Trocadéro roof or nothing. (green ring)');
+      // 8 AUGUST 1901, WRITTEN FROM THE BOOK INSTEAD OF AROUND IT.
+      //
+      // This scenario used to hand you a running motor and a tail wind, and a
+      // pilot who had read the chapter said so three times in three minutes:
+      // "18km/h tail wind!?" (#45), and "the book he talks about this and the
+      // weather conditions he said it was a headwind and therefore didn't want
+      // to dump ballast right and he was over the river Seine!?" (#46). Both
+      // are correct. Ch. XIII:
+      //
+      //   "I saw the propeller cutting and tearing at the wires. I stopped the
+      //    motor instantly. Then, as a consequence, the air-ship was at once
+      //    driven back toward the Tower by the wind, which was strong.
+      //    At the same time I was falling... I might have thrown out ballast
+      //    and greatly diminished the fall, but then the wind would have time
+      //    to blow me back on the Eiffel Tower. I, therefore, preferred to let
+      //    the air-ship go down as it was going."
+      //
+      // So there is no motor: he had stopped it, and that is WHY the wind was
+      // behind him. The tail wind was never the invention — the running motor
+      // was. And the ballast is the whole scenario, because it is the decision
+      // he actually made and wrote down.
+      //
+      // He was aiming past the roof, not at it:
+      //
+      //   "It had already carried me so far that I was expecting to land on the
+      //    Seine embankment beyond the Trocadero... I had made a mistake in my
+      //    estimate of the wind's force by a few yards."
+      //
+      // The line runs Trocadéro -> the embankment -> the Tower, and the survey
+      // agrees with him: the Chaillot hill is 26 m up at the palace and the
+      // ground falls to the water 320 m past it. Every number below was flown
+      // in tools/sim.mjs over this world's real terrain and buildings.
+      const t = placeLegacy('trocadero'), e = placeLegacy('eiffel');
+      const dx = e.x - t.x, dz = e.z - t.z;
+      const L = Math.hypot(dx, dz) || 1;
+      const ux = dx / L, uz = dz / L;             // the way the wind takes you
+      this.u = { x: ux, z: uz, L };
+      this.tro = t;
+      // 138 m, and the height is the whole scenario. At 155 she sailed over the
+      // hotels ten metres too high — their roofs stand about 26 m over a plateau
+      // 27 m up, so the tiles are at 53 and she crossed them at 60 to 83 — and
+      // came down past them on the open forecourt, which is the fall that would
+      // have killed him. Flown in tools/check_scenarios.mjs: at 138 m she
+      // catches the roofs at 234 m out with the ballast untouched, which is what
+      // happened, and one or two bags carry her to the embankment he wanted.
+      ctx.place(t.x - ux * 900, 138, t.z - uz * 900, Math.atan2(-uz, ux));
+      // "the wind, which was strong" — 7 m/s is 25 km/h, and the No. 5 could
+      // not have made way against it even with the motor she no longer has.
+      //
+      // AIMED ALONG THE TRACK, NOT ALONG THE LINE. windAt() veers the wind with
+      // height — 0.17 rad between the ground and 120 m — so a balloon coming
+      // down from 155 m does not travel in the direction of the wind you set;
+      // it follows a curve, and setting the wind straight down the line put her
+      // 115 m to one side of the Trocadéro by the time she arrived. Turning the
+      // base wind 6.5 degrees the other way makes the TRACK straight. Solved by
+      // flying it: at this angle she touches down 21 m past the palace and 9 m
+      // off its axis with the ballast untouched.
+      const TH = -6.5 * Math.PI / 180;
+      const wx = ux * Math.cos(TH) + uz * Math.sin(TH);
+      const wz = -ux * Math.sin(TH) + uz * Math.cos(TH);
+      ctx.setWind(wx * 7, wz * 7);
+      ctx.ship.motorDead = true;
+      ctx.ship.gas = 95;
+      ctx.setZone(V(t.x, 40, t.z), 140);
+      ctx.setCenter('August 8th, 1901',
+        'The motor is stopped and the wind has you. Ballast buys height and costs distance. (green ring)');
+      this.warned = false;
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(55, ctx.ship.gas - 0.35 * dt);
-      const d = ctx.zoneDist();
-      const onRoof = d < ctx.zoneR() && ctx.ship.pos.y > 12 && ctx.ship.pos.y < 45;
-      if (onRoof && ctx.ship.vel.length() < 10) {
-        ctx.ship.wreck('scripted');
-        ctx.complete('The keel braces against the courtyard wall — “the thin pine scantlings and piano wires of Nice had saved my life!” The firemen of Passy are coming.');
-        return;
+      // the weakened valve spring, still letting go
+      ctx.ship.gas = Math.max(20, ctx.ship.gas - 0.10 * dt);
+      const u = this.u, t = this.tro;
+      const rx = ctx.ship.pos.x - t.x, rz = ctx.ship.pos.z - t.z;
+      const along = rx * u.x + rz * u.z;          // + is toward the Tower
+      const wide = Math.abs(-rx * u.z + rz * u.x);
+
+      if (!this.warned && ctx.ship.bags < 6) {
+        this.warned = true;
+        ctx.addMsg('sc2', 'Ballast gone — the fall eases, and the wind has that much longer to work. The Tower is downwind.', 8);
       }
-      if (ctx.ship.wrecked) ctx.fail('The explosion the newspapers described. Try the roof again.');
-      else if (ctx.ship.landed) ctx.fail('You reached the ground — in 1901 that fall was not survivable. Aim for the rooftops.');
+      if (ctx.ship.wrecked) {
+        return ctx.fail(along > this.u.L - 220
+          ? 'Onto the Tower — the thing he threw no ballast to avoid.'
+          : 'Down hard. The keel was pine and piano wire, but not for this.');
+      }
+      if (!ctx.ship.landed) return;
+
+      // where she came to rest, along his own line
+      if (inRiver(ctx.ship.pos.x, ctx.ship.pos.z)) {
+        return ctx.fail('Into the Seine — a few yards past the embankment he was aiming for.');
+      }
+      if (along > 380) {
+        return ctx.fail('Carried on under the Tower itself — “the wind would have time to blow me back on the Eiffel Tower.” He was right about that.');
+      }
+      // THE HOTELS, NOT THE PALACE. He came down "in the courtyard of the
+      // Trocadero hotels" — the apartment blocks on the Chaillot plateau, which
+      // his keel had already cleared when the full end of the balloon "came
+      // slapping down on the roof just before clearing it". The palace and its
+      // gardens are the open ground BEYOND them, running down to the river.
+      // The survey has the same shape: 55 blocks with 23–26 m roofs from 400 m
+      // out to 200 m out, then nothing at all until the Seine.
+      if (along >= -430 && along <= -120 && wide < 200 && ctx.ship.restingOnRoof) {
+        return ctx.complete('The full end of the balloon comes down on the roof just before clearing it, and bursts “exactly like a paper bag struck after being blown up” — the terrific explosion the newspapers described. You are left hanging in your basket high up in the courtyard of the Trocadéro hotels, held on the keel braced between the courtyard wall and a lower roof. “The thin pine scantlings and piano wires of Nice had saved my life!” The firemen of Passy are already running.');
+      }
+      if (along >= 130 && wide < 150) {
+        return ctx.complete('Down on the Seine embankment beyond the Trocadéro, past the gardens — “I was expecting to land on the Seine embankment beyond the Trocadero.” He missed it by a few yards. You did not.');
+      }
+      if (ctx.ship.restingOnRoof) {
+        return ctx.complete('Down on the housetops, whole — not the roof he caught, but the same idea, and the same argument for keeping your ballast.');
+      }
+      return ctx.fail(along > -120
+        ? 'You reached the ground in the Trocadéro gardens. In 1901 that fall was not survivable — it was the roofs that saved him.'
+        : 'Down in the streets of Passy, short of the hotels. The wind wanted more of your ballast, not less.');
     },
   },
   {
@@ -159,6 +246,13 @@ export const SCENARIOS = [
         this.done = true;
         if (r.won) ctx.complete('The crowd cries back: “YES!” — 125,000 francs, most of it to the poor of Paris.');
         else ctx.fail('“Errors do not count.” Convoke the Commission again.');
+      }
+      // and if she is simply DOWN, say so. Only the timekeepers could end this
+      // flight before; land short of them and nothing answered, ever.
+      if (ctx.ship.wrecked) {
+        ctx.fail('Down, and the Commission is still standing at St. Cloud with its watches out.');
+      } else if (ctx.ship.landed) {
+        ctx.fail('You are on the ground and the half-hour is running. “Errors do not count” — but neither do landings.');
       }
     },
   },
@@ -213,6 +307,8 @@ export const SCENARIOS = [
       if (ctx.ship.wrecked) return ctx.fail('The chimney-pots claimed her. The avenue next time.');
       if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('Two servants catch and steady the ship while you go up for coffee. “From my round bay window I looked down upon the air-ship.”');
+      } else if (ctx.ship.landed) {
+        ctx.fail('Down in the street, but not at your own door — which was the whole point of a runabout.');
       }
     },
   },
@@ -364,6 +460,8 @@ export const SCENARIOS = [
         this.done = true;
         ctx.clearZone();
         ctx.complete('"It is practical, and will have to be taken account of in war," say the officers. You steer for the polo grounds, where your friends are waiting.');
+      } else if (ctx.ship.landed) {
+        ctx.fail('Down before the review was flown. The troops are still drawn up at Longchamps.');
       }
     },
   },
