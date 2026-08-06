@@ -324,8 +324,8 @@ Said plainly so nobody spends a week on it:
 
 ## Backlog
 
-- ~~**THE SHIPS FLY TWICE AS FAST AS THEY DID.**~~ **They do not — this entry was
-  wrong, and it was wrong because it used the wrong figure.**
+- ~~**THE SHIPS FLY TWICE AS FAST AS THEY DID.**~~ **DONE — but not for the
+  reason this entry gave, which was wrong.**
 
   It rested on one number: Puteaux and back, "about 3 kilometres (2 miles), done
   in nine minutes" on the No. 5, which is 20 km/h. But that was an excursion, in
@@ -339,23 +339,29 @@ Said plainly so nobody spends a week on it:
   > which would have brought my **proper speed up to between 30 and 35
   > kilometres** (18½ and 21½ miles) per hour."
 
-  Flown headless in `tools/check_scenarios.mjs` over the real model:
+  So the fleet was 6–11% fast, not 100%. It has now been trimmed by 10%
+  (`DRAG_TRIM` in `src/ships.js`), on the **drag** rather than the thrust:
+  the motors are documented down to the horsepower and the No. 6's 66 kg of
+  measured pull, while the drag coefficients were never measured, only tuned
+  until a ship felt right. The correction belongs on the guess.
 
-  | | the game | the book |
-  |---|---|---|
-  | No. 5, rope clear | 37.2 km/h | 30–35 ("proper speed") |
-  | No. 5, rope dragging | 33.4 km/h | 26–30 (Farman's motor-car) |
-  | what the rope costs | 3.7 km/h | "about 5" |
-  | No. 9 runabout | 23.3 km/h | 20–25 |
-  | No. 7 racer | 64.0 km/h | 70–80 by design, never realised |
+  | | before | after | the book |
+  |---|---|---|---|
+  | No. 5, rope clear | 37.2 | **33.5** | 30–35 ("proper speed") |
+  | No. 5, rope dragging | 33.4 | **30.3** | 26–30 (Farman's motor-car) |
+  | No. 6 | 38.9 | **35.0** | — |
+  | No. 7 racer | 64.0 | **57.7** | 70–80 by design, never realised |
+  | No. 9 runabout | 23.3 | **20.9** | 20–25 |
 
-  So the fleet runs **6–11% fast**, not 100%, and the No. 9 and No. 7 are inside
-  the book's own figures. Six per cent is inside the uncertainty of an estimate
-  made in 1901 from a moving car, and `check_scenarios.mjs` now asserts each ship
-  against the range the book gives, so a real drift would be caught.
+  Flown afterwards to check nothing became impossible: the No. 6 goes round the
+  Deutsch course in 1,088 s against the 1,800 s limit — still 40% of margin,
+  where history had 1.6% (his 29:31). Scenario II still lands on the Trocadéro
+  hotels with the ballast untouched. `tools/check_scenarios.mjs` asserts every
+  ship against the range the book gives.
 
-  **Not rebalanced**, and now for a better reason than before: there is no longer
-  a discrepancy worth paying for it with every leaderboard record in the game.
+  **The boards were reset with it.** `BOARD_ERA` in `src/main.js` retires every
+  local best and race time, because a record set on a ship 10% faster is not a
+  record on this one. The world board needed nothing — `public.times` was empty.
 
 - **Ballast by ship: sand or water.** The UI button says SAND for every ship.
   The book does not use one material throughout — check `docs/BOOK_REFERENCE.md`

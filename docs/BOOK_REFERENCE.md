@@ -190,8 +190,9 @@ it justifies.
   excursion to Puteaux and back in wind. The clean reading is in the same
   chapter: Maurice Farman pacing him round Longchamps in a motor-car gave 26–30
   km/h with the guide rope down, and **30–35 km/h** with the rope's ~5 km/h of
-  braking added back. The game's No. 5 makes 37.2 clear and 33.4 dragging, which
-  is 6–11% fast, not double. See docs/PARIS_1901.md.
+  braking added back. The game's No. 5 made 37.2 clear and 33.4 dragging — 6–11%
+  fast, not double — and has been trimmed 10% to 33.5 and 30.3, inside his
+  figures. See `DRAG_TRIM` in src/ships.js and the entry in docs/PARIS_1901.md.
 
 ### A14. The Trocadéro, 8 August 1901 — the ballast he did not throw
 > "I saw the propeller cutting and tearing at the wires. **I stopped the motor

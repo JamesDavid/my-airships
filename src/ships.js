@@ -208,6 +208,35 @@ export const SHIPS = {
   },
 };
 
+// ---------------------------------------------------------------- drag trim
+// THE FLEET RAN FAST, and the book says by how much.
+//
+// Ch. XIII is the only clean airspeed reading he ever got — Maurice Farman
+// pacing the No. 5 round Longchamps in a motor-car: "between 26 and 30
+// kilometres per hour with my guide rope dragging... about 5 kilometres per
+// hour [for the rope's braking], which would have brought my proper speed up to
+// between 30 and 35 kilometres per hour."
+//
+// Measured headless, the No. 5 made 37.2 km/h clear and 33.4 dragging — six to
+// eleven per cent over. This trims that off.
+//
+// DRAG, NOT THRUST, because of which number is known. The motors are documented
+// down to the horsepower and the No. 6's 66 kg of measured pull; the drag
+// coefficients above were never measured, only tuned until a ship felt right.
+// So the correction belongs on the guess, not on the record.
+//
+// Applied here rather than folded into the table so that the tuned numbers stay
+// legible and this stays one line to revert. Solved by bisection for a 10% trim
+// on the No. 5; the same factor is used fleet-wide so their relative
+// performance is untouched. Afterwards: No. 5 33.5 (book 30-35), No. 9 20.9
+// (book 20-25), No. 6 35.0, No. 7 57.7 against a design 70-80 she never
+// actually reached. tools/check_scenarios.mjs asserts these against the book.
+export const DRAG_TRIM = 1.2205;
+for (const s of Object.values(SHIPS)) {
+  s.physics.dragQ *= DRAG_TRIM;
+  s.physics.dragL *= DRAG_TRIM;
+}
+
 // keyboard mapping for ship selection at the aerodrome
 export const SHIP_KEYS = {
   KeyB: 'brazil', Digit1: 'no1', Digit2: 'no2', Digit3: 'no3', Digit4: 'no4',

@@ -374,7 +374,27 @@ function buildRings(gates, originPos) {
 }
 
 // a re-cut circuit is a different course: its version retires the old times
-function bestKey(t) { return `tt_${t.id}${t.v ? '_v' + t.v : ''}_${currentShip}`; }
+// THE LOCAL BESTS CARRY AN ERA, and this is what retires them.
+//
+// A time is only comparable to another flown over the same ground in the same
+// ship. `t.v` already covered the ground — recut a course and its board starts
+// clean. This covers the FLEET: when what the ships can do changes, every time
+// ever set was set by a different aeroplane.
+//
+// Era 2: the 10% drag trim of August 2026, which brought the No. 5 down to the
+// 30-35 km/h Maurice Farman measured (see src/ships.js). Every record on every
+// board was set by ships six to eleven per cent too fast.
+//
+// LOCAL KEYS ONLY. The world boards are keyed on the bare track id, and both
+// the anticheat and the submit-time Edge Function look the course up by that
+// id — an era-tagged id comes back `unknown-track` and no time can be filed at
+// all. So the world boards are reset at the source instead, by clearing
+// public.times; see docs/ONLINE.md.
+const BOARD_ERA = 2;
+
+function bestKey(t) {
+  return `tt_${t.id}${t.v ? '_v' + t.v : ''}_e${BOARD_ERA}_${currentShip}`;
+}
 
 function loadBest(t) {
   // a ghost fetched from the record office keeps flying this course until you
@@ -2211,7 +2231,8 @@ function resetShip() {
 // ---------------------------------------------------------------- race
 // the historic trial's record, kept per city (their limits differ: the Deutsch
 // half-hour at Paris and Monaco, the ten minutes of the St. Louis prize)
-function bestRaceKey() { return `myairships_best_${currentLocation}`; }
+// era-tagged too: the Deutsch half-hour is a different feat on a slower ship
+function bestRaceKey() { return `myairships_best_${currentLocation}_e${BOARD_ERA}`; }
 (function migrateOldBest() {
   const old = store.get('myairships_best');
   if (old && !store.get('myairships_best_paris')) {
