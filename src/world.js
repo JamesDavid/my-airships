@@ -271,7 +271,11 @@ export function buildWorld(scene) {
   scene.add(ground);
 
   // paved city base (east of the Seine)
-  addFlat(scene, 1330, 0, 1940, 3400, 0x847d70, 0.05);
+  // The "paved city base" was a single rectangular slab laid under the whole
+  // city, from the days when there were no streets and something had to stop it
+  // reading as open country. With fifty-five kilometres of surveyed road on top
+  // of it, it does the opposite — a hard-edged brown field with a visible seam
+  // across the map, which is a good part of why Paris looked like dirt. Gone.
   // The Champ de Mars runs from the Tower down to the École Militaire, on that
   // axis — it is not a rectangle lying square to the compass, which is why the
   // Tower and its park did not line up. Drawn as a strip between the two.
