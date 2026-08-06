@@ -111,35 +111,27 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 - [ ] **Rooms for the historic courses** — needs a server-side notion of the aerodrome
   finish radius before those times can be trusted online.
 
-## Next — the two known faults from the full-scale conversion
+## Paris at full scale — done
 
-- [ ] **The stranded Saint-Cloud features.** Reported as "St. Cloud here?
-  Bridges in middle of nowhere?" Saint-Cloud is now at its true position,
-  (-4497, 1999); the Pont de St-Cloud, the Avre aqueduct, the village and its
-  church, Deutsch's air-ship shed, the Suresnes station, the Moulin de
-  Longchamp, the captive balloon and the rest of addBookPlaces are still hand
-  placed about the OLD aerodrome at (-2140, 0) in the half frame. They are 3 km
-  adrift: a river crossing standing in open country with no river under it.
-
-  The transform is `new = PAD_POS + (old - (-2140, 0)) * 2` — the same rule the
-  rest of the world took, since these were laid out relative to the aerodrome.
-
-  THE TRAP: it must be applied to the COLLIDERS as well as the meshes. Several
-  of these push entries into `buildings` as world coordinates (the aqueduct
-  piers, the shed, the church, the station, the mill). Moving the meshes alone
-  leaves invisible walls standing where the bridges used to be, which is a
-  worse fault than the one being fixed. A group with scale (2,1,2) moves the
-  meshes but will not touch those entries.
-
-- [ ] **The roadway does not draw on the avenues.** Reported as "no roads in
-  the city" and "it's just earth between buildings". Narrowed, but not solved:
-  the street data IS at full scale, the merged road mesh is built, visible,
-  carries polygonOffset and spans 4.6 x 4.2 km — and the buildings line the
-  avenues correctly, so the street geometry is in the right place. But a ray
-  cast straight down the Champs-Élysées axis hits the paved city base at
-  y = 0.05 rather than the roadway at y = 0.16. Suspicion is the batched
-  builder in buildWorld (the one that replaced the per-segment addStrip loop),
-  not the data and not the projection.
+- [x] **Full scale, on real coordinates.** A game metre is a metre; the Tower
+  stands 1728 m from the Étoile, which is what it is. The Deutsch course is
+  9.7 km against the historic 11 and its limit is the true half-hour. The
+  landmarks, the Seine, the street network and the Champ de Mars all come from
+  one table of true latitudes and longitudes (src/paris_geo.js), and the
+  courses and scenarios are hung off the landmarks rather than written as
+  numbers, so they cannot circle where a place used to be.
+- [x] **The streets.** 289 ways of surveyed road from OpenStreetMap, screened
+  to 1901: alignments that did not exist dropped by name, renames KEPT (the
+  game shows no street names, so the Avenue du Président Wilson is the Avenue
+  du Trocadéro and draws in the same place), suburbs thinned outside the Thiers
+  fortifications. Buildings generate along all of it and are tested at their
+  CORNERS against every street, not just the one they face.
+- [x] **The roads not drawing.** The quads were wound so their normals pointed
+  down: the whole network was face-down, back-face culled, invisible from the
+  air, and physically present the entire time — which is why every check said
+  the geometry was correct. Second time this project has hit that trap.
+- [x] **The stranded Saint-Cloud features**, colliders and all, and the
+  Aéro-Club's ground rebuilt on the pad it actually uses.
 
 ## Maybe
 
