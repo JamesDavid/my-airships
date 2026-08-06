@@ -11,6 +11,7 @@ import { buildWorld } from '../src/world.js';
 import { SCENARIOS } from '../src/scenarios.js';
 import { makeShip } from './sim.mjs';
 import { SHIPS } from '../src/ships.js';
+import { TRACKS } from '../src/tracks.js';
 
 const scene = { children: [], add(...o) { this.children.push(...o); },
   remove() {}, traverse(f) { f(this); } };
@@ -152,6 +153,26 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     const clear = topSpeed('no5', 150), drag = topSpeed('no5', 37);
     console.log('   ---  no5    the guide rope costs %s km/h; he reckoned about 5',
       (clear - drag).toFixed(1));
+  }
+
+  console.log('');
+  console.log('EVERY GATE HAS AIR IN IT');
+  console.log('   The gymkhana was written when Paris was flat. Once the city got');
+  console.log('   its hills, "UNDER the Arc" at y 13 was eleven metres beneath the');
+  console.log('   Etoile and could not be flown at all — eighteen trial attempts on');
+  console.log('   record and not one completion.');
+  console.log('');
+  for (const t of TRACKS.filter((t) => t.location === 'paris')) {
+    let worst = Infinity, worstI = -1;
+    t.gates.forEach((g, i) => {
+      const agl = g.y - world.groundAt(g.x, g.z);
+      if (agl < worst) { worst = agl; worstI = i; }
+    });
+    const ok = worst >= 6;
+    if (!ok) fails++;
+    console.log('   ' + (ok ? 'ok  ' : 'FAIL') + '  ' + t.id.padEnd(16)
+      + ' lowest gate ' + worstI + ' at ' + worst.toFixed(1).padStart(6)
+      + ' m over its ground');
   }
 
   console.log('');

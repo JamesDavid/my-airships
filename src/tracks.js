@@ -1,6 +1,7 @@
 import { placeLegacy } from './paris_geo.js';
 import { place as placeMC, groundAt as groundMC } from './monaco_geo.js';
 import { LONGCHAMP } from './paris_stcloud.js';
+import { parisGround } from './world.js';
 
 /** "…a distance of about 35 kilometres (22 miles)" for ten circuits of
  *  Longchamps, 12 July 1901 (Ch. XII). A lap round the traced course measures
@@ -51,7 +52,7 @@ export const TRACKS = [
       LONGCHAMP.rx * LAP_INSET, LONGCHAMP.rz * LAP_INSET, 6, 60, 20),
   },
   {
-    id: 'gymkhana', location: 'paris', laps: 2, v: 4,
+    id: 'gymkhana', location: 'paris', laps: 2, v: 5,
     name: 'The Aerial Gymkhana',
     sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
     // Hung off the landmarks themselves rather than written out: the places
@@ -61,15 +62,25 @@ export const TRACKS = [
       const P = (id) => placeLegacy(id);
       const roue = P('roue'), twr = P('eiffel'), troc = P('trocadero'), arc = P('etoile');
       const ec = P('ecolemil');
+      // HEIGHTS OVER THE GROUND, not over the datum.
+      //
+      // These were absolute, from when Paris was flat. The city has its hills
+      // now and two of these gates went underground with them: the Étoile mound
+      // is 25 m up, so "UNDER the Arc" at y 13 was ELEVEN METRES BELOW THE
+      // PAVEMENT and the Champs-Élysées gate at 16 was level with the kerb.
+      // Neither could be flown through, which is why nobody has ever finished
+      // this course — eighteen attempts on the boards and not one completion.
+      const G = (x, z, h) => parisGround(x, z) + h;
       return [
         // SKIRT the rim — outside it. The Grande Roue's rim radius is 46 m and
         // this gate stood 52 m from its axis with a radius of 30, so its inner
         // edge was twenty-two metres INSIDE the wheel and the rim ran straight
         // through the hoop: "the first target is kinda smooshed into the Ferris
         // wheel" (bug #33). 88 m out leaves twelve metres of daylight.
-        { x: roue.x + 88, y: 42, z: roue.z, r: 30 },
-        { x: (twr.x + ec.x) / 2, y: 25, z: (twr.z + ec.z) / 2, r: 34 }, // low over the Champ de Mars
-        { x: twr.x, y: 35, z: twr.z - 150, r: 34 },               // the Tower's shoulder
+        { x: roue.x + 88, y: G(roue.x + 88, roue.z, 44), z: roue.z, r: 30 },
+        { x: (twr.x + ec.x) / 2, y: G((twr.x + ec.x) / 2, (twr.z + ec.z) / 2, 24),
+          z: (twr.z + ec.z) / 2, r: 34 },              // low over the Champ de Mars
+        { x: twr.x, y: G(twr.x, twr.z - 150, 34), z: twr.z - 150, r: 34 },  // the Tower's shoulder
         // PAST the palace front, not through it. This gate sat on the rotunda
         // at 50 m with a radius of 34, and gateHeadings pointed it down the
         // z axis — which is exactly the line the Trocadéro's two 70 m towers
@@ -80,9 +91,9 @@ export const TRACKS = [
         // Sixty-two metres out over the forecourt keeps the low pass and the
         // drama — the rotunda is 18 m across and the curved galleries all sweep
         // the OTHER way, toward the Tower — with eighteen metres of daylight.
-        { x: troc.x - 62, y: 44, z: troc.z, r: 26 },
-        { x: arc.x + 300, y: 16, z: arc.z + 150, r: 26 },         // DOWN the Champs-Élysées
-        { x: arc.x, y: 13, z: arc.z, r: 11, ang: -2.034 },        // UNDER the Arc
+        { x: troc.x - 62, y: G(troc.x - 62, troc.z, 17), z: troc.z, r: 26 },
+        { x: arc.x + 300, y: G(arc.x + 300, arc.z + 150, 22), z: arc.z + 150, r: 26 },  // DOWN the Champs-Élysées
+        { x: arc.x, y: G(arc.x, arc.z, 13), z: arc.z, r: 11, ang: -2.034 },  // UNDER the Arc (its opening is 29 m)
       ];
     })(),
   },

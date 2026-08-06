@@ -436,18 +436,17 @@ print('   %d named places' % len(PL))
 check(not out_of_frame, 'every named place is inside the survey',
       ', '.join(out_of_frame))
 
-tracks = read('tracks.js')
-blk = tracks[tracks.index("location: 'paris'"):] if "location: 'paris'" in tracks else ''
-gates = [tuple(float(v) for v in g) for g in re.findall(
-    r'x:\s*(-?[\d.]+),\s*y:\s*(-?[\d.]+),\s*z:\s*(-?[\d.]+),\s*r:\s*(-?[\d.]+)',
-    tracks)]
-low = []
-for gx, gy, gz, gr in gates:
-    if X0 <= gx <= X1 and Z0 <= gz <= Z1 and gy < 8:
-        low.append((gx, gz, gy))
-print('   %d gates in tracks.js (all worlds)' % len(gates))
-check(not low, 'no Paris gate is written below 8 m over its ground',
-      '%s' % low[:4])
+# GATES: see tools/check_scenarios.mjs.
+#
+# There used to be a check here and it was worse than nothing. It regex'd
+# tracks.js for `x: N, y: N, z: N, r: N` and compared y against a flat 8 —
+# never once asking the terrain, despite reporting "over its ground". Every
+# Paris gate is COMPUTED from placeLegacy(), so the regex matched none of them:
+# it found the six St. Louis literals and passed, for months, while the
+# gymkhana's last two gates sat at and under the pavement of the Etoile.
+#
+# The real check evaluates the actual TRACKS and the actual heightfield, which
+# needs the module graph, so it lives with the other JS checks.
 
 TOWER_H = int(re.search(r'export const TOWER_H = (\d+)', read('world.js')).group(1))
 anch = re.search(r'const TOWER_ANCH = (\[\[.*?\]\]);', read('world.js')).group(1)
