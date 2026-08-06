@@ -425,7 +425,11 @@ export function buildWorldStLouis(scene) {
           twr.position.set(x, y + h + 5, z);
           scene.add(twr);
         }
-        buildings.push({ x, z, w: w + 4, d: d + 4, h: y + h, top: y + h + 1 });
+        // at the attraction's own angle — The Pike runs on a diagonal, and an
+        // unrotated collider on a rotated shed leaves a wedge of each roof
+        // with nothing under it: "Went thru the roof" (bug #47)
+        buildings.push({ x, z, w: w + 4, d: d + 4, ry: att.rotation.y,
+          h: y + h, top: y + h + 1 });
         s += w + 6 + rand() * 10;
       }
     }
@@ -937,12 +941,21 @@ function buildPalace(scene, site, buildings, ivory, gold, rand) {
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(g);
 
-  // a world-axis box for the collider, from the rotated footprint
-  const ca = Math.abs(Math.cos(site.rot)), sa = Math.abs(Math.sin(site.rot));
+  // The palace's OWN box, at the palace's own angle. This used to be the
+  // world-axis box drawn AROUND the rotated footprint, which contains the
+  // building but is up to half again too big: every palace on the fairground
+  // stands at the survey's bearing, so each one carried a slab of invisible
+  // wall off both its corners. Machinery Hall is 305 x 160 m at 37 degrees
+  // off axis — its axis-aligned box was 340 x 311, and 42% of that box was
+  // open ground you bounced off.
+  //
+  // w/d are the local x/z half-extents, and it is `site.l` that runs along
+  // local x — the old formula reduces to w = site.l at rot = 0, which is how
+  // the convention is pinned.
   const top = y + H + ATT + (c.pitched ? 16 : 4) + (c.quadriga || c.pyramids ? 14 : 0);
   buildings.push({
     x: site.x, z: site.z,
-    w: site.l * ca + site.w * sa, d: site.l * sa + site.w * ca,
+    w: site.l, d: site.w, ry: site.rot,
     h: y + H + 6, top,
   });
 }

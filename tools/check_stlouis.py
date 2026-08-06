@@ -200,5 +200,22 @@ print('   extent  x %.0f .. %.0f   z %.0f .. %.0f  (%.2f x %.2f km)'
          (max(xs) - min(xs)) / 1000, (max(zs) - min(zs)) / 1000))
 print('   the guide: "two miles from E. to W. and one mile from N. to S."')
 
+print('\n7. COLLIDERS STAND AT THE ANGLE THEIR BUILDINGS DO')
+_w = open(os.path.join(HERE, '..', 'src', 'world_stlouis.js'), encoding='utf-8').read()
+# Everything on this fairground is laid out on the survey's bearing, so a
+# collider pushed without `ry` is either a wall beside the building (the box
+# drawn AROUND a rotated footprint) or a hole in its roof (bug #47).
+if 'Math.abs(Math.cos(site.rot))' in _w:
+    print('   FAIL palaces still collide as the axis-aligned box around the footprint')
+    fails += 1
+else:
+    print('   palaces collide as their own oriented box')
+_pike = re.search(r'buildings\.push\(\{ x, z, w: w \+ 4[^;]*;', _w, re.S)
+if not _pike or 'ry:' not in _pike.group(0):
+    print('   FAIL The Pike\'s attractions collide unrotated on a diagonal midway')
+    fails += 1
+else:
+    print('   The Pike collides at the midway\'s angle')
+
 print('\n%s' % ('ALL CHECKS PASS' if fails == 0 else '%d FAILURES' % fails))
 raise SystemExit(1 if fails else 0)
