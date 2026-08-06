@@ -100,8 +100,20 @@ company's plates, the stereographs, and the Library of Congress's collection are
 all public domain by age. The Missouri Historical Society's collection is the
 deepest.
 
-**This part has not been done, and it should be done before the modelling, not
-after.** What is wanted from the photographs, per building:
+**DONE** — [STLOUIS_PALACES.md](STLOUIS_PALACES.md). It came out better than
+photographs alone would have: the fair published an Official Guide while it was
+standing, describing buildings the writer could walk out and look at, and it
+names for each palace exactly the five things below. Every figure in the notes
+is cited to a line of the Cornell scan so it can be re-checked.
+
+The single most valuable finding was the colour, and it was not what anyone
+would have guessed. The guide: *"The color of the exhibit buildings is ivory
+white, **with dashes of color on the roofs**."* So `0xefe9dc` was right all
+along and the **roofs** were the error — they were all one grey, and Machinery's
+were red with green tower caps while Mines was "distinguished by a lavish use of
+color."
+
+What was wanted from the photographs, per building:
 
 - the roofline: dome, barrel vault, or flat with a parapet
 - how many storeys the façade reads as, and the order of the columns
@@ -116,14 +128,56 @@ A page of notes per palace, with a source cited for each, is the deliverable —
 the same discipline as [HULLS.md](HULLS.md) and [HELM.md](HELM.md), where the
 quote comes first and the geometry follows from it.
 
-## Order of work
+## Order of work — all of it done
 
-1. ~~**Art Hill's height**~~ — done.
-2. **Photographic notes** on the palaces, one page each, sources cited.
-3. **Georeference the plat** against the four surviving control points; emit
-   `src/stlouis_geo.js`.
-4. **Trace the footprints**; emit `src/stlouis_plan.js`.
-5. **Model from the notes of step 2**, not from imagination.
+1. ~~**Art Hill's height**~~ — `world_stlouis.js`, and now `stlouis_geo.js`.
+2. ~~**Notes on the palaces**~~ — [STLOUIS_PALACES.md](STLOUIS_PALACES.md).
+3. ~~**Georeference the plat**~~ — `src/stlouis_geo.js`.
+4. ~~**Trace the footprints**~~ — `src/stlouis_plan.js`.
+5. ~~**Model from the notes**~~ — `src/world_stlouis.js`.
 
-Steps 3 and 4 are the long ones and they are hand work. Step 2 is what makes
-step 5 worth anything, which is why it comes before the tracing and not after.
+### How steps 3 and 4 actually went
+
+They were supposed to be hand work — "there is no way round doing it by eye."
+There was one. The draughtsman filled every main exhibit palace with the same
+pink wash and **nothing else on the sheet is that colour**, so the palaces can
+be *segmented*: `tools/trace_stlouis_plat.py` thresholds the wash, labels the
+blobs and reduces each to a centroid and a principal axis. Thirteen palaces come
+out of it as measurements rather than estimates.
+
+`tools/gen_stlouis_geo.py` then fits three things, and each has a check:
+
+| | fitted from | checked against | result |
+|---|---|---|---|
+| axis | the fan's mirror symmetry — three mirror pairs, each giving the axis twice | Education and Electricity are mirror images and come out **sharing an x to 1.1 m** | 120.3° on the sheet |
+| scale | Machinery, a plain 1,000 × 525 ft rectangle measuring 110.2 × 58.0 px — an aspect of 1.900 against a true 1.905 | the Concourse's fourteen acres (14.5), the six palaces' 525 ft width (median 2.75), the guide's "two miles from E. to W." (1.97) | **2.75 m per pixel** |
+| bearing | the Art Museum and the flight cage, both still standing, both found in OSM by name | the angle they subtend on the sheet and on the earth differ by **under two degrees** | +276.8° |
+
+**Residual: 23 m at the flight cage, 743 m from the anchor.** That is the honest
+error bar on the whole world.
+
+Only one of the four control points in the table above was actually needed. The
+Grand Basin turned out to be useless — today's Emerson Grand Basin is a long
+lake and the 1904 basin was a 600 ft semicircle, so their centroids are not the
+same point — and the U.S. Government Building's supposed successor, the 1909
+World's Fair Pavilion, stands on the **Missouri** building's site, 180 m away.
+Two exact points and the fair's own symmetry did the work of four.
+
+### And what the checking caught
+
+`tools/check_stlouis.py` tests overlap, water, hill and course clearance
+numerically. It found two real faults that no screenshot would have shown:
+
+- the lagoon arms, drawn across the fan by eye, **ran through Electricity's
+  corner**. Replaced with moats set out from the footprints, which is what
+  "entirely surrounded by lagoons" actually means — and the gap between
+  Electricity and Machinery is only 41 m, so the water had to be sized to fit.
+- a race pylon stood **36 m from the Steam, Gas and Fuels building**. The
+  triangle is now chosen by sweeping centre, radius and rotation against every
+  built thing in the world: 222 m clear, and a course length within 3% of the
+  one the race limit was tuned on.
+
+It also re-cut **The Basin Sprint**, whose six gates were all in the old frame —
+they would have stood over open park a kilometre from the things they are named
+for. Bumped to `v: 3`, which retires the old times, because it is a different
+course now.

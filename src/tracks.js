@@ -72,16 +72,20 @@ export const TRACKS = [
     })(),
   },
   {
-    id: 'basin', location: 'stlouis', laps: 2, v: 2,
+    id: 'basin', location: 'stlouis', laps: 2, v: 3,
+    // v3: re-cut onto the surveyed fairground. The whole of St. Louis was
+    // re-georeferenced off the 1904 ground plan (docs/STLOUIS_PLAT.md steps
+    // 3–5), so every one of these gates moved — the old ones now stand over
+    // open park a kilometre from what they were named for.
     name: 'The Basin Sprint',
     sub: 'the wheel, The Pike’s midway, the lagoon avenue — 2 laps',
     gates: [
-      { x: -288, y: 40, z: -330, r: 15 }, // skirt the great wheel's rim
-      { x: -520, y: 14, z: -331, r: 13 }, // down The Pike's midway canyon
-      { x: -450, y: 16, z: 60, r: 16 },   // the plaza of St. Louis
-      { x: 180, y: 16, z: 0, r: 14 },     // skim the Grand Basin (mind the water!)
-      { x: 620, y: 62, z: 90, r: 18 },    // round Festival Hall
-      { x: -80, y: 18, z: -120, r: 15 },  // up the lagoon avenue
+      { x: 426, y: 40, z: 660, r: 15 },   // skirt the great wheel's rim
+      { x: -370, y: 14, z: 543, r: 13 },  // down The Pike's midway canyon
+      { x: -330, y: 16, z: 60, r: 16 },   // the Plaza of St. Louis
+      { x: 140, y: 16, z: 0, r: 14 },     // skim the Grand Basin (mind the water!)
+      { x: 316, y: 50, z: 95, r: 18 },    // round Festival Hall, up on its terrace
+      { x: 35, y: 18, z: 330, r: 15 },    // up the lagoon avenue
     ],
   },
 ];
