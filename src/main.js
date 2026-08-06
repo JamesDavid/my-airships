@@ -188,10 +188,53 @@ function measureEyeNear(s) {
   } catch { return 0.1; }
 }
 
-function makeRing(color) {
+/**
+ * A ring. With `arrows`, one that says which way through it.
+ *
+ * The torus's axis is its local +Z, and buildRings turns that to the heading a
+ * pilot is meant to cross on — so +Z is the way you go and -Z is the side you
+ * come from. A bare hoop looks identical from both, and on a course that
+ * doubles back past itself there is no way to tell whether the gate ahead is
+ * the one you want or the one you have already taken from behind.
+ *
+ * Two cues, and they answer different questions:
+ *
+ *   three barbs on the rim, pointing the way through. Approach it right and
+ *   they point away from you; approach it backwards and they are aimed at your
+ *   face. They share the hoop's material, so they go gold with it when it is
+ *   the gate in hand.
+ *
+ *   a wide, faint funnel ring standing off the ENTRY side only. From in front
+ *   the gate reads as a mouth to fly into. From behind there is nothing.
+ */
+function makeRing(color, arrows) {
   const m = new THREE.Mesh(new THREE.TorusGeometry(24, 1.4, 10, 40),
     new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true }));
   m.rotation.y = Math.PI / 2;
+  if (arrows) {
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + Math.PI / 6;
+      const barb = new THREE.Mesh(new THREE.ConeGeometry(3.1, 9.5, 7), m.material);
+      barb.position.set(Math.cos(a) * 24, Math.sin(a) * 24, 5.5);
+      barb.rotation.x = Math.PI / 2;                 // the cone's +Y onto +Z
+      m.add(barb);
+    }
+    // GREEN on the way in, RED on the way out — a flat collar either side of
+    // the hoop, each rendered SINGLE-SIDED and facing outward, so a face is
+    // invisible from behind itself. Come at the gate the right way and you see
+    // green and no red; come at it backwards and you see red and no green.
+    // There is never a moment where both show and you have to work out which.
+    const collar = (color, z, flip) => {
+      const c = new THREE.Mesh(new THREE.RingGeometry(21.5, 26.5, 40),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55,
+          side: THREE.FrontSide, fog: true, depthWrite: false }));
+      c.position.z = z;
+      if (flip) c.rotation.y = Math.PI;               // turn its face about
+      m.add(c);
+    };
+    collar(0x5fbf6a, -2.2, true);                     // entry: facing the pilot
+    collar(0xc4544a, 2.2, false);                     // exit: facing away
+  }
   scene.add(m);
   return m;
 }
@@ -226,7 +269,7 @@ function buildRings(gates, originPos) {
   // server-side run validator all use one definition of "through the gate"
   const headings = gateHeadings(gates, originPos);
   gateRings = gates.map((g, i) => {
-    const r = makeRing(0x8a8a8a);
+    const r = makeRing(0x8a8a8a, true);
     r.position.set(g.x, g.y, g.z);
     r.rotation.y = headings[i];
     r.scale.setScalar((g.r || 24) / 24);
@@ -2063,6 +2106,14 @@ const race = { state: 'idle', t: 0, gate: 0, count: 0, sputterAt: 0, lastResult:
 
 function tryStartRace() {
   document.getElementById('help').classList.add('hidden');
+  // A room game is an activity, and "Let go all!" would abandon it for a race
+  // nobody asked for — which is what happened to a pilot in the middle of tag.
+  if (play.id && !track) {
+    const g = gameById(play.id);
+    addMsg('roomgame', `You are playing ${g ? g.name : play.id} — “Let go all!” would start a race instead. `
+      + 'Call the game off from the menu first.', 5);
+    return;
+  }
   // in a room, Enter is the call to the whole room, not a private start
   if (live.inRoom() && track && !track.historic) {
     if (!live.isHost()) {
@@ -2122,9 +2173,15 @@ function updateRace(dt) {
   // The Deutsch course's rings are rebuilt whenever a track ends, so during a
   // scenario that is not a race they hung in the sky — the grey hoop by the
   // Tower with nothing to do with the mission in hand.
-  const freeScenario = !!scenario && !track;
-  for (const r of gateRings) r.visible = !freeScenario;
-  if (freeScenario) startRing.visible = false;
+  // Rings belong to the course in hand and to nothing else. The historic gates
+  // are rebuilt whenever a track ends, so without this they hang in the sky
+  // through a scenario, and through a room game — a pilot playing tag has a
+  // grey hoop by the Tower that has nothing to do with what they are doing.
+  const otherBusiness = (!!scenario && !track) || (!track && !!play.id);
+  for (const r of gateRings) r.visible = !otherBusiness;
+  if (otherBusiness) startRing.visible = false;
+  const go = document.getElementById('btnGo');
+  if (go) go.classList.toggle('off', !track && !!play.id);
   if (!track) return;
   const gates = track.gates;
   const running = s === 'run';

@@ -241,6 +241,8 @@
   @keyframes soundpulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
   #btnSound.asleep svg { animation: soundpulse 1.8s ease-in-out infinite; }
   #btnSound.off { opacity:.55; }
+  /* GO is refused while a room game is on: it would start a race instead */
+  #btnGo.off { opacity:.32; }
 
   /* built into the page, but shown only when net.js has an office to write to */
   #btnBug { display:none; cursor:pointer; }
