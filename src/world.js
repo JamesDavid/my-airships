@@ -281,6 +281,37 @@ export const TOWER_POS = new THREE.Vector3(_twr.x, 0, _twr.z);
  */
 const H2 = (x, z) => ({ x: ORIGIN_XZ.x + (x - 260) * 2, z: ORIGIN_XZ.z + (z - 150) * 2 });
 
+/**
+ * Put a crossing ON the water it crosses.
+ *
+ * The Saint-Cloud group — the bridge, the Avre aqueduct, the village, the
+ * church — is laid out in the world's old HALF FRAME and converted by H2. That
+ * conversion is still right; what is no longer right is the ground under it.
+ * The aerodrome moved to the Aéro-Club's true position when the world was
+ * re-surveyed, and the Seine moved to OpenStreetMap's, and these hand-placed
+ * objects stayed where they were. Measured: the Pont de Saint-Cloud stood
+ * 636 m from any water and the Avre aqueduct 564 m, NINE METRES from the centre
+ * of Longchamps racecourse — which is what a pilot was looking at when he filed
+ * "Longchamps racecourse has a bridge in the middle of it?"
+ *
+ * A bridge that is not over water is wrong under any reading, so both are
+ * snapped to the nearest station of the surveyed river and turned across its
+ * flow. Re-laying the whole Saint-Cloud scene against the real bank is a bigger
+ * job and it is step 7 of docs/PARIS_1901.md.
+ */
+function onTheRiver(x, z) {
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < SEINE_XZ.length; i++) {
+    const d = Math.hypot(SEINE_XZ[i][0] - x, SEINE_XZ[i][1] - z);
+    if (d < bd) { bd = d; bi = i; }
+  }
+  const a = SEINE_XZ[Math.max(0, bi - 1)], b = SEINE_XZ[Math.min(SEINE_XZ.length - 1, bi + 1)];
+  const tx = b[0] - a[0], tz = b[1] - a[1];
+  const tl = Math.hypot(tx, tz) || 1;
+  // a deck whose long axis is local +x, laid across the flow
+  return { x: SEINE_XZ[bi][0], z: SEINE_XZ[bi][1], ry: Math.atan2(tx / tl, -tz / tl), moved: bd };
+}
+
 const _sc = placeLegacy('stcloud');
 // The Aéro-Club's ground lay on the FLAT beside the Seine, with the park of
 // Saint-Cloud and its wooded hill rising behind it to the west — that is why
@@ -312,6 +343,8 @@ export const TOWER_RING = Object.assign(
 
 const _lc = placeLegacy('longchamp');
 const LONGCHAMPS = { x: _lc.x, z: _lc.z, rx: 520, rz: 300 };
+const _au = placeLegacy('autueil');
+const AUTEUIL = { x: _au.x, z: _au.z, rx: 420, rz: 260 };
 
 export function buildWorld(scene) {
   windMats.length = 0;
@@ -486,7 +519,6 @@ export function buildWorld(scene) {
   seine.position.y = riverPts[0].y;      // the surface is one level — see paris_terrain.js
   seine.userData.noLift = true;
   scene.add(seine);
-  addBridges(scene, riverPts);
 
   // The western reach used to be a SECOND, invented river: a straight
   // north-south line at x ~ -2000, standing in for the loop round the Bois. The
@@ -575,7 +607,8 @@ export function buildWorld(scene) {
   roadH(-1600, 330, -1250, 200, 24);            // the allée to the racecourse
   roadH(-2330, 440, -2340, 90, 22);             // the village street to the church
   roadH(-2080, 400, -2150, 150, 20);            // the lane down toward the field gate
-  { const q = H2(-1994, 400); wb.position.set(q.x, 0, q.z); }   // 250 m (0.5 km at full scale) upstream
+  { const h = H2(-1994, 400); const q = onTheRiver(h.x, h.z);
+    wb.position.set(q.x, 0, q.z); wb.rotation.y = q.ry; }   // over the water, not beside it
   wb.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(wb);
 
@@ -1452,16 +1485,18 @@ function addBookPlaces(scene, buildings) {
     aq.add(emb);
   }
 
+  let AQ;
   // The reach here runs north and south, so the crossing runs east and west:
   // the deck's long axis is local +x and the group is NOT turned. (Rotating it
   // a quarter turn laid the whole aqueduct along the water instead of over it.)
-  { const q = H2(-1985, 150); aq.position.set(q.x, 0, q.z); }   // clear of the aerodrome field, which reaches z 120
+  { const h = H2(-1985, 150); const q = onTheRiver(h.x, h.z);
+    aq.position.set(q.x, 0, q.z); aq.rotation.y = q.ry; AQ = q; }
   aq.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(aq);
   buildings.length -= 2;                            // re-place the piers in world terms
   for (const px of [-38, 38]) {
-    { const q = H2(-1985 + px, 150);
-      buildings.push({ x: q.x, z: q.z, w: 18, d: 18, h: DECK, top: DECK }); }
+    buildings.push({ x: AQ.x + Math.cos(AQ.ry) * px, z: AQ.z - Math.sin(AQ.ry) * px,
+      w: 18, d: 18, h: DECK, top: DECK });
   }
 
   // ---- M. Henry Deutsch's air-ship house, a bare skeleton "scarcely two
@@ -1899,17 +1934,27 @@ function ribbonGeoXY(pts, width) {
   return geo;
 }
 
-function addBridges(scene, pts) {
-  for (const frac of [0.52, 0.62]) {
-    const i = Math.floor(pts.length * frac);
-    const p = pts[i];
-    const t = pts[i + 1].clone().sub(p).normalize();
-    const m = new THREE.Mesh(new THREE.BoxGeometry(14, 2.2, 96), new THREE.MeshLambertMaterial({ color: 0xa8a094 }));
-    m.position.set(p.x, 2.4, p.z);
-    m.rotation.y = Math.atan2(t.z, -t.x); // box long axis (z) perpendicular to river tangent
-    scene.add(m);
-  }
-}
+/**
+ * There used to be two bridges here, and they were placed BY INDEX.
+ *
+ *     for (const frac of [0.52, 0.62]) { const i = Math.floor(pts.length * frac); … }
+ *
+ * Fifty-two per cent of the way along an ARRAY is not a place. It is wherever
+ * the station count happens to put it, so these two moved every time the river
+ * was re-surveyed — and when repair_seine.py took the Seine from 246 stations
+ * to 198 they moved again, one of them to within a kilometre of the Longchamps
+ * racecourse, standing over dry ground. A pilot filed it: "Longchamps
+ * racecourse has a bridge in the middle of it? I thought you cleaned this up."
+ *
+ * He was right to be exasperated, because this IS the fault that was cleaned up
+ * once already — addExpoPavilions walked riverPts[60..94] and dropped four
+ * pavilions in the water at Suresnes when the river changed under it.
+ *
+ * They are gone. The bridges of Paris are built where STREETS CROSS THE WATER
+ * (see the crossing search in buildWorldParis): ten of them, each with a deck
+ * spanning the actual width of the river at that point, each with a collider,
+ * each at a place rather than at an index.
+ */
 
 // ---------------------------------------------------------------- city
 // Shared frontage generator: buildings along both sides of a street list,
@@ -2003,11 +2048,24 @@ function buildCity(scene, riverPts) {
     }
     return Math.sqrt(best);
   };
-  // The Bois de Boulogne is woodland with a racecourse in it, not a suburb. The
-  // frontage generator was building houses along every surveyed road that runs
-  // through it — forty-six of them stood among the trees. Same bounds as
-  // world.isInBois, plus the Longchamps and Auteuil grounds.
-  const inBois = (x, z) => x >= -3800 && x <= -680 && Math.abs(z) <= 1120;
+  // The Bois de Boulogne is woodland with two racecourses in it, not a suburb.
+  // The frontage generator was building houses along every surveyed road that
+  // runs through it — forty-six of them stood among the trees.
+  //
+  // This box said "plus the Longchamps and Auteuil grounds" and did not cover
+  // them. It stops at x = -3800; LONGCHAMP'S CENTRE IS AT -3962, so the western
+  // two thirds of the racecourse fell outside the exclusion and had houses
+  // generated across the track. That is what a pilot was looking at when he
+  // filed "Longchamps racecourse has a bridge in the middle of it? I thought
+  // you cleaned this up" — and Longchamp is where the Deutsch runs began, so it
+  // is the one field in this world that has to be empty.
+  //
+  // The grounds come from the PLACES table now instead of being typed, so they
+  // cannot drift apart from the ovals that are actually drawn.
+  const inOval = (o, x, z, pad = 60) =>
+    ((x - o.x) / (o.rx + pad)) ** 2 + ((z - o.z) / (o.rz + pad)) ** 2 < 1;
+  const inBois = (x, z) => (x >= -3800 && x <= -680 && Math.abs(z) <= 1120)
+    || inOval(LONGCHAMPS, x, z) || inOval(AUTEUIL, x, z);
   const canPlace = (x, z) => !inSite(x, z) && !inBois(x, z) && distToRiver(x, z) > 116;
 
   const list = generateFrontages(STREETS, canPlace, rand);

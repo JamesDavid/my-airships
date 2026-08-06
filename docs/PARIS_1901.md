@@ -233,6 +233,41 @@ and that a source has to settle rather than memory:
 Steps 1 and 2 are the ones that pay for themselves immediately. Step 1 is also
 the only one of the six that any pilot has actually asked for, twice.
 
+7. **RE-LAY THE SAINT-CLOUD SCENE against the real bank.** Two pilots filed
+   this on the same minute and it is the largest thing still wrong with Paris:
+
+   > "Longchamps racecourse has a bridge in the middle of it? I thought you
+   > cleaned this up."
+   > "This is a modern map but the river and where things are is the same.
+   > Let's make the Saint Cloud, bois, aero club and longchamp course
+   > realistically detailed given their prominence in the story."
+
+   They are right, and the cause is measurable. The whole Saint-Cloud group —
+   the Pont de Saint-Cloud, the Avre aqueduct, the village, the church, the
+   Paris–Versailles road — is laid out in the world's **old half frame** and
+   converted by `H2`. The conversion is still correct; the ground under it is
+   not. The aerodrome moved to the Aéro-Club's true position when the world was
+   re-surveyed, and the Seine moved to OpenStreetMap's, and none of these
+   hand-placed objects followed:
+
+   | | stood | should be near |
+   |---|---|---|
+   | Avre aqueduct | 564 m from any water, **9 m from Longchamp's centre** | on the river |
+   | Pont de Saint-Cloud | 636 m from any water | on the river |
+   | Deutsch's air-ship shed | **3.9 km from the aerodrome** | "scarcely two air-ships' lengths" from Santos-Dumont's doors |
+   | village church | 187 m from the river | in the village |
+
+   Both crossings are now snapped onto the surveyed river, which clears the
+   racecourse and puts a bridge over water instead of over grass. **That is a
+   patch, not the fix.** The group's *internal* layout is wrong too: it puts the
+   bridge 612 m east of the village where the real one is 469 m west, so no
+   rigid translation can save it. It has to be re-laid — the village on the west
+   bank, the aerodrome on the flat, Deutsch's shed beside Santos-Dumont's, the
+   Paris–Versailles road actually running through them — against real
+   coordinates, the way the palaces of St. Louis were.
+
+   This is the most-flown corner of the map: every Deutsch run starts here.
+
 ---
 
 ## What this does **not** propose
