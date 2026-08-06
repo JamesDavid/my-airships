@@ -214,17 +214,18 @@ export function makeWaterSurface(geometry, sunDir, waterColor) {
 // so climbing for the gradient wind genuinely pays on each leg.
 const _twr = placeLegacy('eiffel');
 export const TOWER_POS = new THREE.Vector3(_twr.x, 0, _twr.z);
-export const PAD_POS = new THREE.Vector3(-2140, 2.0, 0);
-export const START_RING = new THREE.Vector3(-2065, 55, 0);
-export const TOWER_RING = new THREE.Vector3(430, 70, 150);
+const _sc = placeLegacy('stcloud');
+export const PAD_POS = new THREE.Vector3(_sc.x + 120, 2.0, _sc.z - 240);
+export const START_RING = new THREE.Vector3(PAD_POS.x + 150, 55, PAD_POS.z);
+export const TOWER_RING = new THREE.Vector3(_twr.x + 340, 70, _twr.z);
 
 const _lc = placeLegacy('longchamp');
-const LONGCHAMPS = { x: _lc.x, z: _lc.z, rx: 260, rz: 150 };
+const LONGCHAMPS = { x: _lc.x, z: _lc.z, rx: 520, rz: 300 };
 
 export function buildWorld(scene) {
   windMats.length = 0;
   // ---------- sky, light, fog ----------
-  scene.fog = new THREE.FogExp2(0xeccfa8, 0.00042);
+  scene.fog = new THREE.FogExp2(0xeccfa8, 0.00021);   // half the density: twice the distances
 
   const sunDir = new THREE.Vector3(1, 0.14, 0.16).normalize();
   const sky = makePhysicalSky(scene, sunDir, { rayleigh: 2.6, turbidity: 7 });
@@ -234,7 +235,7 @@ export function buildWorld(scene) {
 
   // ---------- ground (subtle patchwork texture so the plain isn't flat) ----------
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(4500, 48),
+    new THREE.CircleGeometry(9000, 56),
     new THREE.MeshLambertMaterial({ map: makeGroundTexture() })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -242,13 +243,13 @@ export function buildWorld(scene) {
   scene.add(ground);
 
   // paved city base (east of the Seine)
-  addFlat(scene, 665, 0, 970, 1700, 0x847d70, 0.05);
+  addFlat(scene, 1330, 0, 1940, 3400, 0x847d70, 0.05);
   // The Champ de Mars runs from the Tower down to the École Militaire, on that
   // axis — it is not a rectangle lying square to the compass, which is why the
   // Tower and its park did not line up. Drawn as a strip between the two.
   {
     const t = placeLegacy('eiffel'), e = placeLegacy('ecolemil');
-    addStrip(scene, t.x, t.z, e.x, e.z, 112, 0x7f9159, 0.12);
+    addStrip(scene, t.x, t.z, e.x, e.z, 224, 0x7f9159, 0.12);
   }
   // Longchamps pelouse
   addOval(scene, LONGCHAMPS.x, LONGCHAMPS.z, LONGCHAMPS.rx, LONGCHAMPS.rz, 0x86a05e, 0.12);
@@ -257,8 +258,8 @@ export function buildWorld(scene) {
 
   // ---------- the Seine: stone quays and living, reflecting water ----------
   const riverPts = seinePoints();
-  scene.add(makeRibbon(riverPts, 92, 0xa39a86, 0.18));  // quays
-  const seine = makeWaterSurface(ribbonGeoXY(riverPts, 70), sunDir, 0x24405a);
+  scene.add(makeRibbon(riverPts, 184, 0xa39a86, 0.18));  // quays
+  const seine = makeWaterSurface(ribbonGeoXY(riverPts, 140), sunDir, 0x24405a);
   seine.rotation.x = -Math.PI / 2;
   seine.position.y = 0.3;
   scene.add(seine);
@@ -273,7 +274,7 @@ export function buildWorld(scene) {
   // Out here the Seine has grass banks and a towpath rather than the cut-stone
   // quays of the city reaches: the last third of the trace is banked in green.
   const westPts = riverPts.slice(Math.floor(riverPts.length * 0.62));
-  scene.add(makeRibbon(westPts, 88, 0x6d7a4d, 0.16, true));
+  scene.add(makeRibbon(westPts, 176, 0x6d7a4d, 0.16, true));
   // the Pont de St-Cloud: a stone road bridge, well clear of the Avre aqueduct
   // downstream of it (the two stood a few hundred metres apart in life, and
   // sat one on top of the other here)
@@ -365,7 +366,7 @@ export function buildWorld(scene) {
   // be seven hundred draw calls before a single building is put up.
   {
     const pos = [], col = [], idx = [];
-    const paved = new THREE.Color(0xb9b0a0), dirt = new THREE.Color(0x9d9573);
+    const paved = new THREE.Color(0xd9d2c2), dirt = new THREE.Color(0xb4ab88);
     for (const st of STREETS) {
       const c = st.dirt ? dirt : paved;
       for (let i = 0; i < st.pts.length - 1; i++) {
@@ -379,7 +380,7 @@ export function buildWorld(scene) {
         const b = pos.length / 3;
         for (const [px, pz] of [[x1 - ex + nx, z1 - ez + nz], [x1 - ex - nx, z1 - ez - nz],
           [x2 + ex + nx, z2 + ez + nz], [x2 + ex - nx, z2 + ez - nz]]) {
-          pos.push(px, 0.09, pz);
+          pos.push(px, 0.16, pz);
           col.push(c.r, c.g, c.b);
         }
         idx.push(b, b + 1, b + 2, b + 2, b + 1, b + 3);
@@ -394,8 +395,8 @@ export function buildWorld(scene) {
     roads.receiveShadow = true;
     scene.add(roads);
   }
-  addOval(scene, 420, -420, 64, 64, 0x9a9285, 0.08);   // the Étoile
-  addOval(scene, 900, -180, 85, 85, 0x9a9285, 0.08);   // Place de la Concorde
+  addOval(scene, arcPos.x, arcPos.z, 128, 128, 0x9a9285, 0.08);   // the Étoile
+  { const c = placeLegacy('concorde'); addOval(scene, c.x, c.z, 170, 170, 0x9a9285, 0.08); }
   scene.add(makeArc(arcPos));
   scene.add(makeConcorde());
   scene.add(makeMadeleine());
@@ -538,15 +539,17 @@ export function buildWorld(scene) {
         clue: 'The wooded park above the aerodrome, with its terraces and cascade.' },
     ],
     towSpots: [
-      { name: 'Bagatelle, by the Bois', pos: new THREE.Vector3(-450, 0, -140) },
+      { name: 'Bagatelle, by the Bois', pos: (() => { const b = placeLegacy('bagatelle');
+        return new THREE.Vector3(b.x, 0, b.z); })() },
       { name: 'Longchamps racecourse', pos: new THREE.Vector3(LONGCHAMPS.x, 0, LONGCHAMPS.z) },
       // on the quay, not in the river — the Seine drowns a ship now
-      { name: 'the Trocadéro bank', pos: new THREE.Vector3(-30, 0, 70) },
+      { name: 'the Trocadéro bank', pos: (() => { const t = placeLegacy('trocadero');
+        return new THREE.Vector3(t.x + 120, 0, t.z + 220); })() },
     ],
-    limitNote: 'the historic 30:00 at half scale',
+    limitNote: 'the historic half-hour, at full scale',
     vistaPos: new THREE.Vector3(TOWER_POS.x + 20, 215, TOWER_POS.z + 20),
     windBase: windB,
-    raceLimit: 900, raceRecord: 885,
+    raceLimit: 1800, raceRecord: 1771,
     hints: {
       idleNear: 'The Commission waits — call “Let go all!” when you are ready.',
       idleFar: 'Free flight — the start ring waits above the Aéro Club at St. Cloud.',
@@ -560,9 +563,9 @@ export function buildWorld(scene) {
     // river is wet right out to the bank you can see
     // …but the Île de Puteaux is dry land in the middle of the reach
     isWater: (x, z) => !onPuteaux(x, z)
-      && nearPolyline(riverPts, x, z, 35.5),
+      && nearPolyline(riverPts, x, z, 71),
     isInBois(x, z) {
-      if (x < -1900 || x > -340 || Math.abs(z) > 560) return false;
+      if (x < -3800 || x > -680 || Math.abs(z) > 1120) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
       if (dx * dx + dz * dz < 1) return false;
       if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 150 * 150) return false;
@@ -901,7 +904,7 @@ function makeArc(pos) {
 // Everything here is named in "My Airships" or stands on the 1900 plans of the
 // ground he flew over. See docs/PERIOD_NOTES.md for the map sources.
 const _pt = placeLegacy('puteaux');
-const PUTEAUX = { x: _pt.x, z: _pt.z, rx: 130, rz: 38 };   // below the Suresnes bridge   // the island in the reach
+const PUTEAUX = { x: _pt.x, z: _pt.z, rx: 260, rz: 76 };   // below the Suresnes bridge   // the island in the reach
 
 export function onPuteaux(x, z) {
   const dx = (x - PUTEAUX.x) / PUTEAUX.rx, dz = (z - PUTEAUX.z) / PUTEAUX.rz;
@@ -1038,7 +1041,8 @@ function addBookPlaces(scene, buildings) {
   // grounds is the park's terraces, its cascade, and the trees. The hill is set
   // well back — its foot must not reach the aerodrome at x -2140.
   const scRand = mulberry32(1901);
-  const HILL = { x: -2980, z: -60, rTop: 240, rBot: 520, h: 110 };
+  const _h = placeLegacy('stcloud');
+  const HILL = { x: _h.x - 400, z: _h.z - 200, rTop: 480, rBot: 1040, h: 110 };
   const hillH = (x, z) => {
     const r = Math.hypot(x - HILL.x, z - HILL.z);
     if (r <= HILL.rTop) return HILL.h;
@@ -1459,18 +1463,18 @@ function buildCity(scene, riverPts) {
     }
     return Math.sqrt(d);
   };
-  const canPlace = (x, z) => !inSite(x, z) && distToRiver(x, z) > 58;
+  const canPlace = (x, z) => !inSite(x, z) && distToRiver(x, z) > 116;
 
   const list = generateFrontages(STREETS, canPlace, rand);
 
   // interior fill: the deep-city backdrop east of the race line
-  for (let gx = 480; gx <= 1240; gx += 54) {
-    for (let gz = -760; gz <= 760; gz += 54) {
+  for (let gx = 960; gx <= 2480; gx += 108) {
+    for (let gz = -1520; gz <= 1520; gz += 108) {
       const x = gx + (rand() - 0.5) * 14, z = gz + (rand() - 0.5) * 14;
       if (!canPlace(x, z)) continue;
       if (streetClearance(x, z) < 12) continue;   // the fill keeps out of the road
       if (rand() < 0.25) continue;
-      const w = 30 + rand() * 14, d = 30 + rand() * 14, r = rand();
+      const w = 52 + rand() * 26, d = 52 + rand() * 26, r = rand();
       list.push({ x, z, w, d, h: 13 + rand() * 9, rw: w, rd: d, ry: 0, r, nChim: 2 });
     }
   }
@@ -1538,7 +1542,7 @@ function addExpoPavilions(scene, riverPts, list, rand) {
     const ry = Math.atan2(-tz / tl, tx / tl);
     for (const side of [-1, 1]) {
       if (rand() < 0.2) continue;
-      const cx = p.x + nx * 64 * side, cz = p.z + nz * 64 * side;
+      const cx = p.x + nx * 128 * side, cz = p.z + nz * 128 * side;
       if (inSite(cx, cz)) continue;
       pav.push({ x: cx, z: cz, ry, r: rand() });
       const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
@@ -1600,11 +1604,11 @@ function addTrees(scene) {
   const rand = mulberry32(99);
   const pts = [];
   for (let i = 0; i < 1250; i++) {
-    const x = -1900 + rand() * 1560, z = -560 + rand() * 1120;
+    const x = -3800 + rand() * 3120, z = -1120 + rand() * 2240;
     const dx = (x - LONGCHAMPS.x) / (LONGCHAMPS.rx + 14), dz = (z - LONGCHAMPS.z) / (LONGCHAMPS.rz + 14);
     if (dx * dx + dz * dz < 1) continue;
-    if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 160 * 160) continue;
-    if (distToStreets(x, z) < 13) continue; // keep the carriage roads clear
+    if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 320 * 320) continue;
+    if (distToStreets(x, z) < 26) continue; // keep the carriage roads clear
     pts.push({ x, z, s: 3 + rand() * 3.4, r: rand() });
   }
   // Three instanced passes make a tree instead of a green ball: a rigid trunk,

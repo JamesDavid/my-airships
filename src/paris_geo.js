@@ -93,13 +93,15 @@ export function place(id) {
 }
 
 // ---------------------------------------------------------------------------
-// The world is still built at half scale while it is converted. This is the
-// bridge: the same true table, expressed in the old frame (Tower at 260,150,
-// two real metres to the game metre). Everything that reads a position should
-// come through here, so that switching the world over is a matter of changing
-// these two functions rather than hunting coordinates again.
-export const LEGACY_ORIGIN = { x: 260, z: 150 };
-export const LEGACY_SCALE = 2;
+// The world was converted to full scale through these two functions: while it
+// was half scale they carried the true table into the old frame, and now they
+// are the identity. Kept because a good deal of code reads them, and because
+// they record how the conversion was done.
+// The world is FULL SCALE now, so these are the true frame and placeLegacy is
+// the same as place. They are kept as names because a good deal of code reads
+// them, and because they document what the conversion was.
+export const LEGACY_ORIGIN = { x: ORIGIN_XZ.x, z: ORIGIN_XZ.z };
+export const LEGACY_SCALE = 1;
 
 export function placeLegacy(id) {
   const p = place(id);

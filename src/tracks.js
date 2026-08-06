@@ -1,3 +1,4 @@
+import { placeLegacy } from './paris_geo.js';
 // storage can throw outright (iOS private browsing) — never let it stop a flight
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not saved */ } }
@@ -15,7 +16,8 @@ export const TRACKS = [
     id: 'longchamps', location: 'paris', laps: 3,
     name: 'The Longchamps Circuit',
     sub: '“Ten times in succession I made the circuit of Longchamps” — 3 laps',
-    gates: ellipse(-1250, 200, 300, 190, 6, 30, 20),
+    gates: (() => { const L = placeLegacy('longchamp');
+      return ellipse(L.x, L.z, 600, 380, 6, 60, 20); })(),
   },
   {
     // his own exercise of 12 July 1901, and the hardest kind of flying there is:
@@ -23,20 +25,29 @@ export const TRACKS = [
     id: 'longchamps-ten', location: 'paris', laps: 3, stops: true,
     name: 'The Longchamps Ten',
     sub: '“stopping each time at a point designed beforehand” — halt in the first ring each lap',
-    gates: ellipse(-1250, 200, 300, 190, 6, 30, 20),
+    gates: (() => { const L = placeLegacy('longchamp');
+      return ellipse(L.x, L.z, 600, 380, 6, 60, 20); })(),
   },
   {
     id: 'gymkhana', location: 'paris', laps: 2, v: 2,
     name: 'The Aerial Gymkhana',
     sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
-    gates: [
-      { x: 452, y: 42, z: 560, r: 16 },   // skirt the rim of the Grande Roue
-      { x: 300, y: 25, z: 330, r: 18 },   // low over the Champ de Mars
-      { x: 260, y: 35, z: 75, r: 18 },    // the Tower's shoulder — his one danger
-      { x: 20, y: 50, z: 140, r: 18 },    // over the Trocadéro dome, between its towers
-      { x: 573, y: 16, z: -344, r: 13 },  // DOWN the Champs-Élysées canyon
-      { x: 420, y: 13, z: -420, r: 5.5, ang: -2.034 }, // UNDER the Arc, along the avenue
-    ],
+    // Hung off the landmarks themselves rather than written out: the places
+    // moved onto their true coordinates, and gates written as numbers would
+    // still be circling where the Roue and the Trocadéro used to stand.
+    gates: (() => {
+      const P = (id) => placeLegacy(id);
+      const roue = P('roue'), twr = P('eiffel'), troc = P('trocadero'), arc = P('etoile');
+      const ec = P('ecolemil');
+      return [
+        { x: roue.x + 52, y: 42, z: roue.z, r: 30 },              // skirt the rim of the Roue
+        { x: (twr.x + ec.x) / 2, y: 25, z: (twr.z + ec.z) / 2, r: 34 }, // low over the Champ de Mars
+        { x: twr.x, y: 35, z: twr.z - 150, r: 34 },               // the Tower's shoulder
+        { x: troc.x, y: 50, z: troc.z, r: 34 },                   // over the Trocadéro dome
+        { x: arc.x + 300, y: 16, z: arc.z + 150, r: 26 },         // DOWN the Champs-Élysées
+        { x: arc.x, y: 13, z: arc.z, r: 11, ang: -2.034 },        // UNDER the Arc
+      ];
+    })(),
   },
   {
     id: 'harbor', location: 'monaco', laps: 2, v: 2,

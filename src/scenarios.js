@@ -1,3 +1,4 @@
+import { placeLegacy } from './paris_geo.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -68,9 +69,9 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no1',
     brief: 'The balloon is losing gas and beginning to fold. Get down to the lawn at Bagatelle — the boys flying kites there will catch your rope. Land gently, or not at all.',
     setup(ctx) {
-      ctx.place(-1150, 270, -120, 0);
+      { const b = placeLegacy('bagatelle'); ctx.place(b.x - 600, 270, b.z + 300, 0); }
       ctx.ship.gas = 90;
-      ctx.setZone(V(-450, 12, -140), 90);
+      { const b = placeLegacy('bagatelle'); ctx.setZone(V(b.x, 12, b.z), 180); }
       ctx.setCenter('September 1898', 'The cylinder is folding — make for Bagatelle! (green ring)');
       this.warned = false;
     },
@@ -96,9 +97,9 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no5',
     brief: 'The balloon is losing hydrogen fast and you cannot make St. Cloud. The Tower stands between you and the Trocadéro hotels — round her, or dare the arch beneath her legs. The roof, not the street.',
     setup(ctx) {
-      ctx.place(330, 150, 160, Math.PI);
+      { const t = placeLegacy('trocadero'); ctx.place(t.x + 620, 150, t.z + 40, Math.PI); }
       ctx.ship.gas = 80;
-      ctx.setZone(V(20, 40, 140), 70);
+      { const t = placeLegacy('trocadero'); ctx.setZone(V(t.x, 40, t.z), 140); }
       ctx.setCenter('August 8th, 1901', 'The valve is gone. The Trocadéro roof or nothing. (green ring)');
     },
     tick(ctx, dt) {
@@ -143,7 +144,7 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no9',
     brief: 'Dawn, and the avenues are empty. Take the little No. 9 across the city at rooftop height and land in the Champs-Élysées at your own door, where the servants wait to catch her.',
     setup(ctx) {
-      ctx.place(-450, 14, -140, 0); // towed to Bagatelle overnight
+      { const b = placeLegacy('bagatelle'); ctx.place(b.x, 14, b.z, 0); } // towed to Bagatelle overnight
       // His door, at 114 Champs-Élysées. The ring used to sit at (581, -340),
       // which a pilot reported as buried in a building — and it was: the 18 m
       // block under its rim is the GRAND PALAIS, which carries no collider and
@@ -153,16 +154,21 @@ export const SCENARIOS = [
       // clear of both the Étoile frontages and the Palais runs s=135..165 m
       // along it. This is its middle, and 28% down the avenue — about where
       // No. 114 stands. A 30 m street cannot hold a wider ring than this.
-      ctx.setZone(V(554, 2, -353), 13);
+      { const a = placeLegacy('etoile');
+        // 300 m down the avenue from the Étoile, on its axis — No. 114
+        ctx.setZone(V(a.x + 268, 2, a.z + 134), 26); }
       // the way he went: over the Bois, across the Seine, round the Arc to the
       // right "as the law directs", and down the avenue at rooftop height
-      ctx.setRoute([V(-150, 30, -90), V(190, 26, -250), V(430, 22, -430)]);
+      { const a = placeLegacy('etoile'), t = placeLegacy('eiffel'), b = placeLegacy('bagatelle');
+        ctx.setRoute([V((b.x + t.x) / 2, 30, (b.z + t.z) / 2), V(t.x - 120, 26, t.z - 400),
+          V(a.x - 40, 22, a.z + 60)]); }
       ctx.setCenter('June 23rd, 1903, 4 a.m.', 'Your door is on the Champs-Élysées. (green ring — land gently in the avenue)');
     },
     tick(ctx) {
-      const d = Math.hypot(ctx.ship.pos.x - 554, ctx.ship.pos.z + 353);
+      const _a = placeLegacy('etoile');
+      const d = Math.hypot(ctx.ship.pos.x - (_a.x + 268), ctx.ship.pos.z - (_a.z + 134));
       if (ctx.ship.wrecked) return ctx.fail('The chimney-pots claimed her. The avenue next time.');
-      if (ctx.ship.landed && d < 13) {
+      if (ctx.ship.landed && d < 26) {
         ctx.complete('Two servants catch and steady the ship while you go up for coffee. “From my round bay window I looked down upon the air-ship.”');
       }
     },
@@ -217,9 +223,10 @@ export const SCENARIOS = [
     brief: 'The Tower is rounded and the timekeepers are waiting at St. Cloud — but the wind has turned against you and the motor is failing. Get her home over the Bois, or come down in M. Edmond de Rothschild’s park as you really did, standing in your basket at the top of the tallest chestnut with the propeller touching the ground.',
     setup(ctx) {
       // homeward from the Tower, into the head wind, motor already sickening
-      ctx.place(-260, 165, 40, Math.PI);
+      { const t = placeLegacy('eiffel'); ctx.place(t.x - 1040, 165, t.z - 220, Math.PI); }
       ctx.ship.motorHealth = 0.62;
-      ctx.setZone(V(-2065, 12, 0), 120);
+      { const sc = placeLegacy('stcloud');
+        ctx.setZone(V(sc.x + 270, 12, sc.z - 240), 240); }
       ctx.setCenter('July 13th, 1901', 'Home to St. Cloud against the wind — the motor is going. (green ring)');
       this.quit = 34 + Math.random() * 26;    // she stops somewhere over the Bois
       this.t = 0; this.told = false;
@@ -251,8 +258,8 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no9',
     brief: 'You lunched at the Cascade, and the officers marking out the troops asked whether you would come to the review in her. Fly the little No. 9 over the massed army at Longchamps, low and slow, then away to the polo ground. Ten minutes, no more — do not disturb the good order of the review.',
     setup(ctx) {
-      ctx.place(-980, 22, 300, -0.6);       // the lawn of the Cascade restaurant
-      ctx.setZone(V(-1250, 10, 200), 180);  // the racecourse, full of troops
+      { const L = placeLegacy('longchamp'); ctx.place(L.x + 540, 22, L.z + 200, -0.6); }  // the Cascade lawn
+      { const L = placeLegacy('longchamp'); ctx.setZone(V(L.x, 10, L.z), 360); }  // the racecourse, full of troops
       ctx.setCenter('July 14th, 1903', 'Over the review at Longchamps — low, and under ten minutes. (green ring)');
       this.over = 0; this.saluted = false; this.done = false;
     },

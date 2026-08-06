@@ -13,44 +13,44 @@ import { OSM_STREETS } from './paris_streets.js';
 
 const HAND = [
   // ---- the grand axis ----
-  { name: 'Avenue des Champs-Élysées', w: 30, pts: [[420, -420], [900, -180]], frontage: true },
-  { name: 'Rue de Rivoli', w: 24, pts: [[900, -180], [1260, -110]], frontage: true },
-  { name: 'Grands Boulevards', w: 26, pts: [[810, -380], [1000, -500], [1180, -450], [1290, -350]], frontage: true },
-  { name: 'Avenue de l’Opéra', w: 20, pts: [[700, -560], [880, -300]], frontage: true },
+  { name: 'Avenue des Champs-Élysées', w: 60, pts: [[840, -840], [1800, -360]], frontage: true },
+  { name: 'Rue de Rivoli', w: 48, pts: [[1800, -360], [2520, -220]], frontage: true },
+  { name: 'Grands Boulevards', w: 52, pts: [[1620, -760], [2000, -1000], [2360, -900], [2580, -700]], frontage: true },
+  { name: 'Avenue de l’Opéra', w: 40, pts: [[1400, -1120], [1760, -600]], frontage: true },
 
   // ---- the twelve avenues of the Étoile, by name and true destination ----
-  { name: 'Avenue du Bois (Foch)', w: 26, pts: [[420, -420], [-140, -380]] },
-  { name: 'Avenue de la Grande-Armée', w: 22, pts: [[420, -420], [240, -740]], frontage: true },
-  { name: 'Avenue de Wagram', w: 18, pts: [[420, -420], [610, -700]], frontage: true },
-  { name: 'Avenue Hoche', w: 16, pts: [[420, -420], [690, -580]], frontage: true },
-  { name: 'Avenue de Friedland', w: 18, pts: [[420, -420], [770, -450]], frontage: true },
-  { name: 'Avenue Marceau', w: 16, pts: [[420, -420], [560, -140]], frontage: true },
-  { name: 'Avenue d’Iéna', w: 16, pts: [[420, -420], [300, -60]], frontage: true },
-  { name: 'Avenue Kléber', w: 18, pts: [[420, -420], [20, 140]], frontage: true },
-  { name: 'Avenue Victor-Hugo', w: 16, pts: [[420, -420], [120, -560]], frontage: true },
-  { name: 'Avenue MacMahon', w: 14, pts: [[420, -420], [330, -660]], frontage: true },
-  { name: 'Avenue Carnot', w: 14, pts: [[420, -420], [220, -600]], frontage: true },
+  { name: 'Avenue du Bois (Foch)', w: 52, pts: [[840, -840], [-280, -760]] },
+  { name: 'Avenue de la Grande-Armée', w: 44, pts: [[840, -840], [480, -1480]], frontage: true },
+  { name: 'Avenue de Wagram', w: 36, pts: [[840, -840], [1220, -1400]], frontage: true },
+  { name: 'Avenue Hoche', w: 32, pts: [[840, -840], [1380, -1160]], frontage: true },
+  { name: 'Avenue de Friedland', w: 36, pts: [[840, -840], [1540, -900]], frontage: true },
+  { name: 'Avenue Marceau', w: 32, pts: [[840, -840], [1120, -280]], frontage: true },
+  { name: 'Avenue d’Iéna', w: 32, pts: [[840, -840], [600, -120]], frontage: true },
+  { name: 'Avenue Kléber', w: 36, pts: [[840, -840], [40, 280]], frontage: true },
+  { name: 'Avenue Victor-Hugo', w: 32, pts: [[840, -840], [240, -1120]], frontage: true },
+  { name: 'Avenue MacMahon', w: 28, pts: [[840, -840], [660, -1320]], frontage: true },
+  { name: 'Avenue Carnot', w: 28, pts: [[840, -840], [440, -1200]], frontage: true },
 
   // ---- the quays (riverside rows survive only on the dry side) ----
-  { name: 'Quai (right bank)', w: 18, pts: [[-40, -300], [-70, -60], [30, 180], [170, 420], [210, 640]], frontage: true },
-  { name: 'Quai (left bank)', w: 18, pts: [[-200, -280], [-160, -40], [-60, 220], [50, 470], [80, 660]], frontage: true },
+  { name: 'Quai (right bank)', w: 36, pts: [[-80, -600], [-140, -120], [60, 360], [340, 840], [420, 1280]], frontage: true },
+  { name: 'Quai (left bank)', w: 36, pts: [[-400, -560], [-320, -80], [-120, 440], [100, 940], [160, 1320]], frontage: true },
 
   // ---- Trocadéro, the Champ, the École Militaire ----
-  { name: 'Axe Trocadéro–École Militaire', w: 22, pts: [[20, 140], [460, 330]] },
-  { name: 'Avenue de Suffren', w: 16, pts: [[195, 180], [245, 540]], frontage: true },
-  { name: 'Avenue de la Bourdonnais', w: 16, pts: [[395, 175], [430, 520]], frontage: true },
-  { name: 'Avenue de la Motte-Picquet', w: 16, pts: [[220, 480], [560, 430]], frontage: true },
+  { name: 'Axe Trocadéro–École Militaire', w: 44, pts: [[40, 280], [920, 660]] },
+  { name: 'Avenue de Suffren', w: 32, pts: [[390, 360], [490, 1080]], frontage: true },
+  { name: 'Avenue de la Bourdonnais', w: 32, pts: [[790, 350], [860, 1040]], frontage: true },
+  { name: 'Avenue de la Motte-Picquet', w: 32, pts: [[440, 960], [1120, 860]], frontage: true },
 
   // ---- Passy, between the river and the Bois ----
-  { name: 'Rue de Passy', w: 14, pts: [[-70, -60], [-230, -230]], frontage: true },
-  { name: 'Avenue Mozart', w: 14, pts: [[-230, -230], [-330, -50]], frontage: true },
-  { name: 'Rue de Boulainvilliers', w: 12, pts: [[-230, -50], [-120, 120]], frontage: true },
+  { name: 'Rue de Passy', w: 28, pts: [[-140, -120], [-460, -460]], frontage: true },
+  { name: 'Avenue Mozart', w: 28, pts: [[-460, -460], [-660, -100]], frontage: true },
+  { name: 'Rue de Boulainvilliers', w: 24, pts: [[-460, -100], [-240, 240]], frontage: true },
 
   // ---- the Bois de Boulogne carriage roads (dirt, unbuilt) ----
-  { name: 'Allée de Longchamp', w: 14, dirt: true, pts: [[-160, -500], [-700, -160], [-990, 40]] },
-  { name: 'Allée de Bagatelle', w: 12, dirt: true, pts: [[-450, -140], [-820, 100]] },
-  { name: 'Allée des Lacs', w: 12, dirt: true, pts: [[-370, 470], [-420, 160], [-520, -120]] },
-  { name: 'Route de la Cascade', w: 12, dirt: true, pts: [[-990, 40], [-1120, 320], [-980, 480], [-700, 420], [-560, 300]] },
+  { name: 'Allée de Longchamp', w: 28, dirt: true, pts: [[-320, -1000], [-1400, -320], [-1980, 80]] },
+  { name: 'Allée de Bagatelle', w: 24, dirt: true, pts: [[-900, -280], [-1640, 200]] },
+  { name: 'Allée des Lacs', w: 24, dirt: true, pts: [[-740, 940], [-840, 320], [-1040, -240]] },
+  { name: 'Route de la Cascade', w: 24, dirt: true, pts: [[-1980, 80], [-2240, 640], [-1960, 960], [-1400, 840], [-1120, 600]] },
 ];
 
 // The hand-drawn avenues first — they carry the names and the deliberate
@@ -61,19 +61,19 @@ export const STREETS = [...HAND, ...OSM_STREETS];
 
 // building-free precincts: plazas, parks, monuments, water approaches
 export const SITES = [
-  { x: 260, z: 150, r: 135 },   // the Tower and her plaza
-  { x: 300, z: 330, r: 185 },   // the Champ de Mars
-  { x: 420, z: -420, r: 64 },   // the Étoile
-  { x: 900, z: -180, r: 85 },   // Place de la Concorde
-  { x: 20, z: 140, r: 75 },     // the Trocadéro palace
-  { x: 620, z: 260, r: 72 },    // Les Invalides
-  { x: 560, z: -310, r: 78 },   // the Grand Palais
-  { x: 400, z: 560, r: 85 },    // the Grande Roue
-  { x: 700, z: -560, r: 58 },   // the Opéra
-  { x: 810, z: -380, r: 48 },   // the Madeleine
-  { x: 1040, z: 140, r: 78 },   // Notre-Dame
-  { x: 920, z: 460, r: 62 },    // the Panthéon
-  { x: 980, z: -720, r: 250 },  // Montmartre hill
+  { x: 520, z: 300, r: 270 },   // the Tower and her plaza
+  { x: 600, z: 660, r: 370 },   // the Champ de Mars
+  { x: 840, z: -840, r: 128 },   // the Étoile
+  { x: 1800, z: -360, r: 170 },   // Place de la Concorde
+  { x: 40, z: 280, r: 150 },     // the Trocadéro palace
+  { x: 1240, z: 520, r: 144 },    // Les Invalides
+  { x: 1120, z: -620, r: 156 },   // the Grand Palais
+  { x: 800, z: 1120, r: 170 },    // the Grande Roue
+  { x: 1400, z: -1120, r: 116 },   // the Opéra
+  { x: 1620, z: -760, r: 96 },   // the Madeleine
+  { x: 2080, z: 280, r: 156 },   // Notre-Dame
+  { x: 1840, z: 920, r: 124 },    // the Panthéon
+  { x: 1960, z: -1440, r: 500 },  // Montmartre hill
 ];
 
 export function inSite(x, z, pad = 0) {
