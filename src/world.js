@@ -427,6 +427,23 @@ export function buildWorld(scene) {
         idx.push(b, b + 2, b + 1, b + 2, b + 3, b + 1);
       }
     }
+    // A disc at every vertex. Segments are drawn as separate quads, so at a
+    // junction, a bend or a change of width they met at a point and left a
+    // notch — reported as the roads being disjointed and broken up. The cap
+    // fills the corner whatever angle the streets meet at.
+    for (const st of STREETS) {
+      const c = st.dirt ? dirt : paved;
+      for (const [vx, vz] of st.pts) {
+        const b = pos.length / 3, r = st.w / 2, N = 8;
+        pos.push(vx, 0.16, vz); col.push(c.r, c.g, c.b);
+        for (let k = 0; k <= N; k++) {
+          const a2 = (k / N) * Math.PI * 2;
+          pos.push(vx + Math.cos(a2) * r, 0.16, vz + Math.sin(a2) * r);
+          col.push(c.r, c.g, c.b);
+          if (k > 0) idx.push(b, b + k, b + k + 1);
+        }
+      }
+    }
     const g2 = new THREE.BufferGeometry();
     g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g2.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -716,7 +733,9 @@ export function buildWorld(scene) {
         return new THREE.Vector3(t.x + 120, 0, t.z + 220); })() },
     ],
     limitNote: 'the historic half-hour, at full scale',
-    vistaPos: new THREE.Vector3(TOWER_POS.x + 20, 215, TOWER_POS.z + 20),
+    // from the TOP of her, on the campanile gallery at 300 m, not two thirds
+    // of the way up where the third platform is
+    vistaPos: new THREE.Vector3(TOWER_POS.x + 9, 302, TOWER_POS.z + 9),
     windBase: windB,
     raceLimit: 1800, raceRecord: 1771,
     hints: {
@@ -1606,7 +1625,7 @@ export function generateFrontages(streets, canPlace, rand, opts = {}) {
             for (const su of [-1, 1]) for (const sv of [-1, 1]) {
               const px = cx + ux * hw * su + nx * hd * sv;
               const pz = cz + uz * hw * su + nz * hd * sv;
-              if (streetClearance(px, pz) < -1) { intrudes = true; break; }
+              if (streetClearance(px, pz) < 1) { intrudes = true; break; }
             }
             if (intrudes) continue;
           }
@@ -1644,9 +1663,11 @@ function buildCity(scene, riverPts) {
     for (let gz = -1520; gz <= 1520; gz += 108) {
       const x = gx + (rand() - 0.5) * 14, z = gz + (rand() - 0.5) * 14;
       if (!canPlace(x, z)) continue;
-      if (streetClearance(x, z) < 12) continue;   // the fill keeps out of the road
       if (rand() < 0.25) continue;
       const w = 52 + rand() * 26, d = 52 + rand() * 26, r = rand();
+      // the fill blocks are 52-78 m across, so a fixed margin on the CENTRE let
+      // their corners sit well inside a roadway — clear the whole footprint
+      if (streetClearance(x, z) < Math.hypot(w, d) * 0.5 + 3) continue;
       list.push({ x, z, w, d, h: 13 + rand() * 9, rw: w, rd: d, ry: 0, r, nChim: 2 });
     }
   }
