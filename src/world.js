@@ -4,6 +4,7 @@
 // ground (A4), and the red/white striped canvas aerodrome (A11).
 
 import * as THREE from 'three';
+import { geo, place, placeLegacy, SEINE, ORIGIN_XZ, LEGACY_ORIGIN, LEGACY_SCALE } from './paris_geo.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { STREETS, SITES, inSite, distToStreets } from './paris_plan.js';
@@ -211,12 +212,14 @@ export function makeWaterSurface(geometry, sunDir, waterColor) {
 
 // Half real scale: St. Cloud to the Tower is ~2.5 km here (5.5 km in 1901),
 // so climbing for the gradient wind genuinely pays on each leg.
-export const TOWER_POS = new THREE.Vector3(260, 0, 150);
+const _twr = placeLegacy('eiffel');
+export const TOWER_POS = new THREE.Vector3(_twr.x, 0, _twr.z);
 export const PAD_POS = new THREE.Vector3(-2140, 2.0, 0);
 export const START_RING = new THREE.Vector3(-2065, 55, 0);
 export const TOWER_RING = new THREE.Vector3(430, 70, 150);
 
-const LONGCHAMPS = { x: -1250, z: 200, rx: 260, rz: 150 };
+const _lc = placeLegacy('longchamp');
+const LONGCHAMPS = { x: _lc.x, z: _lc.z, rx: 260, rz: 150 };
 
 export function buildWorld(scene) {
   windMats.length = 0;
@@ -256,22 +259,16 @@ export function buildWorld(scene) {
   scene.add(seine);
   addBridges(scene, riverPts);
 
-  // the western reach — the river loops AROUND the Bois; the race crosses it
-  // at the start, exactly as in 1901 (PERIOD_NOTES.md)
-  const westPts = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-2090, 0, -1600),
-    new THREE.Vector3(-2010, 0, -700),
-    new THREE.Vector3(-1985, 0, 0),
-    new THREE.Vector3(-2020, 0, 700),
-    new THREE.Vector3(-2130, 0, 1600),
-  ]).getPoints(100);
-  // out here the Seine has grass banks and a towpath, not the cut-stone quays
-  // of the city reaches — those read as a wide brown shelf beside the water
+  // The western reach used to be a SECOND, invented river: a straight
+  // north-south line at x ~ -2000, standing in for the loop round the Bois. The
+  // real trace now carries the whole Seine, loop and all, so that second river
+  // is gone — it was running straight through the Longchamps racecourse once the
+  // racecourse was put where it belongs.
+  //
+  // Out here the Seine has grass banks and a towpath rather than the cut-stone
+  // quays of the city reaches: the last third of the trace is banked in green.
+  const westPts = riverPts.slice(Math.floor(riverPts.length * 0.62));
   scene.add(makeRibbon(westPts, 88, 0x6d7a4d, 0.16, true));
-  const seineW = makeWaterSurface(ribbonGeoXY(westPts, 64), sunDir, 0x24405a);
-  seineW.rotation.x = -Math.PI / 2;
-  seineW.position.y = 0.3;
-  scene.add(seineW);
   // the Pont de St-Cloud: a stone road bridge, well clear of the Avre aqueduct
   // downstream of it (the two stood a few hundred metres apart in life, and
   // sat one on top of the other here)
@@ -356,7 +353,8 @@ export function buildWorld(scene) {
   }
 
   // ---------- the real street plan of 1901 (src/paris_plan.js) ----------
-  const arcPos = new THREE.Vector3(420, 0, -420);
+  const _arc = placeLegacy('etoile');
+  const arcPos = new THREE.Vector3(_arc.x, 0, _arc.z);
   for (const st of STREETS) {
     const col = st.dirt ? 0x8f8a6a : 0x9a9285;
     for (let i = 0; i < st.pts.length - 1; i++) {
@@ -391,7 +389,7 @@ export function buildWorld(scene) {
   towerFlag.position.set(TOWER_POS.x, 316, TOWER_POS.z);
   scene.add(towerFlag);
   const arcFlag = makeStreamFlag(6, 3, 0xb5442f);
-  arcFlag.position.set(420, 40, -420);
+  arcFlag.position.set(arcPos.x, 40, arcPos.z);
   scene.add(arcFlag);
 
   // chimney smoke over the rooftops — the city itself shows the wind
@@ -459,48 +457,51 @@ export function buildWorld(scene) {
   const windB = new THREE.Vector3(4.2, 0, 0.8);
   const clouds = makeClouds(scene, windB);
 
+  const LM = (id) => { const q = placeLegacy(id); return { x: q.x, z: q.z }; };
   return {
     name: 'Paris, 1901',
-    sun, sunDir, sky, waters: [seine, seineW], tick,
+    sun, sunDir, sky, waters: [seine], tick,
     flags: [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag],
     buildings, clouds, riverPts, trees,
     towerPos: TOWER_POS, padPos: PAD_POS,
     startRing: START_RING, turnRing: TOWER_RING,
     gates: [TOWER_RING],
     // ---- the places a hunt can send you to ----------------------------
+    // positions come from the same true table the meshes are placed from, so a
+    // hunt can never send a pilot to where a landmark used to be
     // One list, kept beside the meshes that draw them, so a game can never send
     // a pilot to something that is not there. `y` is a height she flies at
     // comfortably above it; `r` is how close counts as arriving.
     landmarks: [
-      { id: 'eiffel', name: 'the Eiffel Tower', x: TOWER_POS.x, z: TOWER_POS.z, y: 210, r: 90,
+      { id: 'eiffel', name: 'the Eiffel Tower', ...LM('eiffel'), y: 210, r: 90,
         clue: '“I had rounded the Tower.” Three hundred metres of iron, and the whole prize turns on it.' },
-      { id: 'arc', name: 'the Arc de Triomphe', x: 420, z: -420, y: 62, r: 45,
+      { id: 'arc', name: 'the Arc de Triomphe', ...LM('etoile'), y: 62, r: 45,
         clue: 'The arch at the top of the great avenue — he rounded it “to the right, as the law directs”.' },
-      { id: 'palais', name: 'the Grand Palais', x: 560, z: -310, y: 66, r: 45,
+      { id: 'palais', name: 'the Grand Palais', ...LM('grandpalais'), y: 66, r: 45,
         clue: 'Stone below and a river of glass above: the exhibition palace of 1900.' },
-      { id: 'trocadero', name: 'the Trocadéro', x: 20, z: 140, y: 86, r: 55,
+      { id: 'trocadero', name: 'the Trocadéro', ...LM('trocadero'), y: 86, r: 55,
         clue: '“The No. 5 came down on its roof.” A rotunda and two slim towers across the water from the Tower.' },
-      { id: 'invalides', name: 'the Invalides', x: 620, z: 260, y: 70, r: 45,
+      { id: 'invalides', name: 'the Invalides', ...LM('invalides'), y: 70, r: 45,
         clue: 'A gilded dome over the soldiers’ hospital.' },
-      { id: 'montmartre', name: 'Montmartre', x: 980, z: -720, y: 140, r: 60,
+      { id: 'montmartre', name: 'Montmartre', ...LM('montmartre'), y: 140, r: 60,
         clue: 'The white church on the highest hill in the city.' },
-      { id: 'notredame', name: 'Notre-Dame', x: 1040, z: 140, y: 62, r: 45,
+      { id: 'notredame', name: 'Notre-Dame', ...LM('notredame'), y: 62, r: 45,
         clue: 'Two square towers and a spire, on the island in the river.' },
-      { id: 'pantheon', name: 'the Panthéon', x: 920, z: 460, y: 62, r: 45,
+      { id: 'pantheon', name: 'the Panthéon', ...LM('pantheon'), y: 62, r: 45,
         clue: 'A dome on the hill of the left bank.' },
-      { id: 'opera', name: 'the Opéra', x: 700, z: -560, y: 58, r: 45,
+      { id: 'opera', name: 'the Opéra', ...LM('opera'), y: 58, r: 45,
         clue: 'A green dome over the grandest staircase in Paris.' },
-      { id: 'roue', name: 'the Grande Roue', x: 400, z: 560, y: 64, r: 45,
+      { id: 'roue', name: 'the Grande Roue', ...LM('roue'), y: 64, r: 45,
         clue: 'A hundred metres of wheel, left over from the Exposition — the gymkhana threads it.' },
-      { id: 'bagatelle', name: 'Bagatelle', x: -450, z: -140, y: 44, r: 55,
+      { id: 'bagatelle', name: 'Bagatelle', ...LM('bagatelle'), y: 44, r: 55,
         clue: '“I had the No. 9 towed to the railing of Bagatelle.” A little château at the edge of the Bois.' },
-      { id: 'longchamps', name: 'Longchamps', x: LONGCHAMPS.x, z: LONGCHAMPS.z, y: 48, r: 90,
+      { id: 'longchamps', name: 'Longchamps', ...LM('longchamp'), y: 48, r: 90,
         clue: '“Ten times in succession I made the circuit of Longchamps.” The racecourse in the Bois.' },
       { id: 'moulin', name: 'the Moulin de Longchamp', x: -1010, z: 118, y: 42, r: 45,
         clue: 'The abbey’s old mill, standing alone on the pelouse.' },
-      { id: 'puteaux', name: 'the Île de Puteaux', x: -2050, z: -890, y: 46, r: 100,
+      { id: 'puteaux', name: 'the Île de Puteaux', ...LM('puteaux'), y: 46, r: 100,
         clue: '“Beaten out with my Panama hat.” The island in the reach below the bridge.' },
-      { id: 'stcloud', name: 'the hill of Saint-Cloud', x: -2980, z: -60, y: 170, r: 140,
+      { id: 'stcloud', name: 'the hill of Saint-Cloud', ...LM('stcloud'), y: 170, r: 140,
         clue: 'The wooded park above the aerodrome, with its terraces and cascade.' },
     ],
     towSpots: [
@@ -526,7 +527,7 @@ export function buildWorld(scene) {
     // river is wet right out to the bank you can see
     // …but the Île de Puteaux is dry land in the middle of the reach
     isWater: (x, z) => !onPuteaux(x, z)
-      && (nearPolyline(riverPts, x, z, 35.5) || nearPolyline(westPts, x, z, 32.5)),
+      && nearPolyline(riverPts, x, z, 35.5),
     isInBois(x, z) {
       if (x < -1900 || x > -340 || Math.abs(z) > 560) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
@@ -674,7 +675,7 @@ function addLandmarks(scene) {
   const invDrum = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 10, 12), cream); invDrum.position.y = 25; inv.add(invDrum);
   const invDome = new THREE.Mesh(new THREE.SphereGeometry(11, 14, 10), gold); invDome.position.y = 32; invDome.scale.y = 1.15; inv.add(invDome);
   const invSpike = new THREE.Mesh(new THREE.ConeGeometry(1.2, 12, 6), gold); invSpike.position.y = 48; inv.add(invSpike);
-  inv.position.set(620, 0, 260);
+  { const _p = placeLegacy('invalides'); inv.position.set(_p.x, 0, _p.z); }
   scene.add(inv);
 
   // Sacre-Coeur on the Montmartre mound (it was rising over Paris in 1901)
@@ -694,7 +695,7 @@ function addLandmarks(scene) {
     const d = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8), white);
     d.position.set(s * 14, 72, 0); d.scale.y = 1.4; mont.add(d);
   }
-  mont.position.set(980, 0, -720);
+  { const _p = placeLegacy('montmartre'); mont.position.set(_p.x, 0, _p.z); }
   scene.add(mont);
 
   // Old Palais du Trocadero (1878): rotunda, two slim ~80 m towers, curved wings —
@@ -736,7 +737,7 @@ function addLandmarks(scene) {
       }
     }
   }
-  troc.position.set(20, 0, 140);
+  { const _p = placeLegacy('trocadero'); troc.position.set(_p.x, 0, _p.z); }
   troc.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(troc);
 
@@ -768,7 +769,7 @@ function addLandmarks(scene) {
     leg.rotation.z = sx * 0.5;
     roue.add(leg);
   }
-  roue.position.set(400, 0, 560);
+  { const _p = placeLegacy('roue'); roue.position.set(_p.x, 0, _p.z); }
   roue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roue);
   lmColliders.push({ x: 400, z: 560, w: 10, d: 10, h: 30, top: 30 }); // wheel legs only
@@ -786,7 +787,7 @@ function addLandmarks(scene) {
   // ACROSS the building, overhanging the ends by 15 m and covering half its length.
   glass.rotation.z = Math.PI / 2;
   glass.position.y = 18; glass.scale.y = 0.94; gp.add(glass);
-  gp.position.set(560, 0, -310);
+  { const _p = placeLegacy('grandpalais'); gp.position.set(_p.x, 0, _p.z); }
   gp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(gp);
 
@@ -800,7 +801,7 @@ function addLandmarks(scene) {
   ndNave.position.set(30, 10, 0); nd.add(ndNave);
   const fleche = new THREE.Mesh(new THREE.ConeGeometry(2, 22, 6), slate);
   fleche.position.set(34, 30, 0); nd.add(fleche);
-  nd.position.set(1040, 0, 140);
+  { const _p = placeLegacy('notredame'); nd.position.set(_p.x, 0, _p.z); }
   scene.add(nd);
 
   // Pantheon dome and the Opera
@@ -808,13 +809,13 @@ function addLandmarks(scene) {
   const panBase = new THREE.Mesh(new THREE.BoxGeometry(34, 20, 34), cream); panBase.position.y = 10; pan.add(panBase);
   const panDrum = new THREE.Mesh(new THREE.CylinderGeometry(10, 10, 12, 12), cream); panDrum.position.y = 26; pan.add(panDrum);
   const panDome = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 8), slate); panDome.position.y = 33; panDome.scale.y = 1.05; pan.add(panDome);
-  pan.position.set(920, 0, 460);
+  { const _p = placeLegacy('pantheon'); pan.position.set(_p.x, 0, _p.z); }
   scene.add(pan);
   const opera = new THREE.Group();
   const opBase = new THREE.Mesh(new THREE.BoxGeometry(40, 22, 30), cream); opBase.position.y = 11; opera.add(opBase);
   const opDome = new THREE.Mesh(new THREE.SphereGeometry(11, 12, 8),
     new THREE.MeshPhongMaterial({ color: 0x5f7a64, shininess: 40 })); opDome.position.y = 26; opDome.scale.y = 0.7; opera.add(opDome);
-  opera.position.set(700, 0, -560);
+  { const _p = placeLegacy('opera'); opera.position.set(_p.x, 0, _p.z); }
   scene.add(opera);
 
   // scattered church spires
@@ -865,7 +866,8 @@ function makeArc(pos) {
 // ---------------------------------------------------------- the book's places
 // Everything here is named in "My Airships" or stands on the 1900 plans of the
 // ground he flew over. See docs/PERIOD_NOTES.md for the map sources.
-const PUTEAUX = { x: -2050, z: -890, rx: 130, rz: 38 };   // below the Suresnes bridge   // the island in the reach
+const _pt = placeLegacy('puteaux');
+const PUTEAUX = { x: _pt.x, z: _pt.z, rx: 130, rz: 38 };   // below the Suresnes bridge   // the island in the reach
 
 export function onPuteaux(x, z) {
   const dx = (x - PUTEAUX.x) / PUTEAUX.rx, dz = (z - PUTEAUX.z) / PUTEAUX.rz;
@@ -1265,17 +1267,27 @@ export function nearPolyline(pts, x, z, half) {
   return false;
 }
 
+/**
+ * The Seine, from its real centreline (paris_geo.SEINE): in at Austerlitz,
+ * west under the bridges of the city, then the great loop north round the Bois
+ * by Boulogne, Saint-Cloud, Suresnes and the Île de Puteaux.
+ *
+ * It used to be seven invented points running roughly north-south, which is
+ * why the whole west end of the map — the aerodrome, the bridges, the island —
+ * stood in the wrong relation to everything else.
+ *
+ * Traced at HALF the game frame here: buildWorld scales Paris to full size in
+ * one pass at the end, so everything within it is laid out in the old frame and
+ * doubled together. See fullScalePass().
+ */
 function seinePoints() {
-  const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-380, 0, -1500),
-    new THREE.Vector3(-260, 0, -700),
-    new THREE.Vector3(-180, 0, -200),
-    new THREE.Vector3(-60, 0, 120),
-    new THREE.Vector3(120, 0, 380),
-    new THREE.Vector3(140, 0, 800),
-    new THREE.Vector3(40, 0, 1500),
-  ]);
-  return curve.getPoints(140);
+  const curve = new THREE.CatmullRomCurve3(
+    SEINE.map(([lat, lon]) => {
+      const p = geo(lat, lon);
+      return new THREE.Vector3(LEGACY_ORIGIN.x + (p.x - ORIGIN_XZ.x) / LEGACY_SCALE, 0,
+        LEGACY_ORIGIN.z + (p.z - ORIGIN_XZ.z) / LEGACY_SCALE);
+    }));
+  return curve.getPoints(200);
 }
 
 function makeRibbon(pts, width, color, y, dull) {
