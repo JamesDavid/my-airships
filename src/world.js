@@ -37,6 +37,7 @@ import { Water } from 'three/addons/objects/Water.js';
 import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_plan.js';
 import { WALL_RUNS, WALL } from './paris_wall.js';
 import { PONT, AVRE, CHURCH, PARK, LONGCHAMP as LC_REAL, AUTEUIL as AU_REAL } from './paris_stcloud.js';
+import { LANDMARKS } from './paris_landmarks.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -1317,6 +1318,126 @@ function addLandmarks(scene) {
   roue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roue);
   lmColliders.push({ x: 400, z: 560, w: 10, d: 10, h: 30, top: 30 }); // wheel legs only
+
+  // ---------- the eleven that were only coordinates ----------
+  // paris_geo.PLACES named twenty-seven landmarks and this file modelled
+  // sixteen. The Louvre, the Madeleine, the Hôtel de Ville, the Gare d'Orsay,
+  // both columns and the rest stood as nothing at all — the frontage generator
+  // simply ran houses over the top of them. src/paris_landmarks.js carries the
+  // footprints (see docs/PARIS_LANDMARKS.md for what each one was in 1901 and
+  // where its figures come from); the massing is here.
+  for (const L of LANDMARKS) {
+    if (L.id === 'grandpalais' || L.id === 'opera') continue;   // already built
+    const g = new THREE.Group();
+    const stone = new THREE.MeshLambertMaterial({ color: 0xcfc6b0 });
+    const roofM = new THREE.MeshLambertMaterial({ color: 0x5d6068 });
+    const gold = new THREE.MeshPhongMaterial({ color: 0xc9a437, shininess: 110 });
+    const hw = L.w / 2, hl = L.l / 2;
+
+    if (L.kind === 'column') {
+      // Vendôme and the Bastille: a shaft on a plinth with a figure on top —
+      // the Little Corporal, and the Génie de la Liberté in gilt bronze.
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(L.w, L.h * 0.12, L.l), stone);
+      plinth.position.y = L.h * 0.06; g.add(plinth);
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(L.w * 0.19, L.w * 0.22, L.h * 0.78, 16), stone);
+      shaft.position.y = L.h * 0.51; g.add(shaft);
+      const fig = new THREE.Mesh(new THREE.ConeGeometry(L.w * 0.16, L.h * 0.13, 8), gold);
+      fig.position.y = L.h * 0.96; g.add(fig);
+    } else if (L.kind === 'square') {
+      // a place, not a building: paving and the bronze in the middle
+      const pave = new THREE.Mesh(new THREE.PlaneGeometry(L.l, L.w),
+        new THREE.MeshLambertMaterial({ color: 0xbdb6a4 }));
+      pave.rotation.x = -Math.PI / 2; pave.position.y = 0.08; g.add(pave);
+      const ped = new THREE.Mesh(new THREE.BoxGeometry(9, 11, 9), stone);
+      ped.position.y = 5.5; g.add(ped);
+      const rep = new THREE.Mesh(new THREE.ConeGeometry(2.6, 9, 8), gold);
+      rep.position.y = 15.5; g.add(rep);
+    } else if (L.kind === 'temple') {
+      // the Madeleine: a Roman temple, fifty-two Corinthian columns ALL ROUND,
+      // no dome, no tower — a colonnade and a pediment and nothing else.
+      const cella = new THREE.Mesh(new THREE.BoxGeometry(L.l * 0.82, L.h * 0.72, L.w * 0.66), stone);
+      cella.position.y = L.h * 0.36 + 3; g.add(cella);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(L.l, 6, L.w), stone);
+      base.position.y = 3; g.add(base);
+      const nx = Math.max(8, Math.round(L.l / 7.5)), nz = Math.max(4, Math.round(L.w / 7.5));
+      for (let i = 0; i < nx; i++) {
+        for (const sz of [-1, 1]) {
+          const c = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, L.h * 0.66, 10), stone);
+          c.position.set(-hl + 3 + (i / (nx - 1)) * (L.l - 6), L.h * 0.33 + 6, sz * (hw - 3));
+          g.add(c);
+        }
+      }
+      for (let i = 1; i < nz - 1; i++) {
+        for (const sx of [-1, 1]) {
+          const c = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, L.h * 0.66, 10), stone);
+          c.position.set(sx * (hl - 3), L.h * 0.33 + 6, -hw + 3 + (i / (nz - 1)) * (L.w - 6));
+          g.add(c);
+        }
+      }
+      const ped = new THREE.Mesh(new THREE.ConeGeometry(L.w * 0.62, 9, 4), roofM);
+      ped.rotation.y = Math.PI / 4;
+      ped.scale.x = L.l / L.w;
+      ped.position.y = L.h * 0.66 + 10; g.add(ped);
+    } else if (L.kind === 'station') {
+      // the Gare d'Orsay: a hotel front on the quay with the glazed barrel
+      // vault of the train hall behind it, and the two great clocks.
+      const front = new THREE.Mesh(new THREE.BoxGeometry(L.l, L.h, L.w * 0.42), stone);
+      front.position.set(0, L.h / 2, -L.w * 0.29); g.add(front);
+      const vault = new THREE.Mesh(
+        new THREE.CylinderGeometry(L.w * 0.29, L.w * 0.29, L.l * 0.92, 20, 1, false, 0, Math.PI),
+        new THREE.MeshPhongMaterial({ color: 0x9fb6bd, shininess: 70 }));
+      vault.rotation.z = Math.PI / 2;
+      vault.position.set(0, L.h * 0.62, L.w * 0.2); g.add(vault);
+      for (const sx of [-1, 1]) {
+        const clock = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.6, 1.2, 18), gold);
+        clock.rotation.x = Math.PI / 2;
+        clock.position.set(sx * L.l * 0.3, L.h * 0.78, -L.w * 0.5); g.add(clock);
+      }
+    } else if (L.kind === 'works') {
+      // Lachambre's: a yard and a shed long enough to lay an envelope out in
+      const shed = new THREE.Mesh(new THREE.BoxGeometry(L.l, L.h, L.w),
+        new THREE.MeshLambertMaterial({ color: 0xb9ae95 }));
+      shed.position.y = L.h / 2; g.add(shed);
+      const roof = new THREE.Mesh(new THREE.CylinderGeometry(L.w * 0.52, L.w * 0.52, L.l, 12, 1, false, 0, Math.PI),
+        new THREE.MeshLambertMaterial({ color: 0x7a6a52 }));
+      roof.rotation.z = Math.PI / 2; roof.position.y = L.h; g.add(roof);
+    } else {
+      // a palace: a long mass with a mansard roof, and a pavilion at each end
+      const body = new THREE.Mesh(new THREE.BoxGeometry(L.l, L.h * 0.78, L.w), stone);
+      body.position.y = L.h * 0.39; g.add(body);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(L.l * 0.97, L.h * 0.22, L.w * 0.9), roofM);
+      roof.position.y = L.h * 0.89; g.add(roof);
+      for (const sx of [-1, 1]) {
+        const pav = new THREE.Mesh(new THREE.BoxGeometry(L.w * 0.6, L.h * 1.06, L.w * 1.02), stone);
+        pav.position.set(sx * (hl - L.w * 0.3), L.h * 0.53, 0); g.add(pav);
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(L.w * 0.44, L.h * 0.3, 4), roofM);
+        cap.rotation.y = Math.PI / 4;
+        cap.position.set(sx * (hl - L.w * 0.3), L.h * 1.2, 0); g.add(cap);
+      }
+      if (L.id === 'hoteldeville') {          // its belfry over the centre
+        const bel = new THREE.Mesh(new THREE.BoxGeometry(16, L.h * 0.42, 16), stone);
+        bel.position.y = L.h * 0.98; g.add(bel);
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(10, 22, 4), roofM);
+        sp.rotation.y = Math.PI / 4; sp.position.y = L.h * 1.27; g.add(sp);
+      }
+      if (L.id === 'petitpalais') {           // the domed entrance pavilion
+        const dome = new THREE.Mesh(
+          new THREE.SphereGeometry(15, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshPhongMaterial({ color: 0x7d8a86, shininess: 40 }));
+        dome.position.set(0, L.h * 0.9, -hw * 0.5); dome.scale.y = 1.2; g.add(dome);
+      }
+    }
+
+    g.position.set(L.x, parisGround(L.x, L.z), L.z);
+    g.rotation.y = L.ry;
+    g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+    scene.add(g);
+    const ca = Math.abs(Math.cos(L.ry)), sa = Math.abs(Math.sin(L.ry));
+    lmColliders.push({ x: L.x, z: L.z,
+      w: L.l * ca + L.w * sa, d: L.l * sa + L.w * ca,
+      h: L.h * 0.95, top: L.h * 1.3 });
+  }
 
   // Grand Palais (1900): stone colonnade with the great glass barrel vault
   const gp = new THREE.Group();

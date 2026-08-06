@@ -207,11 +207,24 @@ and that a source has to settle rather than memory:
    Only a sixth of the ring is in frame at all: the world is centred on the
    Tower and reaches west to Saint-Cloud, so eastern Paris is off the map.
 
-5. **The eleven landmarks**, modelled from photographs with a source cited per
-   building — the same discipline as
-   [STLOUIS_PALACES.md](STLOUIS_PALACES.md), [HULLS.md](HULLS.md) and
-   [HELM.md](HELM.md), where the quote comes first and the geometry follows
-   from it.
+5. ~~**The eleven landmarks**~~ — **DONE.**
+   [PARIS_LANDMARKS.md](PARIS_LANDMARKS.md) and `src/paris_landmarks.js`.
+   Seven have **measured** footprints from OpenStreetMap; four carry a
+   **published** figure and say so in the data, because OSM maps the Louvre as
+   courtyards and wings and returns the department store across the road for the
+   Hôtel de Ville. The projection was checked, not assumed: the Madeleine's
+   fetched footprint lands 5 m from the coordinate `PLACES` already held.
+
+   The 1901 screen mattered more than the geometry. **The Tuileries burned in
+   1871 and were demolished in 1883**, so the Louvre is already the open U it is
+   today and must not be closed — the one thing a modern photograph gets right
+   for the wrong reason. The Vendôme column was pulled down by the Commune in
+   1871 and re-erected in 1875, so it stands. The Hôtel de Ville is the 1892
+   replacement, nine years old. The Gare d'Orsay had opened the previous May.
+
+   Every landmark now has a site in `paris_plan.SITES` sized from its own
+   footprint, so the frontage generator keeps off it — it had been running rows
+   of houses straight over the Louvre.
 
 6. ~~**Close the Seine's 3.3 km gap**~~ — **RESOLVED, and it was never a hole
    in the data.** Measured: the gap *starts* 18 m from the survey's southern

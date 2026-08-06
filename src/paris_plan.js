@@ -18,6 +18,7 @@ import { OSM_STREETS } from './paris_streets.js';
 // generator had to pack three thousand buildings onto the roads it did have.
 // See docs/PARIS_1901.md and tools/fetch_paris_streets.py.
 import { OSM_MINOR } from './paris_streets_minor.js';
+import { LANDMARKS } from './paris_landmarks.js';
 
 // What the survey does not carry: the earth carriage roads of the Bois, which
 // are paths in OpenStreetMap and not roads at all.
@@ -83,6 +84,14 @@ export const SITES = (() => {
     S('notredame', 156),
     S('pantheon', 124),
     S('montmartre', 420),
+    // …and every landmark that had no site at all, which is why the frontage
+    // generator ran rows of houses straight over the Louvre and the Hôtel de
+    // Ville: they were coordinates in a table and nothing on the ground. The
+    // radius comes from each one's own footprint (src/paris_landmarks.js), so
+    // it cannot drift away from the building actually being drawn.
+    ...LANDMARKS.map((L) => ({
+      x: L.x, z: L.z, r: Math.hypot(L.w, L.l) / 2 + 26,
+    })),
   ];
 })();
 
