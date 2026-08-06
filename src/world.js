@@ -215,6 +215,30 @@ export function makeWaterSurface(geometry, sunDir, waterColor) {
   return water;
 }
 
+/**
+ * Keep some objects out of a water surface's reflection.
+ *
+ * The reflection is a second pass over the whole scene from a mirrored camera,
+ * and it is honest about what it finds — which is the trouble. Our clouds are
+ * low-poly spheres with a flat tan underside, and reflected off a bright sea at
+ * a grazing angle they do not read as clouds at all: they read as sandbanks,
+ * lying in the water a few hundred metres out, with the waves rippling over
+ * them. It looks exactly like z-fighting and it is not.
+ *
+ * So the reflection pass simply does not see them. Their shadow discs still
+ * fall on the water, which is the cue that matters to a pilot.
+ */
+export function keepOutOfReflection(water, objects) {
+  const inner = water.onBeforeRender;
+  if (typeof inner !== 'function') return;
+  water.onBeforeRender = function (renderer, scene, camera) {
+    const was = objects.map((o) => o.visible);
+    for (const o of objects) o.visible = false;
+    inner.call(this, renderer, scene, camera);
+    objects.forEach((o, i) => { o.visible = was[i]; });
+  };
+}
+
 // Half real scale: St. Cloud to the Tower is ~2.5 km here (5.5 km in 1901),
 // so climbing for the gradient wind genuinely pays on each leg.
 const _twr = placeLegacy('eiffel');

@@ -13,7 +13,8 @@
 
 import * as THREE from 'three';
 import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface,
-         windify, windMats, generateFrontages, addBuildingMeshes } from './world.js';
+         windify, windMats, generateFrontages, addBuildingMeshes,
+         keepOutOfReflection } from './world.js';
 import { STREETS_MC } from './monaco_streets.js';
 import { HF, place, groundAt, groundRaw, isSea, slopeAt } from './monaco_geo.js';
 import { inSiteMC } from './monaco_plan.js';
@@ -430,44 +431,97 @@ export function buildWorldMonaco(scene) {
   // "One steam chaloupe and two petroleum launches, all three of them swift
   // goers, together with three well-manned row-boats, had been stationed at
   // intervals down the coast to pick me up in case of accident."
+  const KNOT = 0.5144;                            // metres a second
   const escort = [];
   for (let i = 0; i < 3; i++) {
     const boat = makeYacht(0, 0, 0.35 + i * 0.1, 0);
-    boat.userData.leg = 0.34 + i * 0.22;          // how far down the coast it runs
+    boat.userData.leg = 0.18 + i * 0.17;          // how far down the coast it runs
     boat.userData.ph = i * 0.37;
-    boat.userData.speed = 0.05 - i * 0.011;
+    boat.userData.trim = -0.25 + i * 0.25;        // knots: one is better sailed
     scene.add(boat);
     escort.push(boat);
   }
   // They follow the line the ship flies — but nudged seaward wherever it cuts a
   // corner of the coast, because a launch cannot cross the Monte Carlo
   // headland and the shortest line from the stage to the cape does.
+  //
+  // The lane is then measured and walked by ARC LENGTH. Walking it by index
+  // instead looks right and is not: the nudged waypoints are further apart than
+  // the straight ones, so a boat covering "one index per second" surges through
+  // the bends and dawdles on the straights.
   const LANE = [];
   {
-    const N = 40;
+    // every twenty-five metres: at ninety-metre spacing a boat could pass over
+    // a thirteen-metre shoal standing a hand's breadth out of the water, with a
+    // waypoint safely afloat on either side of it
+    const N = Math.ceil(Math.hypot(TURN.x - START.x, TURN.z - START.z) / 25);
     const nx = -(TURN.z - START.z), nz = TURN.x - START.x;
     const nl = Math.hypot(nx, nz) || 1;
-    for (let i = 0; i <= N; i++) {
-      const f = i / N;
-      let x = START.x + (TURN.x - START.x) * f, z = START.z + (TURN.z - START.z) * f;
-      for (let push = 0; push < 24 && !isSea(x, z); push++) {
-        x += (nx / nl) * 60; z += (nz / nl) * 60;      // out to sea, 60 m at a time
+    const seaward = (x, z) => {
+      for (let push = 0; push < 40 && !isSea(x, z); push++) {
+        x += (nx / nl) * 30; z += (nz / nl) * 30;      // out to sea, thirty at a time
       }
-      LANE.push({ x, z });
+      return { x, z };
+    };
+    // It begins a hundred and forty metres off the stage — they lie in the
+    // roads, not alongside the planks the ship is caught on.
+    const OFF = 140 / Math.hypot(TURN.x - START.x, TURN.z - START.z);
+    for (let i = 0; i <= N; i++) {
+      const f = OFF + (1 - OFF) * (i / N);
+      LANE.push(seaward(START.x + (TURN.x - START.x) * f, START.z + (TURN.z - START.z) * f));
     }
+    // A pair of waypoints can both be afloat with dry land between them. Any
+    // segment whose middle is ashore gets that middle put to sea as well, until
+    // the whole lane is water.
+    for (let pass = 0; pass < 6; pass++) {
+      let fixed = 0;
+      for (let i = 0; i < LANE.length - 1; i++) {
+        const mx = (LANE[i].x + LANE[i + 1].x) / 2, mz = (LANE[i].z + LANE[i + 1].z) / 2;
+        if (isSea(mx, mz)) continue;
+        LANE.splice(i + 1, 0, seaward(mx, mz)); i++; fixed++;
+      }
+      if (!fixed) break;
+    }
+  }
+  // cumulative distance to each waypoint, so the lane can be walked in metres
+  const LANE_S = [0];
+  for (let i = 1; i < LANE.length; i++) {
+    LANE_S.push(LANE_S[i - 1] + Math.hypot(LANE[i].x - LANE[i - 1].x, LANE[i].z - LANE[i - 1].z));
+  }
+  const LANE_LEN = LANE_S[LANE_S.length - 1];
+
+  /** A point `s` metres along the lane from the stage. */
+  function alongLane(s) {
+    s = Math.max(0, Math.min(LANE_LEN, s));
+    let lo = 0, hi = LANE_S.length - 1;
+    while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (LANE_S[mid] <= s) lo = mid; else hi = mid; }
+    const seg = Math.max(1e-6, LANE_S[lo + 1] - LANE_S[lo]);
+    const f = (s - LANE_S[lo]) / seg;
+    const a = LANE[lo], b = LANE[lo + 1];
+    return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f,
+             hx: (b.x - a.x) / seg, hz: (b.z - a.z) / seg };
   }
 
   const tick = (dt, t, wind) => {
-    const wLen = Math.hypot(wind.x, wind.z) || 1;
+    const wSpeed = Math.hypot(wind.x, wind.z);
+    const wLen = wSpeed || 1;
     const wx = wind.x / wLen, wz = wind.z / wLen;
+    // Five knots in a breath, seven with something behind her — and never
+    // outside that, whichever of the three is best sailed. They were making
+    // three hundred and forty kilometres an hour before this: the old code read
+    // its "speed" as a fraction of the whole five-kilometre lane, per second.
+    const knots = 5.25 + 1.5 * Math.min(1, wSpeed / 8);
     for (const b of escort) {
-      const u = (t * b.userData.speed + b.userData.ph) % 2;
-      const f = (u < 1 ? u : 2 - u) * b.userData.leg;   // out, then back
-      const q = f * (LANE.length - 1);
-      const i = Math.min(LANE.length - 2, Math.floor(q)), s = q - i;
-      const a = LANE[i], c2 = LANE[i + 1];
-      b.position.set(a.x + (c2.x - a.x) * s, 0.6, a.z + (c2.z - a.z) * s);
-      b.rotation.y = -Math.atan2(c2.z - a.z, c2.x - a.x) + (u < 1 ? 0 : Math.PI);
+      const legLen = Math.max(1, LANE_LEN * b.userData.leg);   // metres, each way
+      const mps = (knots + b.userData.trim) * KNOT;
+      const u = ((t * mps) / legLen + b.userData.ph) % 2;
+      const out = u < 1;
+      const p = alongLane((out ? u : 2 - u) * legLen);          // out, then back
+      b.position.set(p.x, 0.6, p.z);
+      b.rotation.y = -Math.atan2(p.hz, p.hx) + (out ? 0 : Math.PI);
+      // she heels away from the wind, and harder the more of it there is
+      const rel = Math.cos(b.rotation.y - Math.atan2(wz, wx));
+      b.rotation.z = -rel * Math.min(0.22, wSpeed * 0.03);
     }
     puffs.forEach((p, i) => {
       const u = ((t * 0.13 + i / 7) % 1);
@@ -486,6 +540,10 @@ export function buildWorldMonaco(scene) {
     base: 800,
     ground: groundAt,
   });
+  // ...and the sea does not reflect them. Reflected off a bright Mediterranean
+  // at a grazing angle their flat tan undersides read as sandbanks lying a few
+  // hundred metres offshore, with the waves rippling over them.
+  keepOutOfReflection(sea, clouds.map((c) => c.grp));
 
   const LM = (id, name, up, r, clue) => {
     const p = place(id);

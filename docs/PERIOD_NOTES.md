@@ -174,6 +174,18 @@ cloud inside the Tête de Chien and every cloud shadow inside the hill. The
 Harbor Circuit's gates and the Bay of Monaco scenario hang off `place()` rather
 than being written out, for the same reason the Paris gymkhana does.
 
+**Two things that looked like rendering bugs and were not.** The sea appeared to
+z-fight in tan patches a few hundred metres out: it was the water *reflecting*
+the clouds, whose flat low-poly undersides read as sandbanks with the waves
+rippling over them. `keepOutOfReflection()` takes them out of the reflection
+pass; their shadows still fall on the water, which is the cue that matters.
+And the escort launches were making 340 km/h — the old tick read their "speed"
+as a fraction of the whole five-kilometre lane, per second. They now sail at
+five knots in a breath and seven with something behind them, walked along the
+lane by **arc length** rather than by waypoint index (by index they surged
+through the bends and dawdled on the straights), on a lane sampled every 25 m
+and pushed clear of the water's edge — verified at 0 of 17,150 samples ashore.
+
 **Still hand-modelled**, on true positions and true ground: the palace, the
 cathedral, the Musée océanographique (in its scaffolding — begun 1899, not
 finished until 1910), the Casino, the Salle Garnier, the Hôtel de Paris, the
