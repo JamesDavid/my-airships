@@ -409,6 +409,13 @@ export function buildWorld(scene) {
 
   // ---------- Eiffel Tower ----------
   const tower = makeTower();
+  // She is square to the Champ de Mars, not to the compass: a face looks down
+  // the park to the École Militaire and the opposite one across the river to
+  // the Trocadéro. Taken from the two real positions so it cannot drift.
+  {
+    const t = placeLegacy('eiffel'), e = placeLegacy('ecolemil');
+    tower.rotation.y = -Math.atan2(e.z - t.z, e.x - t.x);
+  }
   tower.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(tower);
 
@@ -1697,9 +1704,15 @@ function makeTower() {
     }
   }
 
-  // ---- ties and cross-bracing on all four faces, between every other level
+  // ---- ties and cross-bracing, but NOT below the first platform ----
+  // Under the platform she is four separate legs and the four great arches, and
+  // nothing between them: that is the whole look of the thing, and it is why a
+  // daring pilot can fly through her, which the collision code has always
+  // allowed. Bracing every face from the ground up walled the base in.
+  const FIRST_PLATFORM = 100;
   for (let i = 2; i < levels.length; i += 2) {
     const y0 = levels[i - 2], y1 = levels[i];
+    if (y1 <= FIRST_PLATFORM) continue;
     const h0 = legHalf(y0), h1 = legHalf(y1);
     const w = 1.0 - 0.55 * (y0 / 300);
     for (let c = 0; c < 4; c++) {
