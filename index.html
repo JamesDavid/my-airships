@@ -34,6 +34,9 @@
   #mark .markname { font-size:12px; font-style:italic; opacity:.65; }
   #panelTR { top:calc(14px + env(safe-area-inset-top, 0px));
     right:calc(18px + env(safe-area-inset-right, 0px)); text-align:right; }
+  #panelInfo { position:fixed; top:calc(96px + env(safe-area-inset-top, 0px));
+    right:calc(18px + env(safe-area-inset-right, 0px)); text-align:right;
+    color:#3a2c1e; text-shadow:0 1px 0 rgba(255,255,255,.35); pointer-events:none; }
   #timer { font-size:30px; font-variant-numeric:tabular-nums; }
   #lapline { font-size:15px; letter-spacing:.08em; }
   #split { font-size:17px; font-variant-numeric:tabular-nums; min-height:20px; }
@@ -362,7 +365,9 @@
        Side by side, "WIND 11 km/h from the W" and a trial line cannot both fit
        across 440 px, and they simply printed over one another. Clear of the
        round buttons: 46 px of button, 12 px of margin, 14 px of air. */
-    #panelTR { right:calc(72px + env(safe-area-inset-right, 0px));
+    #panelTR { top:calc(8px + env(safe-area-inset-top, 0px));
+      right:calc(72px + env(safe-area-inset-right, 0px)); }
+    #panelInfo { right:calc(72px + env(safe-area-inset-right, 0px));
       max-width:calc(100vw - 96px); }
     #objective { font-size:10px; max-width:100%; line-height:1.28; }
     #best, #wr { font-size:9px; }
@@ -523,10 +528,16 @@
   <div id="mark"></div>
 </div>
 
+<!-- The clock stays pinned at the top corner where a pilot looks for it. The
+     trial's description and the record are a separate block, because on a
+     telephone they wrap to four lines and used to carry the timer down the
+     screen with them. -->
 <div class="hud" id="panelTR">
   <div id="timer"></div>
   <div id="lapline"></div>
   <div id="split"></div>
+</div>
+<div class="hud" id="panelInfo">
   <div id="objective"></div>
   <div id="best"></div>
   <div id="wr"></div>

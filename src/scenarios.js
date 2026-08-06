@@ -182,9 +182,16 @@ export const SCENARIOS = [
         ctx.setZone(V(a.x + 268, 2, a.z + 134), 26); }
       // the way he went: over the Bois, across the Seine, round the Arc to the
       // right "as the law directs", and down the avenue at rooftop height
-      { const a = placeLegacy('etoile'), t = placeLegacy('eiffel'), b = placeLegacy('bagatelle');
-        ctx.setRoute([V((b.x + t.x) / 2, 30, (b.z + t.z) / 2), V(t.x - 120, 26, t.z - 400),
-          V(a.x - 40, 22, a.z + 60)]); }
+      // The hoops must lie AHEAD of where she starts. When the start was moved
+      // up the line to save seven minutes of cruising, these stayed back in the
+      // Bois, so the first mark was behind the pilot and the flight began by
+      // turning round. They are struck off the same line, beyond the start.
+      {
+        const a = placeLegacy('etoile'), b = placeLegacy('bagatelle');
+        const door = { x: a.x + 268, z: a.z + 134 };
+        const on = (f) => V(b.x + (door.x - b.x) * f, 30, b.z + (door.z - b.z) * f);
+        ctx.setRoute([on(0.74), on(0.86), on(0.95)]);   // start is at 0.62
+      }
       ctx.setCenter('June 23rd, 1903, 4 a.m.', 'Your door is on the Champs-Élysées. (green ring — land gently in the avenue)');
     },
     tick(ctx) {

@@ -491,6 +491,15 @@ export function buildWorld(scene) {
           const c = riverPts[k], d2 = riverPts[k + 1];
           const hit = seg(ax, az, bx, bz, c.x, c.z, d2.x, d2.z);
           if (!hit) continue;
+          // A road that meets the water at a shallow angle is a QUAY running
+          // along the bank, not a crossing: bridging it laid a deck almost
+          // parallel to the river. Only take it if it cuts the water at more
+          // than thirty-five degrees.
+          const rl = Math.hypot(hit.dx, hit.dz) || 1;
+          const wx = d2.x - c.x, wz = d2.z - c.z;
+          const wl = Math.hypot(wx, wz) || 1;
+          const cosA = Math.abs((hit.dx / rl) * (wx / wl) + (hit.dz / rl) * (wz / wl));
+          if (cosA > 0.70) continue;                 // within 45 deg of the water's line
           if (found.some((f) => Math.hypot(f.x - hit.x, f.z - hit.z) < 150)) continue;
           found.push({ ...hit, w: st.w });
           break;
@@ -514,16 +523,29 @@ export function buildWorld(scene) {
         const para = new THREE.Mesh(new THREE.BoxGeometry(span, 1.7, 1.2), dark2);
         para.position.set(0, DECKY + 2, sz * (DECKW / 2 - 0.6)); g2.add(para);
       }
-      const piers = Math.max(2, Math.round(span / 70));
-      for (let i3 = 0; i3 < piers; i3++) {
-        const t2 = -0.5 + (i3 + 0.5) / piers;
-        const pier = new THREE.Mesh(new THREE.BoxGeometry(9, DECKY, DECKW * 0.86), stone);
+      // Piers with a river arch between each pair, springing from the water and
+      // meeting the underside of the deck. The radius used to be a fraction of
+      // the whole span — on a four-hundred-metre crossing that is an eighty
+      // metre half-cylinder, which stood high above the roadway as a row of
+      // quarter circles instead of sitting under it.
+      const piers = Math.max(2, Math.round(span / 60));
+      const bay = span / piers;
+      // The arch springs from just above the water and its crown meets the
+      // UNDERSIDE of the deck. Sizing it off the bay alone put the crown at
+      // fifteen metres on a deck standing at nine, so a row of half-cylinders
+      // stood proud of the roadway — the "dumb quarter circles" reported.
+      const SPRING = 2.2, SOFFIT = DECKY - 1.4;
+      const AR = Math.min(bay * 0.42, SOFFIT - SPRING);
+      for (let i3 = 0; i3 <= piers; i3++) {
+        const t2 = -0.5 + i3 / piers;
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(7, DECKY, DECKW * 0.9), stone);
         pier.position.set(t2 * span, DECKY / 2, 0); g2.add(pier);
+        if (i3 === piers) break;
         const arch = new THREE.Mesh(
-          new THREE.CylinderGeometry(span / piers * 0.42, span / piers * 0.42, DECKW * 0.86, 12, 1, false, 0, Math.PI),
-          dark2);
+          new THREE.CylinderGeometry(AR, AR, DECKW * 0.9, 14, 1, false, 0, Math.PI), dark2);
         arch.rotation.x = Math.PI / 2;
-        arch.position.set((t2 + 0.5 / piers) * span, DECKY - 1.6, 0); g2.add(arch);
+        arch.rotation.z = Math.PI;                        // the opening downward
+        arch.position.set((t2 + 0.5 / piers) * span, SPRING, 0); g2.add(arch);
       }
       g2.position.set(f.x, 0, f.z);
       g2.rotation.y = ang;

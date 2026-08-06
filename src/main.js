@@ -693,7 +693,7 @@ function showPane() {
  */
 function layoutHud() {
   const tl = document.getElementById('panelTL');
-  const tr = document.getElementById('panelTR');
+  const tr = document.getElementById('panelInfo');
   const rm = document.getElementById('room');
   const ct = document.getElementById('center');
   const parked = ct.classList.contains('parked');
