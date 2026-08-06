@@ -445,60 +445,76 @@ export function buildWorld(scene) {
   // ---------- the city: buildings along their real street frontages ----------
   const buildings = buildCity(scene, riverPts);
 
+  let bridgeCount = 0;
+  const isWaterAt = (x, z) => !onPuteaux(x, z) && nearPolyline(riverPts, x, z, 71);
   // ---------- the bridges of the city ----------
-  // The Seine runs the length of Paris and had nothing across it. These are the
-  // crossings that stood in 1901, by their real positions; each is laid square
-  // across the river at the point it meets it, taking its span and its bearing
-  // from the trace rather than from a guess.
+  // Placed WHERE THE ROADS ACTUALLY CROSS THE WATER, not by name. Listing the
+  // bridges by their real positions put them near the right places but not
+  // necessarily under a road, so a street ran into the Seine and a bridge stood
+  // beside it carrying nothing. Every street segment is tested against the
+  // river's centreline; each crossing gets a deck laid along the ROAD, so the
+  // two always meet.
   {
-    const CROSSINGS = [
-      [48.8628, 2.2795, 'Passy'], [48.8600, 2.2930, 'Iéna'],
-      [48.8640, 2.3010, 'Alma'], [48.8639, 2.3135, 'Alexandre III'],
-      [48.8635, 2.3215, 'Concorde'], [48.8617, 2.3290, 'Solférino'],
-      [48.8600, 2.3330, 'Royal'], [48.8586, 2.3370, 'Carrousel'],
-      [48.8575, 2.3410, 'Pont Neuf'], [48.8558, 2.3470, 'Saint-Michel'],
-      [48.8530, 2.3550, 'Sully'], [48.8480, 2.3620, 'Austerlitz'],
-      [48.8508, 2.2740, 'Grenelle'], [48.8462, 2.2700, 'Mirabeau'],
-    ];
     const stone = new THREE.MeshLambertMaterial({ color: 0xb0a894 });
     const dark2 = new THREE.MeshLambertMaterial({ color: 0x8a8272 });
-    for (const [lat, lon] of CROSSINGS) {
-      const c = placeLegacy0(lat, lon);
-      // the nearest point of the trace, and which way the water runs there
-      let bi = 0, bd = Infinity;
-      for (let i = 0; i < riverPts.length; i++) {
-        const d = (riverPts[i].x - c.x) ** 2 + (riverPts[i].z - c.z) ** 2;
-        if (d < bd) { bd = d; bi = i; }
+    const seg = (ax, az, bx, bz, cx, cz, dx2, dz2) => {
+      const r1x = bx - ax, r1z = bz - az, r2x = dx2 - cx, r2z = dz2 - cz;
+      const den = r1x * r2z - r1z * r2x;
+      if (Math.abs(den) < 1e-9) return null;
+      const t = ((cx - ax) * r2z - (cz - az) * r2x) / den;
+      const u = ((cx - ax) * r1z - (cz - az) * r1x) / den;
+      if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+      return { x: ax + r1x * t, z: az + r1z * t, dx: r1x, dz: r1z };
+    };
+    const found = [];
+    for (const st of STREETS) {
+      for (let i2 = 0; i2 < st.pts.length - 1; i2++) {
+        const [ax, az] = st.pts[i2], [bx, bz] = st.pts[i2 + 1];
+        for (let k = 0; k < riverPts.length - 1; k++) {
+          const c = riverPts[k], d2 = riverPts[k + 1];
+          const hit = seg(ax, az, bx, bz, c.x, c.z, d2.x, d2.z);
+          if (!hit) continue;
+          if (found.some((f) => Math.hypot(f.x - hit.x, f.z - hit.z) < 150)) continue;
+          found.push({ ...hit, w: st.w });
+          break;
+        }
       }
-      if (bd > 400 * 400) continue;                 // not on this river
-      const p = riverPts[bi];
-      const q = riverPts[Math.min(riverPts.length - 1, bi + 2)];
-      const tx = q.x - p.x, tz = q.z - p.z;
-      const tl = Math.hypot(tx, tz) || 1;
-      const ang = Math.atan2(-tz / tl, tx / tl);    // along the water
-      const SPAN = 230, DECKW = 20, DECKY = 9;
+    }
+    for (const f of found) {
+      const L = Math.hypot(f.dx, f.dz) || 1;
+      const ang = -Math.atan2(f.dz / L, f.dx / L);      // the deck follows the ROAD
+      // how far the water reaches along the road, so the deck always spans it
+      let span = 120;
+      for (let m = 40; m < 400; m += 10) {
+        if (!isWaterAt(f.x + (f.dx / L) * m, f.z + (f.dz / L) * m)
+          && !isWaterAt(f.x - (f.dx / L) * m, f.z - (f.dz / L) * m)) { span = m * 2 + 90; break; }
+      }
+      const DECKW = Math.max(18, f.w), DECKY = 9;
       const g2 = new THREE.Group();
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(DECKW, 2.2, SPAN), stone);
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(span, 2.4, DECKW), stone);
       deck.position.y = DECKY; g2.add(deck);
-      const para = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, SPAN), dark2);
-      for (const sx of [-1, 1]) {
-        const r = para.clone();
-        r.position.set(sx * (DECKW / 2 - 0.6), DECKY + 1.9, 0); g2.add(r);
+      for (const sz of [-1, 1]) {
+        const para = new THREE.Mesh(new THREE.BoxGeometry(span, 1.7, 1.2), dark2);
+        para.position.set(0, DECKY + 2, sz * (DECKW / 2 - 0.6)); g2.add(para);
       }
-      // piers and the arches they carry
-      for (const t of [-0.62, -0.21, 0.21, 0.62]) {
-        const pier = new THREE.Mesh(new THREE.BoxGeometry(DECKW * 0.8, DECKY, 9), stone);
-        pier.position.set(0, DECKY / 2, t * SPAN); g2.add(pier);
-        const arch = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, DECKW * 0.8, 12, 1, false, 0, Math.PI), dark2);
-        arch.rotation.z = Math.PI / 2;
-        arch.position.set(0, DECKY - 1.5, t * SPAN + SPAN * 0.105); g2.add(arch);
+      const piers = Math.max(2, Math.round(span / 70));
+      for (let i3 = 0; i3 < piers; i3++) {
+        const t2 = -0.5 + (i3 + 0.5) / piers;
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(9, DECKY, DECKW * 0.86), stone);
+        pier.position.set(t2 * span, DECKY / 2, 0); g2.add(pier);
+        const arch = new THREE.Mesh(
+          new THREE.CylinderGeometry(span / piers * 0.42, span / piers * 0.42, DECKW * 0.86, 12, 1, false, 0, Math.PI),
+          dark2);
+        arch.rotation.x = Math.PI / 2;
+        arch.position.set((t2 + 0.5 / piers) * span, DECKY - 1.6, 0); g2.add(arch);
       }
-      g2.position.set(p.x, 0, p.z);
-      g2.rotation.y = ang;                          // deck long axis across the water
+      g2.position.set(f.x, 0, f.z);
+      g2.rotation.y = ang;
       g2.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       scene.add(g2);
-      buildings.push({ x: p.x, z: p.z, w: 60, d: 60, h: DECKY, top: DECKY + 2 });
+      buildings.push({ x: f.x, z: f.z, w: span * 0.7, d: span * 0.7, h: DECKY, top: DECKY + 3 });
     }
+    bridgeCount = found.length;
   }
 
   // ---------- the Bois ----------

@@ -155,7 +155,19 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no9',
     brief: 'Dawn, and the avenues are empty. Take the little No. 9 across the city at rooftop height and land in the Champs-Élysées at your own door, where the servants wait to catch her.',
     setup(ctx) {
-      { const b = placeLegacy('bagatelle'); ctx.place(b.x, 14, b.z, 0); } // towed to Bagatelle overnight
+      // He was towed to Bagatelle overnight and set out from there, and at full
+      // scale that is 3.9 km — seven minutes of straight cruising on the little
+      // No. 9 before the flight proper begins, which a pilot rightly called too
+      // far. She starts on the same line but a third of the way along it, at
+      // the edge of the Bois where the interesting part starts: over the roofs
+      // and down the avenue.
+      {
+        const b = placeLegacy('bagatelle'), a = placeLegacy('etoile');
+        const door = { x: a.x + 268, z: a.z + 134 };
+        const f = 0.62;                       // along the line from Bagatelle to the door
+        ctx.place(b.x + (door.x - b.x) * f, 60, b.z + (door.z - b.z) * f,
+          Math.atan2(-(door.z - b.z), door.x - b.x));
+      }
       // His door, at 114 Champs-Élysées. The ring used to sit at (581, -340),
       // which a pilot reported as buried in a building — and it was: the 18 m
       // block under its rim is the GRAND PALAIS, which carries no collider and
