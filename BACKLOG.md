@@ -111,6 +111,36 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 - [ ] **Rooms for the historic courses** — needs a server-side notion of the aerodrome
   finish radius before those times can be trusted online.
 
+## Next — the two known faults from the full-scale conversion
+
+- [ ] **The stranded Saint-Cloud features.** Reported as "St. Cloud here?
+  Bridges in middle of nowhere?" Saint-Cloud is now at its true position,
+  (-4497, 1999); the Pont de St-Cloud, the Avre aqueduct, the village and its
+  church, Deutsch's air-ship shed, the Suresnes station, the Moulin de
+  Longchamp, the captive balloon and the rest of addBookPlaces are still hand
+  placed about the OLD aerodrome at (-2140, 0) in the half frame. They are 3 km
+  adrift: a river crossing standing in open country with no river under it.
+
+  The transform is `new = PAD_POS + (old - (-2140, 0)) * 2` — the same rule the
+  rest of the world took, since these were laid out relative to the aerodrome.
+
+  THE TRAP: it must be applied to the COLLIDERS as well as the meshes. Several
+  of these push entries into `buildings` as world coordinates (the aqueduct
+  piers, the shed, the church, the station, the mill). Moving the meshes alone
+  leaves invisible walls standing where the bridges used to be, which is a
+  worse fault than the one being fixed. A group with scale (2,1,2) moves the
+  meshes but will not touch those entries.
+
+- [ ] **The roadway does not draw on the avenues.** Reported as "no roads in
+  the city" and "it's just earth between buildings". Narrowed, but not solved:
+  the street data IS at full scale, the merged road mesh is built, visible,
+  carries polygonOffset and spans 4.6 x 4.2 km — and the buildings line the
+  avenues correctly, so the street geometry is in the right place. But a ray
+  cast straight down the Champs-Élysées axis hits the paved city base at
+  y = 0.05 rather than the roadway at y = 0.16. Suspicion is the batched
+  builder in buildWorld (the one that replaced the per-segment addStrip loop),
+  not the data and not the projection.
+
 ## Maybe
 
 - [ ] **The helm rigged the bicycle way** — the bar has a cord to each side of the rudder,
