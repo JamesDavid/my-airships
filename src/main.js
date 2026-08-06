@@ -12,6 +12,7 @@ import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
 import { SHIPS, SHIP_KEYS } from './ships.js';
 import { SCENARIOS, Rival } from './scenarios.js';
+import * as vr from './vr.js';
 import { gateOffset, TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 import * as net from './net.js';
 import * as live from './live.js';
@@ -66,7 +67,29 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('app').appendChild(renderer.domElement);
 let composer = null;
 
+
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 12000);
+
+// ---------------------------------------------------------------- headset
+// Offered only where a headset answers. See src/vr.js: the flat game is
+// untouched, and this costs one feature test at boot on everything else.
+vr.initVR(renderer, camera, {
+  onBallast: () => { if (ship && !ship.wrecked) ship.dropBallast(); },
+  onCamera: () => cycleCamera(),
+  onMenu: () => toggleMenu(),
+  onStart: () => {
+    // stand in the basket, whatever view you were in, and put the slate up
+    if (camMode !== 1) cycleCameraTo(1);
+    if (ship) ship.showPanel(true);
+    document.body.classList.add('in-vr');
+  },
+  onEnd: () => {
+    if (ship) ship.showPanel(false);
+    document.body.classList.remove('in-vr');
+    fitToWindow.w = -1; fitToWindow();      // take the flat screen back
+  },
+});
+
 
 const LOCS = ['paris', 'monaco', 'stlouis'];
 let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
@@ -525,6 +548,7 @@ function loadWorld(loc) {
   clearRivals();
   scenario = null;
   scene = new THREE.Scene();
+  vr.attachTo(scene);
   world = loc === 'paris' ? buildWorld(scene)
     : loc === 'monaco' ? buildWorldMonaco(scene)
     : buildWorldStLouis(scene);
@@ -838,12 +862,36 @@ function pollInput() {
   const kb = (keys['KeyE'] ? 1 : 0) + (keys['KeyQ'] ? -1 : 0);
   input.pitch = kb !== 0 ? kb : touchPitch;
   input.vent = !!keys['KeyV'];
+
+  // ...and the two Touch controllers, which take precedence while a hand is
+  // actually doing something. The sticks are absolute positions, so the lever
+  // is driven toward them exactly as the touch UI's lever is.
+  const g = vr.pollVR(ship);
+  if (g) {
+    if (g.throttle !== 0) {
+      touchThrottle = Math.max(0, Math.min(1, touchThrottle + g.throttle * 0.9 * (1 / 60)));
+      throttleLever = true;
+    }
+    if (throttleLever) {
+      input.throttle = Math.max(-1, Math.min(1, (touchThrottle - ship.throttle) * 8));
+    }
+    if (g.rudder !== 0) input.rudder = g.rudder;
+    if (g.pitch !== 0) input.pitch = g.pitch;
+    if (g.vent) input.vent = true;
+    if (g.coax) input.coax = true;
+  }
 }
 
-function cycleCamera() {
-  camMode = (camMode + 1) % 4;
-  camera.near = camMode === 1 ? (ship.eyeNear || 0.1) : 0.5;  // FP: instruments are inches from the eye
-  camera.updateProjectionMatrix();
+function cycleCamera() { cycleCameraTo((camMode + 1) % 4); }
+
+function cycleCameraTo(m) {
+  camMode = m;
+  // in a headset the near plane belongs to vr.js, which sets it to let the
+  // instruments in at arm's length; leave it alone
+  if (!vr.inVR()) {
+    camera.near = camMode === 1 ? (ship.eyeNear || 0.1) : 0.5;  // FP: instruments are inches from the eye
+    camera.updateProjectionMatrix();
+  }
   addMsg('cam', 'Camera: ' + CAM_NAMES[camMode], 0);
 }
 
@@ -3039,6 +3087,16 @@ function updateCamera(dt) {
   if (spectate.on && !spectate.ship) return;
   const view = camShip();                       // your ship, or the one you are watching
   const p = view.pos;
+  // IN A HEADSET THE POSE IS NOT OURS TO SET. The head's position and rotation
+  // come from WebXR; all we place is the basket the head is standing in, and
+  // the pilot's own leaning and looking ride on top of that. Anything else here
+  // would fight the headset and make people ill.
+  if (vr.inVR()) {
+    const eye = new THREE.Vector3();
+    (view.eyePoint || view.basketMesh).getWorldPosition(eye);
+    vr.seatIn(eye, view.yaw);
+    return;
+  }
   const fwd = new THREE.Vector3(Math.cos(view.yaw), 0, -Math.sin(view.yaw));
   bobT += dt;
   let desired, look, snap = false;
@@ -3178,6 +3236,9 @@ function updateHUD() {
  * which makes the canvas self-healing whatever the browser forgot to tell us.
  */
 function fitToWindow() {
+  // never while a headset is presenting: the size and the projection are the
+  // session's, and setting them here would squash the stereo pair
+  if (vr.inVR()) return;
   const w = innerWidth, h = innerHeight;
   if (fitToWindow.w === w && fitToWindow.h === h) return;
   fitToWindow.w = w; fitToWindow.h = h;
@@ -3218,6 +3279,9 @@ step('the register', () => net.ensurePilotName());
 const flying = step('the world', () => loadWorld('paris'));
 step('the fault book', () => wireBugBook());
 step('the sound', () => wireSound());
+// asks the browser whether an immersive session is possible and puts up the
+// button only if it is — on a laptop nothing appears and nothing is spent
+step('the headset', () => { vr.offerVR(document.body); });
 step('the album', () => { document.getElementById('albumClose').onclick = closeAlbum; });
 step('the menu', () => {
   toggleMenu(true);   // start screen: choose your ship and your sky
@@ -3245,13 +3309,12 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
 let hudTick = 0;
 let last = performance.now();
 function frame(now) {
-  requestAnimationFrame(frame);
   window.__maBooted = true;      // tells the boot guard she is drawing
   fitToWindow();                 // cheap, and does nothing until the size moves
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  if (menuOpen || boardOpen() || bugBookOpen() || albumOpen()) { updateCamera(dt); composer.render(); return; }  // paused while a panel is up
+  if (menuOpen || boardOpen() || bugBookOpen() || albumOpen()) { updateCamera(dt); draw(); return; }  // paused while a panel is up
 
   // the sky runs on its own clock, not on how long this page has been open:
   // otherwise two pilots at the same instant get different gusts and different
@@ -3395,12 +3458,48 @@ function frame(now) {
   tickGames(dt);
   updateCamera(dt);
   updateHUD();
+  if (vr.inVR()) vrPanel();
   // the blocks above change size as the wind, the trial and the roster change:
   // re-stack a few times a second rather than every frame
   hudTick += dt;
   if (hudTick > 0.2) { hudTick = 0; layoutHud(); }
   drawThrottleLever();
   updateAudio();
-  composer.render();
+  draw();
 }
-requestAnimationFrame(frame);
+
+// ---------------------------------------------------------------- drawing
+// The composer is a screen-sized render target with bloom on the end of it, and
+// neither of those belongs in a headset: WebXR hands us its own framebuffer for
+// the stereo pair, and a bloom pass over both eyes reads as a smear. So in a
+// headset we render straight, which is also the cheapest thing we can do at
+// ninety hertz on a mobile chip.
+function draw() {
+  if (vr.inVR()) renderer.render(scene, camera);
+  else composer.render();
+}
+
+// The readings, on the slate wired to the basket rim. Frankly anachronistic —
+// there was no such thing in 1901 — but a headset cannot show the corners of a
+// screen, and flying blind is worse than flying with a slate.
+function vrPanel() {
+  if (!ship) return;
+  const kmh = Math.hypot(ship.vel.x, ship.vel.z) * 3.6;
+  const agl = ship.pos.y - (world.groundAt ? world.groundAt(ship.pos.x, ship.pos.z) : 0);
+  const rows = [
+    ['height', Math.round(agl) + ' m'],
+    ['speed', kmh.toFixed(0) + ' km/h'],
+    ['gas', Math.round(ship.gas) + '%'],
+    ['ballast', ship.bags + (ship.spec.ballast === 'water' ? ' cyl' : ' bags')],
+  ];
+  if (ship.spec.physics.fuel) {
+    rows.push(['petrol', Math.round((ship.fuel / ship.spec.physics.fuel) * 100) + '%']);
+  }
+  // the same words the flat game puts on screen, read off the DOM so the two
+  // can never drift apart
+  const sub = (document.getElementById('centerSub') || {}).textContent || '';
+  const last = msgBox && msgBox.lastElementChild;
+  ship.drawPanel(rows, sub || (last ? last.textContent : ''));
+}
+
+renderer.setAnimationLoop(frame);

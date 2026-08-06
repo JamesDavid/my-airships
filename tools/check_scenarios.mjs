@@ -281,6 +281,40 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE BASKET IS FLYABLE FROM INSIDE IT (headset)');
+  console.log('   A cord you cannot reach is a control you do not have, and a');
+  console.log('   slate 29 cm from your eyes is 77 degrees of instrument panel.');
+  console.log('');
+  {
+    const V3 = makeShip('no6').pos.constructor;
+    let worstCord = 0, worstSlate = 0, behind = 0, missing = 0;
+    for (const id of Object.keys(SHIPS)) {
+      const sh = makeShip(id);
+      sh.reset({ x: 0, y: 100, z: 0 }, 0);
+      sh.updateTransforms(0);
+      const eye = new V3();
+      (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
+      for (const c of ['ballast', 'vent']) {
+        const p2 = sh.cordAt(c);
+        if (!p2) { missing++; continue; }
+        worstCord = Math.max(worstCord, eye.distanceTo(p2));
+      }
+      if (!sh.panelMesh) { missing++; continue; }
+      const pm = new V3();
+      sh.panelMesh.getWorldPosition(pm);
+      worstSlate = Math.max(worstSlate, eye.distanceTo(pm));
+      if (pm.x - eye.x < 0.05) behind++;
+    }
+    console.log('   furthest cord ' + worstCord.toFixed(2) + ' m from the eye; '
+      + 'slate at ' + worstSlate.toFixed(2) + ' m; ' + behind + ' slates behind the pilot');
+    if (missing) { console.log('   FAIL ' + missing + ' ships have no cords or no slate'); fails++; }
+    else if (worstCord > 0.9) { console.log('   FAIL a cord is out of reach'); fails++; }
+    else if (worstSlate < 0.35) { console.log('   FAIL the slate is too close to focus on'); fails++; }
+    else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
+    else console.log('   ok   both cords in reach, the slate readable and in front');
+  }
+
+  console.log('');
   console.log('%s', fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');
   process.exit(fails ? 1 : 0);
 }

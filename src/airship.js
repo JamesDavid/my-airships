@@ -476,6 +476,74 @@ export class Airship {
     this.eyePoint.position.set(bx + 0.02, -drop + 0.55, 0);
     this.pitchGroup.add(this.eyePoint);
 
+    // ---- the two cords, and the panel between them (for the headset) ----
+    //
+    // Ch. XI, of the No. 5's water ballast: "their two spigots were so arranged
+    // that they could be opened and shut from my basket BY MEANS OF TWO STEEL
+    // WIRES." The valve was worked the same way, on a cord to the pilot's hand.
+    // So a pilot in a headset does not press a button labelled BALLAST — he
+    // reaches up and pulls the cord, which is what the man did.
+    //
+    // Both hang within arm's reach of eyePoint, ballast to port and valve to
+    // starboard, each ending in a turned wooden toggle you can actually see and
+    // aim at. `vrGrab` is what src/vr.js tests against.
+    this.pullCords = [];
+    {
+      const cordMat = new THREE.LineBasicMaterial({ color: 0x2b2119 });
+      const togMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2a });
+      const ey = -drop + 0.55;
+      for (const [id, side, colour] of [['ballast', 0.42, 0x8a7048],
+                                        ['vent', -0.42, 0x7d3f34]]) {
+        const top = new THREE.Vector3(bx + 0.10, ey + 0.92, side);
+        const bot = new THREE.Vector3(bx + 0.14, ey + 0.20, side);
+        const g = new THREE.BufferGeometry().setFromPoints([top, bot]);
+        this.pitchGroup.add(new THREE.Line(g, cordMat));
+        const tog = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.11, 8),
+          new THREE.MeshLambertMaterial({ color: colour }));
+        tog.position.copy(bot);
+        this.pitchGroup.add(tog);
+        // a collar so the two read apart at a glance: pale for ballast, red
+        // for the valve, which is the one you cannot take back
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 5, 10), togMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.copy(bot).y += 0.075;
+        this.pitchGroup.add(ring);
+        this.pullCords.push({ id, mesh: tog, rest: bot.clone(), pulled: 0 });
+      }
+    }
+
+    // The panel. Frankly anachronistic — there was no such thing in 1901, and
+    // the flat game keeps its readings in the corners of the screen where a
+    // headset cannot show them. Rather than pretend, it is mounted plainly on
+    // the rim like a slate a pilot has wired on, and it carries exactly what
+    // the corners carry. A canvas texture, redrawn only when a figure changes.
+    {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 320;
+      this.panelCanvas = c;
+      this.panelTex = new THREE.CanvasTexture(c);
+      this.panelTex.colorSpace = THREE.SRGBColorSpace;
+      // 0.30 m across and set 0.44 m from the eye, low and tipped up — a slate
+      // you GLANCE DOWN at, the way you would a compass on a binnacle. It was
+      // 0.46 m across at 0.29 m to begin with, which is 77 degrees of your view
+      // filled by an instrument panel and nearer than most eyes focus.
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.19),
+        new THREE.MeshBasicMaterial({ map: this.panelTex, transparent: true }));
+      pm.position.set(bx + 0.40, -drop + 0.33, 0);
+      pm.rotation.y = -Math.PI / 2;
+      pm.rotation.x = -0.62;                 // tipped up toward the eye
+      this.panelMesh = pm;
+      pm.visible = false;                    // only in a headset
+      this.pitchGroup.add(pm);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.21, 0.32),
+        new THREE.MeshLambertMaterial({ color: 0x4a3a28 }));
+      frame.position.copy(pm.position).x -= 0.012;
+      frame.rotation.x = pm.rotation.x;
+      frame.visible = false;
+      this.panelFrame = frame;
+      this.pitchGroup.add(frame);
+    }
+
     // ballast sacks hung along the rim — one vanishes with each SPACE
     this.sackMeshes = [];
     const sackMat = new THREE.MeshLambertMaterial({ color: 0x9c8256 });
@@ -839,6 +907,77 @@ export class Airship {
     return g ? g(x, z) : 0;
   }
 
+  // ------------------------------------------------------------ the panel
+  /**
+   * Draw the readings onto the basket panel. Called only while a headset is on;
+   * `lines` is [[label, value], ...] and `note` a single line of message text.
+   * Redraws only when something has actually changed — a canvas upload every
+   * frame at ninety hertz is a cost a headset cannot afford.
+   */
+  drawPanel(lines, note) {
+    const key = JSON.stringify(lines) + '|' + (note || '');
+    if (key === this._panelKey) return;
+    this._panelKey = key;
+    const c = this.panelCanvas;
+    if (!c) return;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
+    g.fillStyle = 'rgba(18,15,11,0.88)';
+    g.fillRect(0, 0, c.width, c.height);
+    g.strokeStyle = '#6b5a3e'; g.lineWidth = 4;
+    g.strokeRect(6, 6, c.width - 12, c.height - 12);
+    g.textBaseline = 'middle';
+    let y = 42;
+    for (const [label, value] of lines) {
+      g.fillStyle = '#a99878';
+      g.font = '22px Georgia, serif';
+      g.fillText(String(label).toUpperCase(), 26, y);
+      g.fillStyle = '#f0e2c2';
+      g.font = 'bold 30px Georgia, serif';
+      g.textAlign = 'right';
+      g.fillText(String(value), c.width - 26, y);
+      g.textAlign = 'left';
+      y += 42;
+    }
+    if (note) {
+      g.fillStyle = '#e8c477';
+      g.font = 'italic 20px Georgia, serif';
+      const words = String(note).split(' ');
+      let line = '', ly = Math.max(y + 14, c.height - 76);
+      for (const wd of words) {
+        if (g.measureText(line + wd).width > c.width - 52) {
+          g.fillText(line, 26, ly); line = ''; ly += 26;
+          if (ly > c.height - 20) break;
+        }
+        line += wd + ' ';
+      }
+      if (ly <= c.height - 20) g.fillText(line, 26, ly);
+    }
+    this.panelTex.needsUpdate = true;
+  }
+
+  /** Show or hide the panel and its frame — headset only. */
+  showPanel(on) {
+    if (this.panelMesh) this.panelMesh.visible = on;
+    if (this.panelFrame) this.panelFrame.visible = on;
+  }
+
+  /**
+   * The world position of a pull-cord's toggle, for a hand to reach for.
+   * `id` is 'ballast' or 'vent'.
+   */
+  cordAt(id, out) {
+    const c = (this.pullCords || []).find((k) => k.id === id);
+    if (!c) return null;
+    return c.mesh.getWorldPosition(out || new THREE.Vector3());
+  }
+
+  /** Pull a cord: it dips, and springs back over the next half second. */
+  pullCord(id) {
+    const c = (this.pullCords || []).find((k) => k.id === id);
+    if (c) c.pulled = 1;
+  }
+
   // ------------------------------------------------------------ controls
   dropBallast() {
     if (this.bags > 0 && !this.wrecked) { this.bags--; this.events.push('ballast'); }
@@ -1120,6 +1259,14 @@ export class Airship {
   }
 
   updateTransforms(dt) {
+    // the pulled cord dips and springs back, so a hand that grabs it sees the
+    // thing move — without that a headset gives you no answer at all
+    for (const c of (this.pullCords || [])) {
+      if (c.pulled > 0) {
+        c.pulled = Math.max(0, c.pulled - dt * 2.4);
+        c.mesh.position.y = c.rest.y - 0.09 * Math.sin(c.pulled * Math.PI);
+      }
+    }
     this.group.rotation.y = this.yaw;
     this.pitchGroup.rotation.z = this.pitch;
     const P = this.spec.physics;

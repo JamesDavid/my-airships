@@ -226,6 +226,16 @@
     user-select:none; -webkit-user-select:none; touch-action:none; z-index:30; }
   .tbtn.sm { width:46px; height:46px; font-size:13px; }
   .tbtn.on { background:rgba(232,196,119,.5); border-color:#e8c477; }
+  /* the headset button — only ever added when a headset answers (src/vr.js) */
+  #vrBtn { position:fixed; right:14px; bottom:14px; z-index:40;
+    font:600 13px/1 Georgia, serif; letter-spacing:.14em; color:#f0e2c2;
+    background:rgba(24,20,15,.82); border:1px solid #6b5a3e; border-radius:4px;
+    padding:11px 16px; cursor:pointer; }
+  #vrBtn:hover { background:rgba(52,42,28,.92); border-color:#e8c477; }
+  /* in a headset the flat overlay is not visible and not wanted: the readings
+     are on the slate wired to the basket rim instead */
+  body.in-vr .hud, body.in-vr #touchUI, body.in-vr #center,
+  body.in-vr #messages, body.in-vr #vrBtn { display:none !important; }
   :root { --rtop: calc(12px + env(safe-area-inset-top, 0px)); }
   /* The right-hand column, positioned here rather than inline so the phone
      layout can push it clear of the notch. --rtop is the top of the column. */
