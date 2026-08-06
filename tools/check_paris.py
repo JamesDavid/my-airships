@@ -455,6 +455,24 @@ top = max(a[0] for a in json.loads(anch))
 check(TOWER_H == top, 'the tower gate is cut to the tower this world builds',
       'TOWER_H %d, tower top %d' % (TOWER_H, top))
 
+print()
+print('12. THE TOWER VISTA LOOKS OVER THE TOWER, NOT THROUGH IT')
+_w = open(os.path.join(ROOT, 'src', 'world.js'), encoding='utf-8').read()
+_m = re.search(r'vistaPos: new THREE\.Vector3\(TOWER_POS\.x([^,]*), ([^,]+), TOWER_POS\.z', _w)
+_th = int(re.search(r'export const TOWER_H = (\d+)', _w).group(1))
+if not _m:
+    print('   FAIL cannot find vistaPos')
+    fails.append('vistaPos missing')
+else:
+    _off, _hgt = _m.group(1).strip(), _m.group(2).strip()
+    print('   vista at x%s, y = %s   (the Tower is %d m)'
+          % (_off or ' + 0 (on axis)', _hgt, _th))
+    if _hgt.startswith('TOWER_H +') and _off == '':
+        print('   ok   on the axis and clear of the top')
+    else:
+        print('   FAIL the lens is down inside the ironwork')
+        fails.append('tower vista obstructed')
+
 print('\n%s' % ('ALL CHECKS PASS' if not fails
                 else '%d FAILURES: %s' % (len(fails), '; '.join(fails))))
 raise SystemExit(1 if fails else 0)

@@ -1038,9 +1038,14 @@ export function buildWorld(scene) {
         return new THREE.Vector3(t.x + 120, 0, t.z + 220); })() },
     ],
     limitNote: 'the historic half-hour, at full scale',
-    // from the TOP of her, on the campanile gallery at 300 m, not two thirds
-    // of the way up where the third platform is
-    vistaPos: new THREE.Vector3(TOWER_POS.x + 9, 302, TOWER_POS.z + 9),
+    // ABOVE her, not on her. This stood on the campanile gallery at 302 m,
+    // 12.7 m off the axis — which is inside the ironwork, ten metres below a
+    // 312 m tower, so the view out was through the girders and the lantern:
+    // "tower voew should ve from just above the tower so view is mever
+    // obstructed" (bug #50). On the axis and clear of the top, nothing of the
+    // Tower can come between the lens and the ship. Tied to TOWER_H so it
+    // cannot drift back inside when the Tower is re-cut.
+    vistaPos: new THREE.Vector3(TOWER_POS.x, TOWER_H + 22, TOWER_POS.z),
     windBase: windB,
     raceLimit: 1800, raceRecord: 1771,
     hints: {
@@ -2162,7 +2167,9 @@ function makeRibbon(pts, width, color, y, dull) {
     const bx = p.x - n.x * width / 2, bz = p.z - n.z * width / 2;
     pos.push(ax, parisGround(ax, az) + y, az);
     pos.push(bx, parisGround(bx, bz) + y, bz);
-    if (i > 0) {
+    // ...but not across a gap in the trace, which is a 3.3 km quad, exactly as
+    // in makeBankRibbon. The city reach has one such gap today.
+    if (i > 0 && p.distanceTo(pts[i - 1]) <= RIVER_GAP) {
       const a = (i - 1) * 2;
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
@@ -2171,9 +2178,21 @@ function makeRibbon(pts, width, color, y, dull) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
+  // DOUBLE-SIDED, because this ribbon is wound face-DOWN — all hundred and
+  // fifty of its triangles, measured. n = up x t and the quads are emitted in
+  // the order that makes the normal come out underneath, so lit from above the
+  // grass banks of the western Seine went black: "What are these black
+  // triangles on the bank of the river" (bug #51).
+  //
+  // Double-siding rather than re-winding is what the rest of this file does
+  // with ribbons — makeBankRibbon, the Seine's own sheet, the Monaco roads —
+  // because the winding of a swept quad depends on the direction the trace
+  // happens to run, and a ribbon that is right on one reach is inside out on
+  // the next.
   return new THREE.Mesh(geo, dull
-    ? new THREE.MeshLambertMaterial({ color })
-    : new THREE.MeshPhongMaterial({ color, shininess: 90, specular: 0xffe6c0 }));
+    ? new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })
+    : new THREE.MeshPhongMaterial({ color, shininess: 90, specular: 0xffe6c0,
+      side: THREE.DoubleSide }));
 }
 
 // ribbon built in the XY plane (x, -z) so Water's reflector plane is correct
