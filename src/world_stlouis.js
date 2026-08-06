@@ -70,14 +70,25 @@ export function buildWorldStLouis(scene) {
   // ---------- Festival Hall on Art Hill, at the basin's head ----------
   const white = new THREE.MeshLambertMaterial({ color: 0xefe9dc });
   // Art Hill is a truncated mound with a level crown — Festival Hall's flat
-  // base needs ground under all of it, not the point of a cone
-  const hill = new THREE.Mesh(new THREE.CylinderGeometry(96, 220, 46, 18, 1),
+  // base needs ground under all of it, not the point of a cone. The flat crown
+  // is real: measured off the terrain tiles along the fair's grand axis, the
+  // ground climbs from the Grand Basin and then goes level, which is why a
+  // building could stand there at all.
+  //
+  // The HEIGHT was not. This was 46 m, which is nearly four times the hill.
+  // The measured rise is 12.1 m of ground over 417 m, the climb all in the
+  // first 230; the figure usually quoted for Art Hill is sixty feet, and the
+  // difference between that and the measured twelve is the basin's water
+  // against the ground at its lip, plus the museum's own terracing. Sixteen
+  // sits inside that, and everything below is fitted to it.
+  const HILL_H = 16, HILL_R = 220, CROWN_R = 96, HILL_X = 620;
+  const hill = new THREE.Mesh(new THREE.CylinderGeometry(CROWN_R, HILL_R, HILL_H, 18, 1),
     new THREE.MeshLambertMaterial({ color: 0x74884f }));
-  hill.position.set(620, 23, 0); hill.receiveShadow = true;
+  hill.position.set(HILL_X, HILL_H / 2, 0); hill.receiveShadow = true;
   scene.add(hill);
   const crown = new THREE.Mesh(new THREE.CircleGeometry(96, 18),
     new THREE.MeshLambertMaterial({ color: 0x7c9055 }));
-  crown.rotation.x = -Math.PI / 2; crown.position.set(620, 46.05, 0);
+  crown.rotation.x = -Math.PI / 2; crown.position.set(HILL_X, HILL_H + 0.05, 0);
   crown.receiveShadow = true;
   scene.add(crown);
   const fest = new THREE.Group();
@@ -88,10 +99,11 @@ export function buildWorldStLouis(scene) {
   festDome.position.y = 30; festDome.scale.y = 0.85; fest.add(festDome);
   const lantern = new THREE.Mesh(new THREE.ConeGeometry(4, 14, 8), white);
   lantern.position.y = 62; fest.add(lantern);
-  fest.position.set(620, 44, 0);
+  fest.position.set(HILL_X, HILL_H - 2, 0);   // its base bedded into the crown
   fest.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(fest);
-  buildings.push({ x: 620, z: 0, w: 110, d: 110, h: 70, top: 74 }); // the hall itself, not the whole hill
+  // the hall itself, not the whole hill: crown, then its own 28 m of dome
+  buildings.push({ x: HILL_X, z: 0, w: 110, d: 110, h: HILL_H + 24, top: HILL_H + 28 });
 
   // ---------- the fan plan of 1904 (official ground plan): the palaces
   // radiate from Festival Hall's apex around the Grand Basin ----------
@@ -193,13 +205,22 @@ export function buildWorldStLouis(scene) {
   scene.add(mon);
   buildings.push({ x: -140, z: 60, w: 6, d: 6, h: 43, top: 43 });
 
-  // the Cascades spilling from Festival Hall to the Grand Basin
-  for (const cz of [-26, 0, 26]) {
-    const casc = new THREE.Mesh(new THREE.PlaneGeometry(95, 8),
-      new THREE.MeshPhongMaterial({ color: 0x7fb0c9, shininess: 120, specular: 0xffffff }));
-    casc.rotation.x = -Math.PI / 2 + 0.21;
-    casc.position.set(515, 24, cz);
-    scene.add(casc);
+  // The Cascades spilling from Festival Hall to the Grand Basin — fitted to the
+  // hill's actual face rather than written out, so they cannot be left hanging
+  // in the air the next time its height is corrected. They run from the crown's
+  // edge down to the foot of the mound, and the plane is as long as that slope
+  // measures and tilted to match it.
+  {
+    const top = { x: HILL_X - CROWN_R, y: HILL_H };     // where the crown breaks
+    const foot = { x: HILL_X - HILL_R, y: 0 };          // where the mound meets the level
+    const run = top.x - foot.x, drop = top.y - foot.y;
+    for (const cz of [-26, 0, 26]) {
+      const casc = new THREE.Mesh(new THREE.PlaneGeometry(Math.hypot(run, drop), 8),
+        new THREE.MeshPhongMaterial({ color: 0x7fb0c9, shininess: 120, specular: 0xffffff }));
+      casc.rotation.x = -Math.PI / 2 + Math.atan2(drop, run);
+      casc.position.set((top.x + foot.x) / 2, (top.y + foot.y) / 2 + 0.3, cz);
+      scene.add(casc);
+    }
   }
 
   // ---------- the Observation Wheel (the rebuilt 1893 giant) ----------
@@ -345,7 +366,7 @@ export function buildWorldStLouis(scene) {
     sun, sunDir, sky, waters: [basin], flags, tick,
     buildings, clouds, trees,
     landmarks: [
-      { id: 'festival', name: 'Festival Hall', x: 620, z: 0, y: 100, r: 60,
+      { id: 'festival', name: 'Festival Hall', x: 620, z: 0, y: 62, r: 60,
         clue: 'The domed hall at the head of the cascades, on the hill above the basin.' },
       { id: 'basin', name: 'the Grand Basin', x: 280, z: 0, y: 46, r: 90,
         clue: 'The long water in front of the palaces, with the lagoons running off it.' },
@@ -364,7 +385,7 @@ export function buildWorldStLouis(scene) {
     limitNote: 'three laps at the pace he asked for — half again the Deutsch',
     windBase: WINDB,
     raceLimit: 1030, raceRecord: 950, raceLaps: 3,
-    vistaPos: new THREE.Vector3(620, 120, 60), // from Festival Hall
+    vistaPos: new THREE.Vector3(620, 78, 60), // from Festival Hall, on its true hill
     hints: {
       idleNear: 'The grand prize waits — three pylons, two rivals.',
       idleFar: 'Free flight — the race begins over the Aeronautic Concourse.',

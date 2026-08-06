@@ -42,10 +42,12 @@ commonly quoted figure for Art Hill is 60 feet (18 m); the difference from the
 measured 12 m is the basin's water surface versus the ground at its lip, plus
 the museum's own terracing. **Somewhere between 12 and 18 m is right. 46 is not.**
 
-Fixing it is not a one-line change: Festival Hall sits on the crown, the
-Cascades spill from the Hall down the face to the basin, and both are positioned
-against the 46. Do it deliberately, with the Cascades re-fitted to the new
-slope, or it will look worse than the error.
+**DONE.** The hill is 16 m, inside that band. Everything that stood on it is now
+derived from `HILL_H` rather than written out — the crown, Festival Hall's
+bedding, its collider, the landmark's fly-over height and the vista — and the
+Cascades are fitted to the mound's actual face, running from where the crown
+breaks down to where the mound meets the level, at the length and pitch that
+slope measures. Correct the height again and they follow it.
 
 **And the modern ground is not the 1904 ground.** The fair regraded Forest Park
 enormously — the River des Peres was culverted *for* the fair, the lagoons were
@@ -116,9 +118,7 @@ quote comes first and the geometry follows from it.
 
 ## Order of work
 
-1. **Art Hill's height** — the measurement above is done; applying it means
-   re-fitting Festival Hall and the Cascades. Small, self-contained, worth doing
-   first because it is the one outright error currently known.
+1. ~~**Art Hill's height**~~ — done.
 2. **Photographic notes** on the palaces, one page each, sources cited.
 3. **Georeference the plat** against the four surviving control points; emit
    `src/stlouis_geo.js`.
