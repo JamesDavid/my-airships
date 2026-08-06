@@ -595,6 +595,10 @@ export function buildWorldMonaco(scene) {
     // the ground IS the map now: anything at or under the waterline is sea,
     // except the planks of the landing-stage
     groundAt,
+    // the Mediterranean is at zero, which is what groundAt already returns out
+    // there — so this changes nothing here, and keeps every world answering the
+    // same question the same way
+    waterY: (x, z) => (isSea(x, z) ? 0 : null),
     isWater: (x, z) => isSea(x, z)
       && !(Math.abs(x - STAGE.x) < STAGE.w / 2 && Math.abs(z - STAGE.z) < STAGE.d / 2),
     isInBois: () => false,

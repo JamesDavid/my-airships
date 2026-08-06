@@ -769,6 +769,12 @@ export class Airship {
       // (A1, B4). Over the sea it lies on the water and becomes the true
       // stabilisateur the book makes of it.
       let floor = this.groundUnder(n.p.x, n.p.z) + 0.15;
+      // ON the water, not under it. The Seine's bed is cut below its sheet, so
+      // a rope that asked only for the ground went to the bottom of the river
+      // and dragged there — 1.2 m beneath the surface it is supposed to be
+      // lying on. Over Monaco the sea IS the ground and this changes nothing.
+      const wy = this._env && this._env.waterY && this._env.waterY(n.p.x, n.p.z);
+      if (wy !== null && wy !== undefined && wy > floor) floor = wy;
       for (const b of nearB) {
         if (Math.abs(n.p.x - b.x) < b.w / 2 && Math.abs(n.p.z - b.z) < b.d / 2) {
           floor = Math.max(floor, b.top + 0.15);

@@ -1073,6 +1073,21 @@ export function buildWorld(scene) {
     isWater: (x, z) => !onPuteaux(x, z)
       && nearPolyline(riverPts, x, z, 71, RIVER_GAP),
     /**
+     * The SURFACE of the water at (x, z), or null on dry land.
+     *
+     * The guide rope wants this and the ground will not do. The Seine's bed is
+     * carved 1.4 m under its sheet so that the quays are not left standing in
+     * the air, so a rope asking `groundAt` went to the BOTTOM: measured at
+     * 1.2 m below the surface, dragging along the riverbed. "Over the sea it
+     * lies on the water and becomes the true stabilisateur" is what the rope
+     * code says it does, and over the Seine it did not.
+     *
+     * The ship itself still uses the ground, because the Seine is meant to
+     * drown her — it is only the rope that floats.
+     */
+    waterY: (x, z) => (!onPuteaux(x, z)
+      && nearPolyline(riverPts, x, z, 71, RIVER_GAP) ? riverPts[0].y : null),
+    /**
      * The Bois de Boulogne — for the cool air under the trees, and for the
      * "soft and safe" landing a pilot gets among them.
      *

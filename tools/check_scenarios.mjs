@@ -228,6 +228,59 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE TWO THINGS THAT BALLAST HER WITHOUT A SACK');
+  {
+    const P = SHIPS.no6.physics;
+    const env2 = { groundAt: world.groundAt, buildings: world.buildings,
+      waterY: world.waterY, underCloud: false, inBois: false };
+
+    // 1. burning petroleum leaves her light — the end-of-voyage lift problem
+    const s1 = makeShip('no6');
+    s1.reset({ x: 520, y: 120, z: 300 }, 0);
+    let yEarly = 0;
+    for (let k = 0; k < 90000; k++) {
+      s1.update(1/30, { throttle: 1, rudder: 0, pitch: 0, vent: 0, coax: 0 },
+        { x: 0, y: 0, z: 0 }, env2);
+      if (k === 900) yEarly = s1.pos.y;
+      if (s1.wrecked || s1.fuel <= 0) break;
+    }
+    const rose = s1.pos.y - yEarly;
+    console.log('   petrol: a full tank weighs ' + (0.25 / P.bagLift).toFixed(1)
+      + ' ballast bags; burning it lifted her ' + rose.toFixed(0) + ' m');
+    if (rose < 20) { console.log('   FAIL burning fuel does not lighten her'); fails++; }
+    else console.log('   ok   she gets light as the tank empties');
+
+    // 2. the guide rope takes her weight as it lies down, and gives it back
+    const s2 = makeShip('no6');
+    s2.reset({ x: -2000, y: world.groundAt(-2000, 400) + 25, z: 400 }, 0);
+    s2.gas = 96;
+    for (let k = 0; k < 5400; k++)
+      s2.update(1/30, { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 },
+        { x: 0, y: 0, z: 0 }, env2);
+    const held = s2.groundedFrac * P.ropeLift;
+    console.log('   rope:   ' + (s2.groundedFrac * 100).toFixed(0) + '% of it down, holding '
+      + (held / P.bagLift).toFixed(1) + ' bags of her weight, hovering at '
+      + (s2.pos.y - world.groundAt(s2.pos.x, s2.pos.z)).toFixed(1) + ' m');
+    if (s2.groundedFrac <= 0 || s2.pos.y - world.groundAt(s2.pos.x, s2.pos.z) > 40) {
+      console.log('   FAIL the rope is not holding her up'); fails++;
+    } else console.log('   ok   she rides on her rope instead of sinking');
+
+    // 3. and it lies ON the water, not on the riverbed under it
+    const riv = world.riverPts[Math.floor(world.riverPts.length * 0.35)];
+    const s3 = makeShip('no6');
+    s3.reset({ x: riv.x, y: world.groundAt(riv.x, riv.z) + 34, z: riv.z }, 0);
+    for (let k = 0; k < 1800; k++)
+      s3.update(1/30, { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 },
+        { x: 0, y: 0, z: 0 }, env2);
+    const lowest = s3.rope.reduce((m, n) => Math.min(m, n.p.y), Infinity);
+    const under = riv.y - lowest;
+    console.log('   Seine:  lowest rope node ' + (under >= 0 ? under.toFixed(2) + ' m under'
+      : (-under).toFixed(2) + ' m over') + ' the surface (the bed is 1.4 m down)');
+    if (under > 0.5) { console.log('   FAIL the rope is dragging on the riverbed'); fails++; }
+    else console.log('   ok   the rope lies on the water');
+  }
+
+  console.log('');
   console.log('%s', fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');
   process.exit(fails ? 1 : 0);
 }

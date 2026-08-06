@@ -3278,6 +3278,8 @@ function frame(now) {
     // zero and sank fifteen metres into the hill, which two pilots filed as
     // "I fell through the ground after crashing" and "Sank below the earth".
     groundAt: world.groundAt,
+    // for the guide rope only: it lies on water, it does not sink through it
+    waterY: world.waterY,
   };
   // the air itself is worth remarking on when it takes hold of the ship
   if (env.airY > 0.75) addMsg('updraft', 'The air itself is lifting you — a column of it, rising to build the cloud above.', 26);
