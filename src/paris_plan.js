@@ -9,7 +9,9 @@
 //    naturally clear the water side of the quays)
 //  - dirt: Bois carriage roads, unbuilt
 
-export const STREETS = [
+import { OSM_STREETS } from './paris_streets.js';
+
+const HAND = [
   // ---- the grand axis ----
   { name: 'Avenue des Champs-Élysées', w: 30, pts: [[420, -420], [900, -180]], frontage: true },
   { name: 'Rue de Rivoli', w: 24, pts: [[900, -180], [1260, -110]], frontage: true },
@@ -50,6 +52,12 @@ export const STREETS = [
   { name: 'Allée des Lacs', w: 12, dirt: true, pts: [[-370, 470], [-420, 160], [-520, -120]] },
   { name: 'Route de la Cascade', w: 12, dirt: true, pts: [[-990, 40], [-1120, 320], [-980, 480], [-700, 420], [-560, 300]] },
 ];
+
+// The hand-drawn avenues first — they carry the names and the deliberate
+// choices — then the whole surveyed network behind them. Together they give
+// the city streets everywhere instead of a few grand axes across bare ground.
+export const STREETS = [...HAND, ...OSM_STREETS];
+
 
 // building-free precincts: plazas, parks, monuments, water approaches
 export const SITES = [

@@ -242,7 +242,7 @@ export function buildWorld(scene) {
   scene.add(ground);
 
   // paved city base (east of the Seine)
-  addFlat(scene, 665, 0, 970, 1700, 0x9b9484, 0.05);
+  addFlat(scene, 665, 0, 970, 1700, 0x847d70, 0.05);
   // Champ de Mars green beside the tower
   addFlat(scene, 300, 330, 150, 320, 0x7f9159, 0.12);
   // Longchamps pelouse
@@ -355,11 +355,39 @@ export function buildWorld(scene) {
   // ---------- the real street plan of 1901 (src/paris_plan.js) ----------
   const _arc = placeLegacy('etoile');
   const arcPos = new THREE.Vector3(_arc.x, 0, _arc.z);
-  for (const st of STREETS) {
-    const col = st.dirt ? 0x8f8a6a : 0x9a9285;
-    for (let i = 0; i < st.pts.length - 1; i++) {
-      addStrip(scene, st.pts[i][0], st.pts[i][1], st.pts[i + 1][0], st.pts[i + 1][1], st.w, col);
+  // Every street in ONE mesh. There are close to three hundred of them now that
+  // the network is surveyed rather than sketched, and a mesh per segment would
+  // be seven hundred draw calls before a single building is put up.
+  {
+    const pos = [], col = [], idx = [];
+    const paved = new THREE.Color(0xb9b0a0), dirt = new THREE.Color(0x9d9573);
+    for (const st of STREETS) {
+      const c = st.dirt ? dirt : paved;
+      for (let i = 0; i < st.pts.length - 1; i++) {
+        const [x1, z1] = st.pts[i], [x2, z2] = st.pts[i + 1];
+        const dx = x2 - x1, dz = z2 - z1;
+        const L = Math.hypot(dx, dz) || 1;
+        // half-width across the line, and a little PAST each end so that
+        // consecutive segments and crossings close up instead of showing gaps
+        const nx = (-dz / L) * st.w / 2, nz = (dx / L) * st.w / 2;
+        const ex = (dx / L) * st.w * 0.5, ez = (dz / L) * st.w * 0.5;
+        const b = pos.length / 3;
+        for (const [px, pz] of [[x1 - ex + nx, z1 - ez + nz], [x1 - ex - nx, z1 - ez - nz],
+          [x2 + ex + nx, z2 + ez + nz], [x2 + ex - nx, z2 + ez - nz]]) {
+          pos.push(px, 0.09, pz);
+          col.push(c.r, c.g, c.b);
+        }
+        idx.push(b, b + 1, b + 2, b + 2, b + 1, b + 3);
+      }
     }
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g2.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g2.setIndex(idx);
+    g2.computeVertexNormals();
+    const roads = new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    roads.receiveShadow = true;
+    scene.add(roads);
   }
   addOval(scene, 420, -420, 64, 64, 0x9a9285, 0.08);   // the Étoile
   addOval(scene, 900, -180, 85, 85, 0x9a9285, 0.08);   // Place de la Concorde
