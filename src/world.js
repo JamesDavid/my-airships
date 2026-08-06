@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { geo, place, placeLegacy, SEINE, ORIGIN_XZ, LEGACY_ORIGIN, LEGACY_SCALE } from './paris_geo.js';
 import { HF as PHF, groundAt as parisGroundASL, slopeAt as parisSlope,
-         SEINE_XZ, riverNear, RIVER_HALF } from './paris_terrain.js';
+         SEINE_XZ, riverNear, RIVER_HALF, RIVER_GAP } from './paris_terrain.js';
 
 /**
  * Paris has relief, and it always did — the game simply had not measured it.
@@ -349,17 +349,52 @@ export function buildWorld(scene) {
     terrain.userData.noLift = true;
     scene.add(terrain);
 
-    // A RING outside the survey, not a disc. A disc laid at a single height
-    // under the whole world buries anything the ground dips below it — and the
-    // Seine runs seven metres down in its valley, so the river disappeared
-    // under its own horizon filler.
-    const inner = Math.hypot(gx * st, gz * st) / 2;
-    const skirt = new THREE.Mesh(new THREE.RingGeometry(inner, inner + 12000, 64, 1),
-      new THREE.MeshLambertMaterial({ map: makeGroundTexture() }));
-    skirt.rotation.x = -Math.PI / 2;
-    skirt.position.set(cx, -2.0, cz);
-    skirt.userData.noLift = true;
-    scene.add(skirt);
+    // FOUR APRONS along the survey's four edges — not a disc, and not a ring.
+    //
+    // A disc laid at a single height under the whole world buries anything the
+    // ground dips below it, and the Seine runs seven metres down in its valley,
+    // so the river disappeared under its own horizon filler. That was fixed by
+    // making it a ring — but the ring's inner radius was half the survey's
+    // DIAGONAL, 6,424 m, while the survey is a rectangle whose nearest edge is
+    // only 3,150 m out. Between the two there was nothing at all: fly south
+    // past z = 2500 and the world stopped, which is what a pilot filed as
+    // "paris just ends on a void?" (bug_reports #27).
+    //
+    // An apron per edge cannot have that fault, because each one starts exactly
+    // where the survey stops. And the inner row of each is sampled from the
+    // ground itself rather than laid flat, so the join has no step in it: the
+    // apron carries the survey's own edge profile out to the horizon.
+    const x0 = PHF.x0, x1 = PHF.x0 + gx * st;
+    const z0 = PHF.z0, z1 = PHF.z0 + gz * st;
+    const OUT = 12000, N = 64;
+    const apronMat = new THREE.MeshLambertMaterial({ map: makeGroundTexture() });
+    // north and south run the full width PLUS the overhang, so the corners are
+    // covered; east and west only span the survey, and tuck in behind them.
+    for (const [ax0, ax1, az, dir, horiz] of [
+      [x0 - OUT, x1 + OUT, z0, -1, true], [x0 - OUT, x1 + OUT, z1, 1, true],
+      [z0, z1, x0, -1, false], [z0, z1, x1, 1, false]]) {
+      const pos = [], idx = [];
+      for (let i = 0; i <= N; i++) {
+        const t = ax0 + ((ax1 - ax0) * i) / N;
+        const ex = horiz ? t : az, ez = horiz ? az : t;
+        const y = parisGround(Math.min(x1, Math.max(x0, ex)),
+          Math.min(z1, Math.max(z0, ez)));
+        pos.push(ex, y, ez);
+        pos.push(horiz ? t : az + dir * OUT, y, horiz ? az + dir * OUT : ez);
+        if (i > 0) {
+          const a = (i - 1) * 2;
+          if (dir * (horiz ? 1 : -1) > 0) idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+          else idx.push(a + 2, a + 1, a, a + 2, a + 3, a + 1);
+        }
+      }
+      const ag = new THREE.BufferGeometry();
+      ag.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      ag.setIndex(idx);
+      ag.computeVertexNormals();
+      const apron = new THREE.Mesh(ag, apronMat);
+      apron.userData.noLift = true;
+      scene.add(apron);
+    }
   }
 
   // paved city base (east of the Seine)
@@ -574,7 +609,7 @@ export function buildWorld(scene) {
   const buildings = buildCity(scene, riverPts);
 
   let bridgeCount = 0;
-  const isWaterAt = (x, z) => !onPuteaux(x, z) && nearPolyline(riverPts, x, z, 71);
+  const isWaterAt = (x, z) => !onPuteaux(x, z) && nearPolyline(riverPts, x, z, 71, RIVER_GAP);
   // ---------- the bridges of the city ----------
   // Placed WHERE THE ROADS ACTUALLY CROSS THE WATER, not by name. Listing the
   // bridges by their real positions put them near the right places but not
@@ -600,6 +635,7 @@ export function buildWorld(scene) {
         const [ax, az] = st.pts[i2], [bx, bz] = st.pts[i2 + 1];
         for (let k = 0; k < riverPts.length - 1; k++) {
           const c = riverPts[k], d2 = riverPts[k + 1];
+          if (c.distanceTo(d2) > RIVER_GAP) continue;   // a gap, not a reach
           const hit = seg(ax, az, bx, bz, c.x, c.z, d2.x, d2.z);
           if (!hit) continue;
           // A road that meets the water at a shallow angle is a QUAY running
@@ -904,7 +940,7 @@ export function buildWorld(scene) {
     // river is wet right out to the bank you can see
     // …but the Île de Puteaux is dry land in the middle of the reach
     isWater: (x, z) => !onPuteaux(x, z)
-      && nearPolyline(riverPts, x, z, 71),
+      && nearPolyline(riverPts, x, z, 71, RIVER_GAP),
     isInBois(x, z) {
       if (x < -3800 || x > -680 || Math.abs(z) > 1120) return false;
       const dx = (x - LONGCHAMPS.x) / LONGCHAMPS.rx, dz = (z - LONGCHAMPS.z) / LONGCHAMPS.rz;
@@ -1685,13 +1721,16 @@ function addBookPlaces(scene, buildings) {
 // ---------------------------------------------------------------- Seine
 // Is (x,z) within `half` metres of a river's centre line? Cheap enough to ask
 // every frame: a bounding reject, then squared distance to each segment.
-export function nearPolyline(pts, x, z, half) {
+export function nearPolyline(pts, x, z, half, maxSeg = Infinity) {
   const h2 = half * half;
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i];
     if (x < Math.min(a.x, b.x) - half || x > Math.max(a.x, b.x) + half) continue;
     if (z < Math.min(a.z, b.z) - half || z > Math.max(a.z, b.z) + half) continue;
     const dx = b.x - a.x, dz = b.z - a.z;
+    // a step far longer than the sampling is a gap in the data, not a reach of
+    // whatever this polyline is: it is not water and you cannot land on it
+    if (dx * dx + dz * dz > maxSeg * maxSeg) continue;
     const len2 = dx * dx + dz * dz;
     let t = len2 ? ((x - a.x) * dx + (z - a.z) * dz) / len2 : 0;
     t = t < 0 ? 0 : t > 1 ? 1 : t;
@@ -1738,7 +1777,7 @@ function makeBankRibbon(pts, inner, outer, side, color, lift) {
       const x = p.x + n.x * off, z = p.z + n.z * off;
       pos.push(x, parisGround(x, z) + lift, z);
     }
-    if (i > 0) {
+    if (i > 0 && p.distanceTo(pts[i - 1]) <= RIVER_GAP) {   // not across a gap
       const a = (i - 1) * 2;
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
@@ -1794,7 +1833,9 @@ function ribbonGeoXY(pts, width) {
     const n = new THREE.Vector3().crossVectors(up, t).normalize();
     pos.push(p.x + n.x * width / 2, -(p.z + n.z * width / 2), 0);
     pos.push(p.x - n.x * width / 2, -(p.z - n.z * width / 2), 0);
-    if (i > 0) {
+    // …but never ACROSS a gap in the data. One step of this river is 3.3 km
+    // long and runs over the hills of Meudon (paris_terrain.RIVER_GAP).
+    if (i > 0 && p.distanceTo(pts[i - 1]) <= RIVER_GAP) {
       const a = (i - 1) * 2;
       // wind the triangles so the face normal is +Z: once the ribbon is laid
       // flat (rotation.x = -90°) that becomes +Y, and the river faces the sky.
@@ -1899,6 +1940,7 @@ function buildCity(scene, riverPts) {
     for (let i = 0; i < riverPts.length - 1; i++) {
       const a = riverPts[i], b = riverPts[i + 1];
       const dx = b.x - a.x, dz = b.z - a.z;
+      if (dx * dx + dz * dz > RIVER_GAP * RIVER_GAP) continue;   // a gap, not a reach
       const L2 = dx * dx + dz * dz;
       const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2)) : 0;
       const qx = a.x + dx * t - x, qz = a.z + dz * t - z;
