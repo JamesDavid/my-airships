@@ -2173,12 +2173,21 @@ function updateRace(dt) {
   // The Deutsch course's rings are rebuilt whenever a track ends, so during a
   // scenario that is not a race they hung in the sky — the grey hoop by the
   // Tower with nothing to do with the mission in hand.
-  // Rings belong to the course in hand and to nothing else. The historic gates
-  // are rebuilt whenever a track ends, so without this they hang in the sky
-  // through a scenario, and through a room game — a pilot playing tag has a
-  // grey hoop by the Tower that has nothing to do with what they are doing.
+  // Rings belong to the course in hand and to nothing else.
+  //
+  // endTrack() rebuilds the historic gates every time a track finishes, so they
+  // exist whether or not anything is being flown — which left the Deutsch
+  // Prize's turn ring hanging in the air beside the Eiffel Tower during a
+  // scenario, during a room game, and in plain free flight. The test is simply
+  // whether there IS a course: a track being flown, or one being drawn in the
+  // editor. Not "is something else going on", which is what this used to ask
+  // and which free flight answered no to.
+  const showGates = !!track || !!editing;
+  for (const r of gateRings) r.visible = showGates;
+  // The gold start ring over the aerodrome stays: it is where you stand to call
+  // the Commission. It only goes away when the pilot is busy with something
+  // that is not a race.
   const otherBusiness = (!!scenario && !track) || (!track && !!play.id);
-  for (const r of gateRings) r.visible = !otherBusiness;
   if (otherBusiness) startRing.visible = false;
   const go = document.getElementById('btnGo');
   if (go) go.classList.toggle('off', !track && !!play.id);
