@@ -760,8 +760,10 @@ export class Airship {
       const vx = (n.p.x - n.prev.x) * 0.985, vy = (n.p.y - n.prev.y) * 0.985, vz = (n.p.z - n.prev.z) * 0.985;
       n.prev.copy(n.p);
       n.p.x += vx; n.p.y += vy - 9.8 * dt * dt * 6; n.p.z += vz;
-      // rope rests on whatever is beneath it — pavement or rooftops (A1, B4)
-      let floor = 0.15;
+      // rope rests on whatever is beneath it — pavement, hillside or rooftops
+      // (A1, B4). Over the sea it lies on the water and becomes the true
+      // stabilisateur the book makes of it.
+      let floor = this.groundUnder(n.p.x, n.p.z) + 0.15;
       for (const b of nearB) {
         if (Math.abs(n.p.x - b.x) < b.w / 2 && Math.abs(n.p.z - b.z) < b.d / 2) {
           floor = Math.max(floor, b.top + 0.15);
@@ -816,6 +818,16 @@ export class Airship {
   // where her envelope's centre sits when she is standing on the ground
   restHeight() { return -(this.lowY ?? this.keelY) + 0.25; }
 
+  /**
+   * The ground under a point. Paris and St. Louis are flat and answer 0; Monaco
+   * hands back a real heightfield, so the ship must land on the Tete de Chien at
+   * five hundred metres and not fall through it to the sea.
+   */
+  groundUnder(x, z) {
+    const g = this._env && this._env.groundAt;
+    return g ? g(x, z) : 0;
+  }
+
   // ------------------------------------------------------------ controls
   dropBallast() {
     if (this.bags > 0 && !this.wrecked) { this.bags--; this.events.push('ballast'); }
@@ -825,6 +837,7 @@ export class Airship {
   // ------------------------------------------------------------ physics
   update(dt, input, wind, env) {
     const P = this.spec.physics;
+    this._env = env;
     this._t += dt;
     if (this.wrecked) {
       // the gas escapes and the bag dies — "losing the remains of its gas
@@ -843,7 +856,7 @@ export class Airship {
       // -keelY * 0.4, a guess at the keel depth made before lowY existed, and
       // it put the wreck well below her own lowest timber: the basket sank
       // through the ground every time she came down hard.
-      const rest = this.restHeight();
+      const rest = this.groundUnder(this.pos.x, this.pos.z) + this.restHeight();
       if (this.pos.y < rest) { this.pos.y = rest; this.vel.set(0, 0, 0); this.landed = true; }
       this.updateRope(dt);
       this.updateTransforms(dt);
@@ -1048,8 +1061,9 @@ export class Airship {
     this.yawVel *= Math.pow(0.25, dt);
     this.yaw += this.yawVel * dt;
 
-    // ground contact (B9)
-    const keelClear = this.restHeight();
+    // ground contact (B9) — measured from the ground, which over Monaco is a
+    // mountain and not a plane
+    const keelClear = this.groundUnder(this.pos.x, this.pos.z) + this.restHeight();
     if (this.pos.y < keelClear) {
       if (this.vel.y < -6) { this.wreck('hardLanding'); return; }
       if (this.vel.y < -2.5) this.events.push('roughLanding');

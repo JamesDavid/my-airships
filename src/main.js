@@ -93,12 +93,11 @@ function spawnShip(specId, where = null) {
   live.setShip(specId);
   if (ship) ship.dispose();
   ship = new Airship(scene, SHIPS[specId]);
-  const y = ship.restHeight();
   if (where) {
-    ship.reset(new THREE.Vector3(where.x, Math.max(where.y, y), where.z), where.yaw);
+    ship.reset(new THREE.Vector3(where.x, Math.max(where.y, restAt(where.x, where.z)), where.z), where.yaw);
     ship.landed = false;
   } else {
-    ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
+    ship.reset(new THREE.Vector3(world.padPos.x, restAt(world.padPos.x, world.padPos.z), world.padPos.z), 0);
   }
   ship.eyeNear = measureEyeNear(ship);
   setCenter('', '');   // clear any wreck notice from the previous ship
@@ -793,7 +792,7 @@ function buildMenuButtons() {
         if (!ship.landed || race.state !== 'idle') {
           addMsg('notow', 'Land first — the men cannot catch a flying rope.', 0); return;
         }
-        ship.reset(new THREE.Vector3(spot.pos.x, ship.restHeight(), spot.pos.z), ship.yaw);
+        ship.reset(new THREE.Vector3(spot.pos.x, restAt(spot.pos.x, spot.pos.z), spot.pos.z), ship.yaw);
         toggleMenu(false);
         addMsg('tow', `The men walk her out by the guide rope to ${spot.name} — “as stable-boys lead a racehorse.”`, 0);
       });
@@ -2002,8 +2001,7 @@ function ordinal(n) {
 }
 
 function resetShip() {
-  const y = ship.restHeight();
-  ship.reset(new THREE.Vector3(world.padPos.x, y, world.padPos.z), 0);
+  ship.reset(new THREE.Vector3(world.padPos.x, restAt(world.padPos.x, world.padPos.z), world.padPos.z), 0);
   endTrack();
   clearRivals();
   editing = null;
@@ -2267,13 +2265,18 @@ function finishRace() {
 }
 
 // ---------------------------------------------------------------- scenarios
+/** Where the keel rests at (x, z) — over Monaco that is a hillside, not zero. */
+function restAt(x, z) {
+  return (world && world.groundAt ? world.groundAt(x, z) : 0) + ship.restHeight();
+}
+
 function scenCtx() {
   return {
     ship, world, addMsg, setCenter,
     wind: { x: wind.x, z: wind.z },     // so a scenario can set a pilot upwind
     place(x, y, z, yaw) {
       ship.reset(new THREE.Vector3(x, y, z), yaw);
-      ship.landed = y <= ship.restHeight() + 0.8;
+      ship.landed = y <= restAt(x, z) + 0.8;
     },
     // a line of faint hoops marking the way, each fading out as it is passed
     setRoute(points) {

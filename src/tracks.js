@@ -1,4 +1,5 @@
 import { placeLegacy } from './paris_geo.js';
+import { place as placeMC, groundAt as groundMC } from './monaco_geo.js';
 // storage can throw outright (iOS private browsing) — never let it stop a flight
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not saved */ } }
@@ -50,16 +51,25 @@ export const TRACKS = [
     })(),
   },
   {
-    id: 'harbor', location: 'monaco', laps: 2, v: 2,
+    id: 'harbor', location: 'monaco', laps: 2, v: 3,
     name: 'The Harbor Circuit',
     sub: 'the Casino terrace, over the Prince’s Palace — 2 laps',
-    gates: [
-      { x: 100, y: 18, z: 40, r: 16 },    // off the landing-stage
-      { x: 300, y: 16, z: -160, r: 16 },  // wave-top down the coast
-      { x: -75, y: 38, z: -295, r: 14 },  // the Casino terrace
-      { x: 250, y: 20, z: 120, r: 16 },   // back out over the bay
-      { x: -10, y: 82, z: 420, r: 15 },   // climb clear OVER the Prince's Palace
-    ],
+    // Hung off the places, like the gymkhana, and for the same reason: Monaco
+    // moved onto its true coordinates and real ground, and gates written out as
+    // numbers would still be threading a bay that was never the right shape.
+    // The heights are measured from what is under them, because the Rock is
+    // fifty metres up and the water is not.
+    gates: (() => {
+      const P = (id) => { const p = placeMC(id); return { x: p.x, z: p.z, g: groundMC(p.x, p.z) }; };
+      const st = P('stage'), pt = P('port'), cs = P('casino'), rk = P('rock'), oc = P('oceano');
+      return [
+        { x: st.x, y: 20, z: st.z, r: 18 },                           // off the landing-stage
+        { x: pt.x + 120, y: 18, z: pt.z + 90, r: 18 },                // wave-top across the bay
+        { x: cs.x + 40, y: cs.g + 34, z: cs.z + 30, r: 20 },          // the Casino terrace
+        { x: oc.x + 150, y: 22, z: oc.z + 120, r: 20 },               // out round the Rock's foot
+        { x: rk.x, y: rk.g + 40, z: rk.z, r: 18 },                    // clear OVER the palace
+      ];
+    })(),
   },
   {
     id: 'basin', location: 'stlouis', laps: 2, v: 2,

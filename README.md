@@ -19,7 +19,8 @@ public domain).
 - **Win the Deutsch Prize**: St. Cloud → round the Eiffel Tower → home, against the clock —
   the race he won on 19 October 1901 with 29 seconds to spare.
 - **Winter in Monaco**: launch from the aerodrome of La Condamine and run the coast to
-  Cap Martin, guide-roping low over the waves. Don't put her in the bay.
+  Cap Martin — eleven kilometres there and back — guide-roping low over the waves. Don't
+  put her in the bay.
 - **St. Louis, 1904**: the World's Fair grand prize that never happened — his proposed
   triangular pylon course, flown against rival dirigibles (Deutsch's *La Ville de Paris*
   among them).
@@ -136,6 +137,27 @@ courses, ships, or its own rules:
 ```
 node supabase/test-anticheat.mjs     # honest runs accepted, ten forgeries refused
 ```
+
+## Where the cities came from
+
+Nothing is placed by eye. Both cities are at **full scale** — a game metre is a
+metre — and everything in them comes through one projection and one table of real
+coordinates.
+
+**Paris** is `src/paris_geo.js` (the Eiffel Tower as the anchor) and
+`src/paris_streets.js`, 336 OpenStreetMap ways screened to 1901.
+
+**Monaco** is `src/monaco_geo.js`: the ground is NASA's SRTM by way of the AWS
+terrain tiles, on a 50 m grid, and it is the actual mountain — Mont Agel comes out
+at 1093 m against a surveyed 1085, the Trophy of Augustus at 487 against 480. The
+streets are 340 OpenStreetMap ways screened to 1902. The coast is *not* today's
+coast: Fontvieille, the Larvotto beaches, the outer digue and Mareterra are all
+made ground poured into the sea long after 1902, and they are masked back to
+water.
+
+The generators live in [`tools/`](tools/) and the method — including what the
+modern data gets wrong for 1902, and how it was checked — is written up in
+[`docs/PERIOD_NOTES.md`](docs/PERIOD_NOTES.md).
 
 ## The source material
 

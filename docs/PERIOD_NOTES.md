@@ -85,15 +85,100 @@ Concourse** at the western edge hosted the airship trials. → all modeled:
 palace fan with tangent orientation, lagoon avenues with water, Pike attraction
 rows with entrance arch, monument, cascades.
 
-## Monaco street plan (implemented)
+## Monaco, from the survey (implemented)
 
-`src/monaco_plan.js`: Boulevard de la Condamine along the waterfront (the
-aerodrome's address), Rue Grimaldi behind it, the Avenue de Monte-Carlo and
-Avenue de la Costa climbing to the Casino, the Boulevard des Moulins through
-Monte Carlo, the Rampe Major up the Rock (Prince's Palace with its corner
-towers, the Cathedral), Sainte-Dévote's chapel in her ravine, the
-Nice–Ventimiglia railway cut along the slope, and the first jetty works of
-Port Hercule.
+Monaco used to be eight hand-placed cones and an invented street skeleton on a
+half-scale frame, and the errors were the same kind Paris had before it was
+re-surveyed: the Tête de Chien stood two kilometres north of the mountain it
+actually is, and the palace four hundred metres east of the Rock. It is now
+built from real data, at full scale, in the same frame as Paris — +x east,
+−z north, one metre to the unit.
+
+**Terrain — `src/monaco_geo.js`.** NASA's SRTM, by way of the AWS terrain tiles
+(terrarium encoding, zoom 14, no key and no auth):
+
+```
+https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png
+elevation = (R * 256 + G + B / 256) - 32768
+```
+
+A 7×7 block of tiles is resampled onto a 50 m grid, 149 × 125, over 7.4 km by
+6.2 km, and shipped as base64 Int16. It is the actual mountain, checked against
+the surveyed heights:
+
+| | surveyed | in the game |
+|---|---|---|
+| Mont Agel | 1085 m | 1093 |
+| Tête de Chien | 573 m | 534 (a sharp summit on a 50 m grid) |
+| Trophy of Augustus, La Turbie | 480 m | 487 |
+| Casino terrace | ~50 m | 50 |
+| the Rock | ~50–60 m | 47 |
+| the sea | 0 | 0 |
+
+**The coast is not the modern coast**, and this is where the work was. Two
+things had to be undone:
+
+1. *The SRTM's ocean mask is generous.* It clamps the flat quarter of La
+   Condamine and the shore strip under Monte Carlo to zero along with the water
+   — which put the aerodrome in the bay. OpenStreetMap's own `natural=coastline`
+   was tried as a replacement waterline and abandoned: the ways around Monaco do
+   not stitch into one clean ring (harbour, digue and modern basins interleave),
+   and point-in-polygon over the result came out *speckled*, alternating land and
+   water across the same quarter every fifty metres. Sidedness against the
+   nearest piece is worse — inside the mouth of a harbour the nearest piece is a
+   quay pointing the other way. What is used instead cannot come apart: **where a
+   street ran, there was land.** The period street plan floors the ground in a
+   42 m corridor along itself.
+
+2. *Monaco has grown a long way into the sea since 1902.* Fontvieille (1966–73),
+   the Larvotto beaches (1960s), the outer digue (2002) and Mareterra (2024) are
+   all in both the DEM and the modern coastline. They are masked back to water,
+   guarded by a height test so a slack polygon can never bite into the Rock, and
+   no street is laid on them. Port Hercule, which a 30 m surface model bridges as
+   though it were solid ground, is dug back out.
+
+   The result was checked against 204 probe points, asking OpenStreetMap for
+   buildings within 55 m of each: 177 agree. Of the 27 that do not, most are
+   *meant* to — they are today's buildings standing on ground that did not exist,
+   in Fontvieille, on the digue and out at Le Portier.
+
+The sea is written into the grid as a shelf three metres down rather than a flat
+zero. It costs nothing and it buys the coastline: bilinear between a five-metre
+quay and a −3 seabed crosses the waterline inside the cell, instead of stepping
+round the grid in 50 m blocks.
+
+**Streets — `src/monaco_streets.js`.** OpenStreetMap, screened to 1902. Monaco
+grew in three bursts and the screen follows them: the Rock is medieval, La
+Condamine and Monte Carlo are Charles III's (1860–1889), and everything named
+for a twentieth-century person, driven through the mountain, or standing on made
+ground is later. 340 ways survive of the 2,540 OSM offers, under 95 period
+names. The lanes on the Rock come in as *footways* — it is closed to carriages
+now — and had to be asked for separately; leaving them out lost the whole of
+Monaco-Ville, palace and cathedral included. They are medieval alignments under
+modern names, and it is the alignment being placed.
+
+**Places.** Every landmark comes out of OpenStreetMap by name. None is typed
+from memory, because typing them from memory is exactly what put the Tête de
+Chien on the wrong mountain.
+
+**Regenerating.** `tools/fetch_monaco_dem.py`, `tools/fetch_monaco_osm.py`,
+`tools/gen_monaco.py` — see `tools/README.md`. The generator prints what it kept
+and what it threw away; that output is the record.
+
+**What the ground being real changed elsewhere.** `Airship.groundUnder()` — ground
+contact, the wreck's resting height and the guide rope all measure from the
+hill instead of from zero. `addBuildingMeshes` takes a base `y`, so a house on
+the Boulevard des Moulins has sixty metres of rock under it. `makeClouds` takes
+a box, a base height and a ground function, because the Paris defaults put every
+cloud inside the Tête de Chien and every cloud shadow inside the hill. The
+Harbor Circuit's gates and the Bay of Monaco scenario hang off `place()` rather
+than being written out, for the same reason the Paris gymkhana does.
+
+**Still hand-modelled**, on true positions and true ground: the palace, the
+cathedral, the Musée océanographique (in its scaffolding — begun 1899, not
+finished until 1910), the Casino, the Salle Garnier, the Hôtel de Paris, the
+Hermitage, the two forts, the Trophy of Augustus, the aerodrome and its
+landing-stage. Building *footprints* from OSM are not done here or in Paris.
 
 ## Sources
 

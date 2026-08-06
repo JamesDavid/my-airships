@@ -209,9 +209,16 @@ export const SCENARIOS = [
     location: 'monaco', shipId: 'no6',
     brief: 'The balloon left the aerodrome slack, and the sun is driving the gas to the up-pointed stem. She will rear like a steed. Nurse her back to the landing-stage — the bay is waiting to swallow her.',
     setup(ctx) {
-      ctx.place(260, 90, -320, -2.16); // facing the stage, wind at your back
+      // Asked of the world rather than typed: the stage is where monaco_geo.js
+      // says the Prince built it, and she starts out over the bay with the wind
+      // at her back, wherever the wind happens to be blowing that day.
+      const S = ctx.world.startRing;
+      const w = ctx.world.windBase;
+      const wl = Math.hypot(w.x, w.z) || 1;
+      const px = S.x - (w.x / wl) * 900, pz = S.z - (w.z / wl) * 900;
+      ctx.place(px, 90, pz, Math.atan2(-(S.z - pz), S.x - px));   // facing the stage
       ctx.ship.gas = 90;
-      ctx.setZone(V(40, 12, 0), 45);
+      ctx.setZone(S.clone(), 55);
       ctx.setCenter('February 14th, 1902', 'Imperfectly inflated, sinking — the wind is behind you. Spend the sand and run for the stage.');
     },
     tick(ctx, dt) {

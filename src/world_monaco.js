@@ -3,121 +3,220 @@
 // of La Condamine with its giant doors, the landing-stage over the surf, and the
 // coastal run toward Cap Martin. Over the sea the guide rope becomes the perfect
 // stabilizer — and landing IN the sea ends the experiments (Ch. XX).
+//
+// THE GROUND IS REAL. It was hand-modelled cones until now — eight of them, and
+// a Tete de Chien invented at a bearing the actual mountain does not stand on.
+// It is now NASA's SRTM, screened back to 1902, at full scale: see
+// monaco_geo.js for how, and what had to be undone (Monaco has grown a long way
+// into the sea since). The streets are OpenStreetMap's, screened the same way.
+// Nothing here is placed by eye; everything comes through place() or geo().
 
 import * as THREE from 'three';
-import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface, windify, windMats, makeFacadeTexture, generateFrontages, addBuildingMeshes } from './world.js';
-import { STREETS_MC, inSiteMC } from './monaco_plan.js';
+import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface,
+         windify, windMats, generateFrontages, addBuildingMeshes } from './world.js';
+import { STREETS_MC } from './monaco_streets.js';
+import { HF, place, groundAt, groundRaw, isSea, slopeAt } from './monaco_geo.js';
+import { inSiteMC } from './monaco_plan.js';
 
-const PAD = new THREE.Vector3(40, 2, 0);
-const START = new THREE.Vector3(120, 42, 0);
-// Cap Martin at half real scale — held far enough off the headland that the
-// whole ring is over open water (the massif's collider reaches x 550, z -2570)
-const TURN = new THREE.Vector3(620, 58, -2520);
-const SHORE_X = 26;
+/** A named place as a point on the actual ground. */
+function at(id, lift = 0) {
+  const p = place(id);
+  return new THREE.Vector3(p.x, groundAt(p.x, p.z) + lift, p.z);
+}
 
 export function buildWorldMonaco(scene) {
   windMats.length = 0;
-  // ---------- sky, light, fog (brighter, bluer Mediterranean morning) ----------
-  scene.fog = new THREE.FogExp2(0xdfd4bc, 0.00038);
+  const rand = mulberry32(31);
+
+  const PAD = at('aerodrome');                       // the shed on the boulevard
+  const START = at('stage', 40);                     // the ring over the stage
+
+  /**
+   * Open water off a point, at least `r` metres out and as near the wanted
+   * bearing as the coast allows. Asked of the heightfield rather than guessed:
+   * guessing put the Cap Martin turn on the headland itself.
+   */
+  function offshore(p, r, prefer) {
+    let best = null;
+    for (let ring = r; ring <= r * 2.6; ring += 40) {
+      for (let k = 0; k < 72; k++) {
+        const a = (k / 72) * Math.PI * 2;
+        const x = p.x + Math.cos(a) * ring, z = p.z + Math.sin(a) * ring;
+        if (!isSea(x, z)) continue;
+        // it must be clear water, not a notch in the rocks
+        let clear = true;
+        for (let j = 0; j < 8 && clear; j++) {
+          const b = (j / 8) * Math.PI * 2;
+          if (!isSea(x + Math.cos(b) * 120, z + Math.sin(b) * 120)) clear = false;
+        }
+        if (!clear) continue;
+        const score = Math.abs(((a - prefer + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (!best || score > best.score) best = { x, z, score };
+      }
+      if (best) break;
+    }
+    return best || { x: p.x, z: p.z };
+  }
+
+  const cm = place('capmartin');
+  // the turn is held off the headland, over open water, where the escort ran
+  const turnPt = offshore(cm, 320, Math.atan2(cm.z - START.z, cm.x - START.x));
+  const TURN = new THREE.Vector3(turnPt.x, 58, turnPt.z);
+
+  // ---------- sky, light, fog (a bright, blue Mediterranean morning) ----------
+  scene.fog = new THREE.FogExp2(0xdfd4bc, 0.00026);
   const sunDir = new THREE.Vector3(0.9, 0.22, -0.35).normalize();
   const sky = makePhysicalSky(scene, sunDir, { rayleigh: 1.8, turbidity: 4 });
-  const hemi = new THREE.HemisphereLight(0xfdeccd, 0x5f6a5a, 0.8);
-  scene.add(hemi);
+  scene.add(new THREE.HemisphereLight(0xfdeccd, 0x5f6a5a, 0.8));
   const sun = makeShadowSun(scene, sunDir, 2.8);
 
-  // ---------- the Mediterranean, alive and reflecting ----------
-  const sea = makeWaterSurface(new THREE.PlaneGeometry(6000, 6000), sunDir, 0x1c3a52);
+  // ---------- the Mediterranean ----------
+  const sea = makeWaterSurface(new THREE.PlaneGeometry(24000, 24000), sunDir, 0x1c3a52);
   sea.rotation.x = -Math.PI / 2;
-  sea.position.set(SHORE_X + 3000, 0.1, 0);
+  sea.position.set(1600, 0.0, -1700);
   scene.add(sea);
 
-  // ---------- the land: a rising Riviera shelf ----------
-  const land = new THREE.Mesh(new THREE.PlaneGeometry(3200, 6000),
-    new THREE.MeshLambertMaterial({ color: 0x968f6e }));
-  land.rotation.x = -Math.PI / 2;
-  land.position.set(SHORE_X - 1600, 0.05, 0);
-  land.receiveShadow = true;
-  scene.add(land);
-  // pebble shore strip
-  const shore = new THREE.Mesh(new THREE.PlaneGeometry(18, 6000),
-    new THREE.MeshLambertMaterial({ color: 0xb5aa8e }));
-  shore.rotation.x = -Math.PI / 2;
-  shore.position.set(SHORE_X - 2, 0.14, 0);
-  scene.add(shore);
+  // ---------- the mountain ----------
+  // One mesh over the whole heightfield, at twice its resolution so the cliffs
+  // read as cliffs. It is built on groundRaw, which goes on down under the
+  // water instead of stopping flat at zero: the shore then falls where the
+  // interpolation crosses the waterline, rather than stepping round the grid in
+  // fifty-metre blocks — and there is nothing left to z-fight the sea plane.
+  const SUB = 2;
+  const gx = (HF.nx - 1) * SUB, gz = (HF.nz - 1) * SUB;
+  const step = HF.step / SUB;
+  const terrGeo = new THREE.PlaneGeometry(gx * step, gz * step, gx, gz);
+  terrGeo.rotateX(-Math.PI / 2);
+  const tp = terrGeo.attributes.position;
+  const colors = new Float32Array(tp.count * 3);
+  const rock = new THREE.Color(0x8a8674), scrubC = new THREE.Color(0x6c7a4e);
+  const highC = new THREE.Color(0x9a9382), shingle = new THREE.Color(0xb6ab8f);
+  const seabed = new THREE.Color(0x2e4a52);
+  const cx0 = HF.x0 + (gx * step) / 2, cz0 = HF.z0 + (gz * step) / 2;
+  const c = new THREE.Color();
+  for (let i = 0; i < tp.count; i++) {
+    const wx = tp.getX(i) + cx0, wz = tp.getZ(i) + cz0;
+    const h = groundRaw(wx, wz);
+    tp.setY(i, h);
+    if (h <= 0.02) c.copy(seabed);
+    else {
+      const s = Math.min(1, slopeAt(wx, wz) / 0.75);       // bare where it is steep
+      // shingle only at the water's edge — a flat band up to seven metres made
+      // the whole of La Condamine read as beach
+      c.copy(shingle).lerp(scrubC, Math.min(1, Math.max(0, (h - 2.5) / 9)));
+      c.lerp(rock, s);
+      if (h > 300) c.lerp(highC, Math.min(1, (h - 300) / 500));
+    }
+    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+  }
+  terrGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  terrGeo.computeVertexNormals();
+  const terrain = new THREE.Mesh(terrGeo,
+    new THREE.MeshLambertMaterial({ vertexColors: true }));
+  terrain.position.set(cx0, 0, cz0);
+  terrain.receiveShadow = true;
+  scene.add(terrain);
+
+  // A skirt round the edge of the survey. Without it the world ends in a
+  // vertical cliff of nothing at Cap d'Ail and under Mont Agel — the fog hides
+  // it from a pilot at sea level, but not from anyone who climbs.
+  {
+    const x0 = HF.x0, x1 = HF.x0 + (HF.nx - 1) * HF.step;
+    const z0 = HF.z0, z1 = HF.z0 + (HF.nz - 1) * HF.step;
+    const pos = [], idx = [];
+    const edge = [];
+    const N = 90;
+    for (let i = 0; i <= N; i++) edge.push([x0 + (x1 - x0) * (i / N), z0]);
+    for (let i = 1; i <= N; i++) edge.push([x1, z0 + (z1 - z0) * (i / N)]);
+    for (let i = 1; i <= N; i++) edge.push([x1 - (x1 - x0) * (i / N), z1]);
+    for (let i = 1; i <= N; i++) edge.push([x0, z1 - (z1 - z0) * (i / N)]);
+    for (const [ex, ez] of edge) {
+      pos.push(ex, groundRaw(ex, ez), ez);
+      pos.push(ex, -240, ez);
+    }
+    for (let i = 0; i < edge.length - 1; i++) {
+      const b = i * 2;
+      idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    scene.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({
+      color: 0x6d6a5c, side: THREE.DoubleSide })));
+  }
 
   const buildings = [];
 
-  // ---------- the mountains that shelter the bay ----------
-  const rand = mulberry32(31);
-  const mountains = [
-    [-420, -500, 380, 300], [-520, 100, 460, 420], [-380, 600, 340, 260],
-    [-650, -250, 520, 380], [-300, -900, 300, 220], [-350, 1000, 320, 240],
-    [-700, 700, 540, 300], [-250, 260, 260, 200],
-  ];
-  const rockMat = new THREE.MeshLambertMaterial({ color: 0x7b7f66 });
-  for (const [x, z, r, h] of mountains) {
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 14), rockMat);
-    cone.position.set(x, h / 2, z);
-    cone.rotation.y = rand() * 3;
-    cone.castShadow = cone.receiveShadow = true;
-    scene.add(cone);
-    buildings.push({ x, z, w: r * 0.9, d: r * 0.9, h: h * 0.55, top: h * 0.55 });
-  }
-
-  // the Tete de Chien — the great promontory that overlooks the principality
-  const tete = new THREE.Group();
-  const teteBase = new THREE.Mesh(new THREE.ConeGeometry(420, 520, 16), rockMat);
-  teteBase.position.y = 260; tete.add(teteBase);
-  const cliff = new THREE.Mesh(new THREE.CylinderGeometry(90, 130, 190, 10),
-    new THREE.MeshLambertMaterial({ color: 0x8a8874 }));
-  cliff.position.set(140, 330, 0); tete.add(cliff);
-  tete.position.set(-620, 0, -60);
-  tete.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
-  scene.add(tete);
-  buildings.push({ x: -620, z: -60, w: 620, d: 620, h: 300, top: 300 });
-
-  // Monaco rock (south headland) and Cap Martin (down the coast)
-  const rock = new THREE.Mesh(new THREE.CylinderGeometry(120, 160, 60, 12), rockMat);
-  rock.position.set(-30, 30, 420); scene.add(rock);
-  buildings.push({ x: -30, z: 420, w: 220, d: 220, h: 62, top: 62 });
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(240, 100, 12), rockMat);
-  cap.position.set(400, 50, -2720); scene.add(cap);
-  buildings.push({ x: 400, z: -2720, w: 300, d: 300, h: 66, top: 66 });
-
-  // ---------- the town along its real streets (monaco_plan.js) ----------
-  for (const st of STREETS_MC) {
-    const col2 = st.rail ? 0x4a4238 : st.dirt ? 0x8f8a6a : 0x9a9285;
-    for (let i = 0; i < st.pts.length - 1; i++) {
-      const [ax, az] = st.pts[i], [bx2, bz2] = st.pts[i + 1];
-      const strip = new THREE.Mesh(
-        new THREE.PlaneGeometry(Math.hypot(bx2 - ax, bz2 - az), st.w),
-        new THREE.MeshLambertMaterial({ color: col2 }));
-      strip.rotation.x = -Math.PI / 2;
-      strip.rotation.z = -Math.atan2(bz2 - az, bx2 - ax);
-      strip.position.set((ax + bx2) / 2, 0.12, (az + bz2) / 2);
-      scene.add(strip);
+  // ---------- the streets, laid on the ground they climb ----------
+  // One merged mesh, as in Paris. Every quad is DOUBLE-SIDED here rather than
+  // wound by hand: a road draped over a hillside has no single "up", and this
+  // project has twice lost an entire road network to reversed winding, once in
+  // Paris and once in the Seine before it.
+  {
+    const pos = [], col = [], idx = [];
+    const cRoad = new THREE.Color(0x9a9285), cDirt = new THREE.Color(0x8f8a6a);
+    const cRail = new THREE.Color(0x4a4238);
+    for (const st of STREETS_MC) {
+      const tint = st.rail ? cRail : st.dirt ? cDirt : cRoad;
+      const hw = st.w / 2;
+      for (let i = 0; i < st.pts.length - 1; i++) {
+        const [ax, az] = st.pts[i], [bx, bz] = st.pts[i + 1];
+        const len = Math.hypot(bx - ax, bz - az);
+        if (len < 0.5) continue;
+        const dx = (bx - ax) / len, dz = (bz - az) / len;
+        const nx = -dz, nz = dx;
+        // cut long runs up so the roadway follows the hill instead of spanning it
+        const n = Math.max(1, Math.ceil(len / 12));
+        for (let k = 0; k < n; k++) {
+          const t0 = k / n, t1 = (k + 1) / n;
+          for (const t of [t0, t1]) {
+            const px = ax + (bx - ax) * t, pz = az + (bz - az) * t;
+            for (const s of [-1, 1]) {
+              const qx = px + nx * hw * s, qz = pz + nz * hw * s;
+              pos.push(qx, groundAt(qx, qz) + 0.45, qz);
+              col.push(tint.r, tint.g, tint.b);
+            }
+          }
+          const b = pos.length / 3 - 4;
+          idx.push(b, b + 2, b + 1, b + 2, b + 3, b + 1);
+        }
+      }
     }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const roads = new THREE.Mesh(g, new THREE.MeshLambertMaterial({
+      vertexColors: true, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+    }));
+    roads.receiveShadow = true;
+    scene.add(roads);
   }
+
+  // ---------- the town, along the streets it grew on ----------
   const cream = ['#e3d3b5', '#dcc4a8', '#e8dcc2', '#d9c8ae', '#e2c8b0'];
-  const canPlaceMC = (x, z) => !inSiteMC(x, z) && x < 22;
+  const canPlaceMC = (x, z) =>
+    !inSiteMC(x, z) && !isSea(x, z) && slopeAt(x, z) < 0.62;
   const town = generateFrontages(STREETS_MC, canPlaceMC, rand,
     { hMin: 9, hVar: 8, wMin: 14, wVar: 9, dMin: 12, dVar: 7 });
-  // the old town packed on the Rock's shoulder
-  for (let gx = -80; gx >= -190; gx -= 28) {
-    for (let gz = 250; gz <= 560; gz += 28) {
-      if (rand() < 0.35) continue;
-      const x = gx + (rand() - 0.5) * 8, z = gz + (rand() - 0.5) * 8;
-      if (inSiteMC(x, z)) continue;
-      const w = 14 + rand() * 8, d = 14 + rand() * 8, h = 8 + rand() * 6, r = rand();
-      town.push({ x, z, w, d, h, rw: w, rd: d, ry: rand() * 0.5, r, nChim: 1 });
-    }
-  }
-  addBuildingMeshes(scene, town, (b, col3) => col3.set(cream[Math.floor(b.r * cream.length) % cream.length]));
+  for (const b of town) b.y = groundAt(b.x, b.z);
+  addBuildingMeshes(scene, town, (b, c3) => c3.set(cream[Math.floor(b.r * cream.length) % cream.length]));
   for (const b of town) buildings.push(b);
 
-  // the Prince's Palace on the Rock, the Cathedral, and Sainte-Dévote
-  const palace = new THREE.Group();
+  // ---------- what stood on the Rock ----------
   const pMat = new THREE.MeshLambertMaterial({ color: 0xe6d9c0 });
+  const put = (grp, id, extra = 0) => {
+    const p = at(id, extra);
+    grp.position.copy(p);
+    grp.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    scene.add(grp);
+    return p;
+  };
+
+  const palace = new THREE.Group();
   const pBody = new THREE.Mesh(new THREE.BoxGeometry(46, 14, 30), pMat);
   pBody.position.y = 7; palace.add(pBody);
   for (const [tx, tz] of [[-20, -12], [20, -12], [-20, 12], [20, 12]]) {
@@ -127,37 +226,53 @@ export function buildWorldMonaco(scene) {
       new THREE.MeshLambertMaterial({ color: 0x8a3a28 }));
     cap.position.set(tx, 22.5, tz); palace.add(cap);
   }
-  palace.position.set(-55, 60, 400);
-  palace.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  scene.add(palace);
+  const pPos = put(palace, 'rock');
+  buildings.push({ x: pPos.x, z: pPos.z, w: 46, d: 30, y: pPos.y, h: 24, top: pPos.y + 27 });
+
+  // the cathedral, still building — consecrated 1903, a year after he flew here
   const cath = new THREE.Group();
-  const cBody2 = new THREE.Mesh(new THREE.BoxGeometry(30, 12, 16), pMat);
-  cBody2.position.y = 6; cath.add(cBody2);
+  const cBody = new THREE.Mesh(new THREE.BoxGeometry(30, 12, 16), pMat);
+  cBody.position.y = 6; cath.add(cBody);
   const cDome = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 8),
     new THREE.MeshLambertMaterial({ color: 0xb9ad93 }));
   cDome.position.y = 14; cDome.scale.y = 1.1; cath.add(cDome);
-  cath.position.set(0, 60, 455);
-  cath.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  scene.add(cath);
-  const chapel = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 7),
-    new THREE.MeshLambertMaterial({ color: 0xe8dcc2 }));
-  chapel.position.set(-95, 4, 42);
-  chapel.castShadow = true;
-  scene.add(chapel);
-  buildings.push({ x: -95, z: 42, w: 10, d: 7, h: 8, top: 9 });
+  const caPos = put(cath, 'cathedral');
+  buildings.push({ x: caPos.x, z: caPos.z, w: 30, d: 16, y: caPos.y, h: 12, top: caPos.y + 20 });
 
-  // the first jetty works of Port Hercule
-  const jetty = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 90),
-    new THREE.MeshLambertMaterial({ color: 0xa39a86 }));
-  jetty.position.set(90, 1, 330);
-  jetty.rotation.y = -0.5;
-  scene.add(jetty);
-  buildings.push({ x: 90, z: 330, w: 50, d: 90, h: 3, top: 4 });
+  // Albert I's Musee oceanographique, begun 1899 and not finished until 1910 —
+  // in 1902 the great sea-facing wall was rising out of the cliff in scaffold
+  const oc = new THREE.Group();
+  const ocBody = new THREE.Mesh(new THREE.BoxGeometry(34, 26, 20), pMat);
+  ocBody.position.y = 13; oc.add(ocBody);
+  for (let i = 0; i < 5; i++) {                       // the scaffold, still up
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 30, 5),
+      new THREE.MeshLambertMaterial({ color: 0x7a6242 }));
+    pole.position.set(-17 - 1.5, 15, -8 + i * 4); oc.add(pole);
+  }
+  const ocPos = put(oc, 'oceano');
+  buildings.push({ x: ocPos.x, z: ocPos.z, w: 34, d: 20, y: ocPos.y, h: 26, top: ocPos.y + 28 });
 
-  // the Casino (Garnier) — cream palace, seaside cupola towers, the 1900 clock
-  const casino = new THREE.Group();
+  const chapel = new THREE.Group();
+  chapel.add(new THREE.Mesh(new THREE.BoxGeometry(10, 8, 7),
+    new THREE.MeshLambertMaterial({ color: 0xe8dcc2 })));
+  const chPos = put(chapel, 'stedevote', 4);
+  buildings.push({ x: chPos.x, z: chPos.z, w: 10, d: 7, y: chPos.y - 4, h: 8, top: chPos.y + 4 });
+
+  // Fort Antoine on the Rock's north point, and the fort on the Tete de Chien
+  for (const [id, r, h] of [['fortantoine', 16, 7], ['forttete', 26, 9]]) {
+    const f = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 8),
+      new THREE.MeshLambertMaterial({ color: 0x8f8574 }));
+    ring.position.y = h / 2; f.add(ring);
+    const p = put(f, id);
+    buildings.push({ x: p.x, z: p.z, w: r * 2, d: r * 2, y: p.y, h, top: p.y + h });
+  }
+
+  // ---------- Monte Carlo ----------
   const creamMat = new THREE.MeshLambertMaterial({ color: 0xe8dcc2 });
   const copper = new THREE.MeshPhongMaterial({ color: 0x5f8a74, shininess: 60 });
+  // Garnier's Casino — cream palace, two seaside cupola towers, the clock
+  const casino = new THREE.Group();
   const cBase = new THREE.Mesh(new THREE.BoxGeometry(54, 18, 32), creamMat);
   cBase.position.y = 9; casino.add(cBase);
   for (const s of [-1, 1]) {
@@ -171,19 +286,31 @@ export function buildWorldMonaco(scene) {
   const clock = new THREE.Mesh(new THREE.CircleGeometry(2.2, 12),
     new THREE.MeshLambertMaterial({ color: 0xf4eee0, emissive: 0x5a5648 }));
   clock.position.set(27.1, 12, 0); clock.rotation.y = Math.PI / 2; casino.add(clock);
-  casino.position.set(-130, 0, -300);
-  casino.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  scene.add(casino);
-  buildings.push({ x: -130, z: -300, w: 54, d: 32, h: 24, top: 24 });
+  const csPos = put(casino, 'casino');
+  buildings.push({ x: csPos.x, z: csPos.z, w: 54, d: 32, y: csPos.y, h: 24, top: csPos.y + 24 });
 
-  // terraced hotels stepping down the Monte Carlo height to the port
-  for (let tI = 0; tI < 3; tI++) {
-    const terr = new THREE.Mesh(new THREE.BoxGeometry(20, 8 + tI * 6, 130), creamMat);
-    terr.position.set(-38 - tI * 26, (8 + tI * 6) / 2, -240);
-    terr.castShadow = terr.receiveShadow = true;
-    scene.add(terr);
-    buildings.push({ x: terr.position.x, z: -240, w: 20, d: 130, h: 8 + tI * 6, top: 8 + tI * 6 });
+  // the Salle Garnier alongside it, the Hotel de Paris and the Hermitage
+  for (const [id, w, d, h] of [['opera', 30, 22, 20], ['hoteldeparis', 40, 26, 26],
+                               ['hermitage', 36, 24, 24]]) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), creamMat);
+    body.position.y = h / 2; g.add(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 3.5, d * 0.9), copper);
+    roof.position.y = h + 1.6; g.add(roof);
+    const p = put(g, id);
+    buildings.push({ x: p.x, z: p.z, w, d, y: p.y, h, top: p.y + h + 3.5 });
   }
+
+  // the Trophy of Augustus above La Turbie, standing there since 6 BC
+  const troph = new THREE.Group();
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(9, 10, 18, 12),
+    new THREE.MeshLambertMaterial({ color: 0xc9bda0 }));
+  drum.position.y = 17; troph.add(drum);
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(26, 16, 26),
+    new THREE.MeshLambertMaterial({ color: 0xbfb298 }));
+  plinth.position.y = 8; troph.add(plinth);
+  const trPos = put(troph, 'trophee');
+  buildings.push({ x: trPos.x, z: trPos.z, w: 26, d: 26, y: trPos.y, h: 26, top: trPos.y + 26 });
 
   // ---------- the aerodrome of La Condamine, with its giant doors ----------
   const hangar = new THREE.Group();
@@ -193,79 +320,112 @@ export function buildWorldMonaco(scene) {
   const hRoof = new THREE.Mesh(new THREE.BoxGeometry(60, 2.2, 15),
     new THREE.MeshLambertMaterial({ color: 0x8a6a4a }));
   hRoof.position.set(-22, 17, 0); hangar.add(hRoof);
-  // the famous doors, each 15 m tall — rolled apart by two small princes
+  // the famous doors, each fifteen metres tall, rolled apart by two small princes
   for (const s of [-1, 1]) {
     const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 15, 5.6),
       new THREE.MeshLambertMaterial({ color: 0x4a3a2c }));
     door.position.set(7.5, 7.5, s * 5.6);
     hangar.add(door);
   }
-  hangar.position.set(-30, 0, 0);
-  scene.add(hangar);
-  buildings.push({ x: -52, z: 0, w: 58, d: 13, h: 18, top: 18 });
+  // it faced the water, so she could be walked straight out to the stage
+  const stagePos = place('stage');
+  hangar.rotation.y = -Math.atan2(stagePos.z - PAD.z, stagePos.x - PAD.x);
+  const hPos = put(hangar, 'aerodrome');
+  buildings.push({ x: hPos.x - 22, z: hPos.z, w: 58, d: 15, y: hPos.y, h: 18, top: hPos.y + 18 });
 
   // "It will be enough to build a landing-stage on the sea side of the wall at
   // the level of the boulevard" — twelve days' work, after the first launch
   // nearly pitched him out of the basket over the wall's four-metre drop
-  const stage = new THREE.Mesh(new THREE.BoxGeometry(46, 1.6, 26),
+  const stg = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(46, 1.6, 26),
     new THREE.MeshLambertMaterial({ color: 0x9a7d54 }));
-  stage.position.set(38, 1.2, 0);
-  scene.add(stage);
-  for (let i = 0; i < 8; i++) {
-    const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 4, 6),
+  deck.position.y = 4.2; stg.add(deck);
+  for (let i = 0; i < 12; i++) {
+    const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 8, 6),
       new THREE.MeshLambertMaterial({ color: 0x6b5236 }));
-    pile.position.set(24 + (i % 4) * 10, -0.5, i < 4 ? -11 : 11);
-    scene.add(pile);
+    pile.position.set(-20 + (i % 6) * 8, 0.4, i < 6 ? -11 : 11); stg.add(pile);
+  }
+  put(stg, 'stage');
+  // the deck is dry footing amid the surf — see isWater below
+  const STAGE = { x: stagePos.x, z: stagePos.z, w: 46, d: 26 };
+
+  // the sea wall it was built over, and the electric tramcar tracks behind it —
+  // "From the side walk it was only waist high, but on the other side of it the
+  // surf rolled over pebbles from four to five metres below."
+  {
+    const bd = STREETS_MC.filter((s) => s.name === 'Boulevard Albert 1er');
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0xbdb3a0 });
+    const railMat = new THREE.MeshPhongMaterial({ color: 0x6b6459, shininess: 80 });
+    for (const st of bd) {
+      for (let i = 0; i < st.pts.length - 1; i++) {
+        const [ax, az] = st.pts[i], [bx, bz] = st.pts[i + 1];
+        const len = Math.hypot(bx - ax, bz - az);
+        if (len < 2) continue;
+        const ang = -Math.atan2(bz - az, bx - ax);
+        const nx = -(bz - az) / len, nz = (bx - ax) / len;
+        const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        // the wall stands on the seaward kerb — whichever side that is here
+        const side = isSea(mx + nx * 22, mz + nz * 22) ? 1 : -1;
+        const wx = mx + nx * (st.w / 2 + 1) * side, wz = mz + nz * (st.w / 2 + 1) * side;
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(len, 5.2, 1.6), wallMat);
+        wall.position.set(wx, groundAt(wx, wz) + 0.4, wz);
+        wall.rotation.y = ang; wall.castShadow = true;
+        scene.add(wall);
+        for (const off of [-0.9, 0.9]) {              // the tramway, two rails
+          const rx = mx + nx * off * side * -1, rz = mz + nz * off * side * -1;
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.2, 0.16), railMat);
+          rail.position.set(rx, groundAt(rx, rz) + 0.6, rz);
+          rail.rotation.y = ang; scene.add(rail);
+        }
+      }
+    }
   }
 
-  // ---------- the waterfront as the book describes it ----------
-  // "The new aerodrome rose on the Boulevard de la Condamine, just across the
-  // electric tramcar tracks from the sea wall… From the side walk it was only
-  // waist high, but on the other side of it the surf rolled over pebbles from
-  // four to five metres below."
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0xbdb3a0 });
-  const seaWall = new THREE.Mesh(new THREE.BoxGeometry(2.2, 6.4, 300), wallMat);
-  seaWall.position.set(SHORE_X - 1, 1.6, 0);      // waist high above the boulevard…
-  seaWall.castShadow = true;
-  scene.add(seaWall);
-  // …and the pebble beach four to five metres below it, on the sea side
-  const pebbles = new THREE.Mesh(new THREE.PlaneGeometry(16, 300),
-    new THREE.MeshLambertMaterial({ color: 0x9b9384 }));
-  pebbles.rotation.x = -Math.PI / 2;
-  pebbles.position.set(SHORE_X + 7, 0.2, 0);
-  scene.add(pebbles);
-
-  // the electric tramway along the Condamine, between hangar and wall
-  const railMat = new THREE.MeshPhongMaterial({ color: 0x6b6459, shininess: 80 });
-  for (const rz of [-0.72, 0.72]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 300), railMat);
-    rail.position.set(SHORE_X - 6 + rz, 0.28, 0);
-    scene.add(rail);
+  // ---------- olive scrub on the slopes ----------
+  const scrub = [];
+  for (let i = 0; i < 1400; i++) {
+    const x = -1900 + rand() * 6800, z = -3600 + rand() * 4600;
+    const h = groundAt(x, z);
+    if (h < 3 || h > 620 || slopeAt(x, z) > 0.85) continue;
+    if (town.some((b) => Math.abs(b.x - x) < b.w * 0.7 && Math.abs(b.z - z) < b.d * 0.7)) continue;
+    scrub.push({ x, y: h, z, s: 1.8 + rand() * 2.4 });
   }
-  for (let z = -148; z <= 148; z += 4) {
-    const sleeper = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.16, 0.9),
-      new THREE.MeshLambertMaterial({ color: 0x5b4a34 }));
-    sleeper.position.set(SHORE_X - 6, 0.16, z);
-    scene.add(sleeper);
+  const sGeo = new THREE.SphereGeometry(1, 6, 5); sGeo.translate(0, 0.6, 0);
+  const sMesh = new THREE.InstancedMesh(sGeo,
+    windify(new THREE.MeshLambertMaterial({ color: 0x5d6b46 })), scrub.length);
+  {
+    const m = new THREE.Matrix4();
+    scrub.forEach((t, i) => {
+      m.makeScale(t.s, t.s * 0.8, t.s).setPosition(t.x, t.y, t.z);
+      sMesh.setMatrixAt(i, m);
+    });
   }
+  sMesh.castShadow = true;
+  scene.add(sMesh);
 
-  // ---------- yachts in the bay — anchored head-to-wind, a pilot's wind vane ----------
-  const WINDB = new THREE.Vector3(0.5, 0, 3.9);
+  // ---------- yachts in the port, anchored head-to-wind ----------
+  // down the coast: a headwind out to Cap Martin, and the wind behind coming home
+  const WINDB = new THREE.Vector3(2.6, 0, 1.6);
   const headToWind = Math.atan2(WINDB.z, -WINDB.x);
-  for (let i = 0; i < 6; i++) {
-    scene.add(makeYacht(120 + rand() * 220, -220 + rand() * 440, rand(), headToWind + (rand() - 0.5) * 0.3));
+  const anchorage = place('port');
+  for (let i = 0; i < 7; i++) {
+    let x, z, tries = 0;
+    do { x = anchorage.x + (rand() - 0.5) * 210; z = anchorage.z + (rand() - 0.5) * 190; }
+    while (!isSea(x, z) && ++tries < 20);
+    scene.add(makeYacht(x, z, rand(), headToWind + (rand() - 0.5) * 0.3));
   }
-  scene.add(makeSteamer(200, 160));
+  const steamerAt = { x: anchorage.x + 60, z: anchorage.z + 40 };
+  scene.add(makeSteamer(steamerAt.x, steamerAt.z));
 
   // the steamer's smoke streams downwind (the book's own "Wind A / Wind B" cue)
-  const smokeBase = new THREE.Vector3(202, 6.5, 158.5);
+  const smokeBase = new THREE.Vector3(steamerAt.x + 2, 6.5, steamerAt.z - 1.5);
   const puffMatS = new THREE.MeshLambertMaterial({ color: 0x9a938a, transparent: true, opacity: 0.32, depthWrite: false });
   const puffs = [];
   for (let i = 0; i < 7; i++) {
     const s = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), puffMatS.clone());
-    scene.add(s);
-    puffs.push(s);
+    scene.add(s); puffs.push(s);
   }
+
   // ---------- the escort ----------
   // "One steam chaloupe and two petroleum launches, all three of them swift
   // goers, together with three well-manned row-boats, had been stationed at
@@ -273,21 +433,41 @@ export function buildWorldMonaco(scene) {
   const escort = [];
   for (let i = 0; i < 3; i++) {
     const boat = makeYacht(0, 0, 0.35 + i * 0.1, 0);
-    boat.userData.leg = 900 + i * 700;            // how far down the coast it runs
+    boat.userData.leg = 0.34 + i * 0.22;          // how far down the coast it runs
     boat.userData.ph = i * 0.37;
-    boat.userData.speed = 0.055 - i * 0.012;
+    boat.userData.speed = 0.05 - i * 0.011;
     scene.add(boat);
     escort.push(boat);
   }
+  // They follow the line the ship flies — but nudged seaward wherever it cuts a
+  // corner of the coast, because a launch cannot cross the Monte Carlo
+  // headland and the shortest line from the stage to the cape does.
+  const LANE = [];
+  {
+    const N = 40;
+    const nx = -(TURN.z - START.z), nz = TURN.x - START.x;
+    const nl = Math.hypot(nx, nz) || 1;
+    for (let i = 0; i <= N; i++) {
+      const f = i / N;
+      let x = START.x + (TURN.x - START.x) * f, z = START.z + (TURN.z - START.z) * f;
+      for (let push = 0; push < 24 && !isSea(x, z); push++) {
+        x += (nx / nl) * 60; z += (nz / nl) * 60;      // out to sea, 60 m at a time
+      }
+      LANE.push({ x, z });
+    }
+  }
+
   const tick = (dt, t, wind) => {
     const wLen = Math.hypot(wind.x, wind.z) || 1;
     const wx = wind.x / wLen, wz = wind.z / wLen;
-    // the escort runs up and down the coast, as it did on the 12th of February
     for (const b of escort) {
       const u = (t * b.userData.speed + b.userData.ph) % 2;
-      const f = u < 1 ? u : 2 - u;                 // out, then back
-      b.position.set(150 + f * 260, 0.6, 120 - f * b.userData.leg);
-      b.rotation.y = u < 1 ? Math.PI * 0.5 : -Math.PI * 0.5;
+      const f = (u < 1 ? u : 2 - u) * b.userData.leg;   // out, then back
+      const q = f * (LANE.length - 1);
+      const i = Math.min(LANE.length - 2, Math.floor(q)), s = q - i;
+      const a = LANE[i], c2 = LANE[i + 1];
+      b.position.set(a.x + (c2.x - a.x) * s, 0.6, a.z + (c2.z - a.z) * s);
+      b.rotation.y = -Math.atan2(c2.z - a.z, c2.x - a.x) + (u < 1 ? 0 : Math.PI);
     }
     puffs.forEach((p, i) => {
       const u = ((t * 0.13 + i / 7) % 1);
@@ -297,50 +477,56 @@ export function buildWorldMonaco(scene) {
     });
   };
 
-  // ---------- olive scrub on the slopes ----------
-  const scrub = [];
-  for (let i = 0; i < 300; i++) {
-    const x = -30 - rand() * 300, z = -700 + rand() * 1500;
-    if (town.some(b => Math.abs(b.x - x) < b.w * 0.7 && Math.abs(b.z - z) < b.d * 0.7)) continue;
-    scrub.push({ x, z, s: 1.6 + rand() * 1.8 });
-  }
-  const sGeo = new THREE.SphereGeometry(1, 6, 5); sGeo.translate(0, 0.6, 0);
-  const sMesh = new THREE.InstancedMesh(sGeo, windify(new THREE.MeshLambertMaterial({ color: 0x5d6b46 })), scrub.length);
-  const m = new THREE.Matrix4();
-  scrub.forEach((t, i) => {
-    m.makeScale(t.s, t.s * 0.8, t.s).setPosition(t.x, 0, t.z);
-    sMesh.setMatrixAt(i, m);
+  // The cloud deck stands over the mountain, not in it: the Tete de Chien is
+  // 573 m and Mont Agel above a thousand, so the base goes to eight hundred and
+  // the field is stretched to the whole bay from Cap d'Ail to Cap Martin.
+  const clouds = makeClouds(scene, WINDB, {
+    box: { x0: HF.x0, x1: HF.x0 + (HF.nx - 1) * HF.step,
+           z0: HF.z0, z1: HF.z0 + (HF.nz - 1) * HF.step },
+    base: 800,
+    ground: groundAt,
   });
-  scene.add(sMesh);
 
-  const clouds = makeClouds(scene, WINDB);
+  const LM = (id, name, up, r, clue) => {
+    const p = place(id);
+    return { id, name, x: p.x, z: p.z, y: groundAt(p.x, p.z) + up, r, clue };
+  };
 
   return {
     name: 'Monaco, winter 1902',
     sun, sunDir, sky, waters: [sea], flags: [], tick,
     buildings, clouds, trees: scrub,
     landmarks: [
-      { id: 'casino', name: 'the Casino terrace', x: -130, z: -300, y: 70, r: 55,
-        clue: '“A thousand handkerchiefs were fluttering.” The terraces of Monte Carlo.' },
-      { id: 'palace', name: 'the Prince’s Palace', x: -55, z: 400, y: 120, r: 55,
-        clue: 'On the Rock, above the harbour — the Prince who paid for the aerodrome lives here.' },
-      { id: 'cathedral', name: 'the cathedral', x: 0, z: 455, y: 118, r: 45,
-        clue: 'Beside the palace on the same rock, facing the sea.' },
-      { id: 'tetedechien', name: 'the Tête de Chien', x: -620, z: -60, y: 400, r: 150,
-        clue: 'The great head of rock that stands over the whole bay.' },
-      { id: 'capmartin', name: 'Cap Martin', x: 400, z: -2720, y: 70, r: 160,
-        clue: '“I was now well up the coast.” The point he turned at, out beyond the bay.' },
-      { id: 'stage', name: 'the landing-stage', x: 90, z: 330, y: 34, r: 55,
-        clue: 'The jetty at La Condamine, where the ground crew wait to catch her.' },
+      LM('casino', 'the Casino terrace', 40, 60,
+        '“A thousand handkerchiefs were fluttering.” The terraces of Monte Carlo.'),
+      LM('rock', 'the Prince’s Palace', 45, 60,
+        'On the Rock, above the harbour — the Prince who paid for the aerodrome lives here.'),
+      LM('cathedral', 'the cathedral', 42, 50,
+        'Beside the palace on the same rock, facing the sea. Finished the year after he flew here.'),
+      LM('oceano', 'the Musée océanographique', 46, 50,
+        'Albert I’s own museum, still in its scaffolding on the cliff face.'),
+      LM('tetedechien', 'the Tête de Chien', 60, 170,
+        'The great head of rock that stands over the whole principality — five hundred and seventy metres.'),
+      LM('trophee', 'the Trophy of Augustus', 40, 90,
+        'Up at La Turbie, on the Roman road. It has stood there since six years before Christ.'),
+      LM('capmartin', 'Cap Martin', 55, 180,
+        '“I was now well up the coast.” The point he turned at, out beyond the bay.'),
+      LM('stage', 'the landing-stage', 34, 55,
+        'The stage at La Condamine, where the ground crew wait to catch her.'),
     ],
     towerPos: null, padPos: PAD,
     startRing: START, turnRing: TURN,
     gates: [TURN],
-    towSpots: [{ name: 'the far quay of the port', pos: new THREE.Vector3(-10, 0, 180) }],
-    limitNote: 'the historic 30:00 at half scale',
-    vistaPos: new THREE.Vector3(-160, 120, -320), // from the Monte Carlo terraces
-    windBase: WINDB,                              // down the coast: headwind out, flying home
-    raceLimit: 900, raceRecord: 885,
+    towSpots: [{ name: 'the quay of the Condamine', pos: at('condamine') }],
+    limitNote: 'the coastal run to Cap Martin and back, eleven kilometres',
+    vistaPos: at('boulingrins', 90),               // from above the Casino gardens
+    windBase: WINDB,
+    // The No. 6 does 22 km/h and the turn stands 5.6 km off the stage, so the
+    // round trip is 11.1 km and cannot be flown in much under 1820 seconds in a
+    // dead calm. The limit carries the same thirteen per cent over that as the
+    // Deutsch does over its own course — earned, not given.
+    raceLimit: 2100, raceRecord: 1900,
+    limitNoteLong: 'Cap Martin and back: 11.1 km, and the No. 6 makes 22 km/h.',
     hints: {
       idleNear: 'The run to Cap Martin waits — call “Let go all!” when you are ready.',
       idleFar: 'Free flight — the start ring waits over the landing-stage of La Condamine.',
@@ -348,25 +534,13 @@ export function buildWorldMonaco(scene) {
       back: 'Home to the bay of Monaco — the wind behind you now.',
       turnMsg: 'Round Cap Martin! “The air-ship swung round like a boat” — now home on the wind, like an eagle.',
     },
-    // the landing-stage rectangle is dry footing amid the surf
-    isWater: (x, z) => x > SHORE_X + 2 && !(x < 64 && Math.abs(z) < 15),
+    // the ground IS the map now: anything at or under the waterline is sea,
+    // except the planks of the landing-stage
+    groundAt,
+    isWater: (x, z) => isSea(x, z)
+      && !(Math.abs(x - STAGE.x) < STAGE.w / 2 && Math.abs(z - STAGE.z) < STAGE.d / 2),
     isInBois: () => false,
   };
-}
-
-function makeSky() {
-  const c = document.createElement('canvas');
-  c.width = 1; c.height = 256;
-  const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 256, 0, 0);
-  grad.addColorStop(0, '#efd9b2');
-  grad.addColorStop(0.4, '#cfd3c2');
-  grad.addColorStop(1, '#7fa3c8');
-  g.fillStyle = grad; g.fillRect(0, 0, 1, 256);
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(4200, 24, 12),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), side: THREE.BackSide, fog: false, depthWrite: false }));
-  dome.renderOrder = -10;
-  return dome;
 }
 
 function makeYacht(x, z, r, heading) {

@@ -1733,16 +1733,20 @@ export function addBuildingMeshes(scene, list, colorOf) {
   const rand = mulberry32(7);
   list.forEach((b, i) => {
     const ry = b.ry || 0, rw = b.rw || b.w, rd = b.rd || b.d;
+    // b.y is the ground it stands on. Paris and St. Louis are flat and leave it
+    // undefined; Monaco is a mountain and a house on the Boulevard des Moulins
+    // has sixty metres of rock under it.
+    const base = b.y || 0;
     q.setFromAxisAngle(yAxis, ry);
-    m.compose(pos.set(b.x, 0, b.z), q, scl.set(rw, b.h, rd));
+    m.compose(pos.set(b.x, base, b.z), q, scl.set(rw, b.h, rd));
     body.setMatrixAt(i, m);
     if (colorOf) colorOf(b, col);
     else col.setHSL(0.09 + b.r * 0.02, 0.22, 0.66 + b.r * 0.1);
     body.setColorAt(i, col);
     const roofH = 3.5 + b.r * 1.5;
-    m.compose(pos.set(b.x, b.h, b.z), q, scl.set(rw * 0.84, roofH, rd * 0.84));
+    m.compose(pos.set(b.x, base + b.h, b.z), q, scl.set(rw * 0.84, roofH, rd * 0.84));
     roof.setMatrixAt(i, m);
-    b.top = b.h + roofH;
+    b.top = base + b.h + roofH;
     const cR = Math.cos(ry), sR = Math.sin(ry);
     for (let k = 0; k < b.nChim; k++) {
       const lx = (rand() - 0.5) * rw * 0.6, lz = (rand() - 0.5) * rd * 0.6;
@@ -2099,7 +2103,21 @@ function makeHangar() {
 // ---------------------------------------------------------------- clouds
 // Fair-weather cumulus: flat shaded bases, bright cauliflower tops; plus a
 // veil of high cirrus streaks aligned with the gradient wind.
-export function makeClouds(scene, windBase) {
+/**
+ * The weather deck. `opts` lets a world that is not a flat plain say so:
+ * Monaco is seven kilometres across with a five-hundred-metre headland in the
+ * middle of it and a thousand-metre mountain behind, and the Paris defaults put
+ * every cloud inside the Tete de Chien.
+ *
+ *   box    {x0,x1,z0,z1}  where they may drift
+ *   base   metres to the flat underside
+ *   ground (x,z) => y     so the shadows lie on the hill and not through it
+ */
+export function makeClouds(scene, windBase, opts = {}) {
+  const box = opts.box || { x0: -1800, x1: 1600, z0: -1500, z1: 1500 };
+  const base = opts.base ?? 225;
+  const ground = opts.ground || (() => 0);
+  const bw = box.x1 - box.x0, bd = box.z1 - box.z0;
   const clouds = [];
   const rand = mulberry32(1234);
   const topMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x4a453c, fog: true });
@@ -2140,18 +2158,24 @@ export function makeClouds(scene, windBase) {
       }
     }
     grp.rotation.y = rand() * Math.PI * 2;
-    grp.position.set(-1800 + rand() * 3400,
-      (towering ? 190 : 225) + rand() * 150, -1500 + rand() * 3000);
+    grp.position.set(box.x0 + rand() * bw,
+      base - (towering ? 35 : 0) + rand() * 150, box.z0 + rand() * bd);
     scene.add(grp);
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 20), shadowMat);
     shadow.rotation.x = -Math.PI / 2;
-    shadow.position.set(grp.position.x, 0.45, grp.position.z);
+    shadow.position.set(grp.position.x, ground(grp.position.x, grp.position.z) + 0.45, grp.position.z);
     scene.add(shadow);
     // the seeded birthplace is kept: every position after it is measured from
     // here, so the sky can be computed for any instant rather than stepped to
     clouds.push({ grp, shadow, r, towering, drift: 0.4 + rand() * 0.5,
       home: { x: grp.position.x, z: grp.position.z } });
   }
+  // Where they wrap, and what they cast their shadows on. Both used to be
+  // fixed: a 5.2 km field centred on the origin and a shadow at y=0.45. Over
+  // Monaco, which runs seven kilometres east and stands a thousand metres up,
+  // that lost half the sky over the sea and buried every shadow in the hill.
+  clouds.field = { cx: (box.x0 + box.x1) / 2, cz: (box.z0 + box.z1) / 2,
+                   span: Math.max(bw, bd) * 1.35, ground };
   // cirrus veil, streaked along the prevailing wind
   const windAng = windBase ? Math.atan2(-windBase.z, windBase.x) : 0;
   const cirrusTex = makeCirrusTexture();
@@ -2161,7 +2185,7 @@ export function makeClouds(scene, windBase) {
         depthWrite: false, fog: true }));
     m.rotation.x = -Math.PI / 2;
     m.rotation.z = -windAng + (rand() - 0.5) * 0.3;
-    m.position.set(-1500 + rand() * 3000, 620 + rand() * 160, -1200 + rand() * 2400);
+    m.position.set(box.x0 + rand() * bw, base * 2.75 + rand() * 160, box.z0 + rand() * bd);
     m.renderOrder = -5;
     scene.add(m);
   }
@@ -2208,9 +2232,9 @@ export function skyDaySeed() {
   return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
 }
 
-const CLOUD_SPAN = 5200;                        // they wrap over a 5.2 km field
-function wrapField(v) {
-  return ((v + CLOUD_SPAN / 2) % CLOUD_SPAN + CLOUD_SPAN) % CLOUD_SPAN - CLOUD_SPAN / 2;
+const CLOUD_SPAN = 5200;                        // Paris wraps over a 5.2 km field
+function wrapField(v, c = 0, span = CLOUD_SPAN) {
+  return ((v - c + span / 2) % span + span) % span - span / 2 + c;
 }
 
 /**
@@ -2222,11 +2246,15 @@ function wrapField(v) {
  * by the mean current, and it keeps the position a pure function of t.
  */
 export function updateClouds(clouds, windBase, t) {
+  const f = clouds.field;
   for (const c of clouds) {
     const w = windAt(windBase, c.grp.position.y);
-    c.grp.position.x = wrapField(c.home.x + w.x * c.drift * t);
-    c.grp.position.z = wrapField(c.home.z + w.z * c.drift * t);
-    c.shadow.position.set(c.grp.position.x, 0.45, c.grp.position.z);
+    c.grp.position.x = f ? wrapField(c.home.x + w.x * c.drift * t, f.cx, f.span)
+                         : wrapField(c.home.x + w.x * c.drift * t);
+    c.grp.position.z = f ? wrapField(c.home.z + w.z * c.drift * t, f.cz, f.span)
+                         : wrapField(c.home.z + w.z * c.drift * t);
+    const gy = f ? f.ground(c.grp.position.x, c.grp.position.z) : 0;
+    c.shadow.position.set(c.grp.position.x, gy + 0.45, c.grp.position.z);
   }
 }
 
