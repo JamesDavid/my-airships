@@ -70,7 +70,7 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 12
 
 const LOCS = ['paris', 'monaco', 'stlouis'];
 let scene, world, ship = null, startRing, gateRings = [], scenRing = null;
-let rivals = [], scenario = null, scenBeacon = null;
+let rivals = [], scenario = null, scenBeacon = null, scenZone = null;
 let routeRings = [];
 let track = null;                       // the active course (historic or time trial)
 let ghostBest = null, ghostMesh = null, ghostRec = [], ghostLastSample = -1;
@@ -2270,6 +2270,7 @@ function finishRace() {
 function scenCtx() {
   return {
     ship, world, addMsg, setCenter,
+    wind: { x: wind.x, z: wind.z },     // so a scenario can set a pilot upwind
     place(x, y, z, yaw) {
       ship.reset(new THREE.Vector3(x, y, z), yaw);
       ship.landed = y <= ship.restHeight() + 0.8;
@@ -2286,12 +2287,21 @@ function scenCtx() {
       }
     },
     setZone(pos, r) {
+      // remembered, so a scenario's tick can ASK where its ring is instead of
+      // repeating the coordinates. Repeating them meant that when the places
+      // moved onto their true positions, rings moved and the checks did not:
+      // you could land inside the green ring and be told you had missed.
+      scenZone = { pos: pos.clone(), r };
       scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24);
       scenBeacon.visible = true;
       scenBeacon.position.set(pos.x, pos.y + 75, pos.z);
       scenBeacon.scale.set(r / 24, 1, r / 24);
     },
-    clearZone() { scenRing.visible = false; scenBeacon.visible = false; clearRoute(); },
+    clearZone() { scenZone = null; scenRing.visible = false; scenBeacon.visible = false; clearRoute(); },
+    /** How far the ship is from the ring, on the flat, and how big it is. */
+    zoneDist: () => (scenZone ? Math.hypot(ship.pos.x - scenZone.pos.x, ship.pos.z - scenZone.pos.z) : Infinity),
+    zoneR: () => (scenZone ? scenZone.r : 0),
+    inZone() { return this.zoneDist() < this.zoneR(); },
     startRace() { startTrack(historicTrack()); },
     raceResult: () => (race.state === 'done' ? race.lastResult : null),
     complete: scenComplete,

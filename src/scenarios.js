@@ -81,11 +81,11 @@ export const SCENARIOS = [
         this.warned = true;
         ctx.addMsg('sc', '“The balloon began to fold in the middle like a pocket knife…” Throttle DOWN, nose down, ride her in.', 0);
       }
-      const d = Math.hypot(ctx.ship.pos.x + 450, ctx.ship.pos.z + 140);
+      const d = ctx.zoneDist();
       if (ctx.ship.wrecked) return ctx.fail('“I was saved for the first time”… but not this time.');
-      if (ctx.ship.landed && d < 90) {
+      if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('The kite-flying boys grasp your guide rope and run against the wind — “They were bright young fellows!”');
-      } else if (ctx.ship.landed && d >= 90) {
+      } else if (ctx.ship.landed && d >= ctx.zoneR()) {
         ctx.fail('Down safely — but far from the boys at Bagatelle. Try again.');
       }
     },
@@ -97,15 +97,26 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no5',
     brief: 'The balloon is losing hydrogen fast and you cannot make St. Cloud. The Tower stands between you and the Trocadéro hotels — round her, or dare the arch beneath her legs. The roof, not the street.',
     setup(ctx) {
-      { const t = placeLegacy('trocadero'); ctx.place(t.x + 620, 150, t.z + 40, Math.PI); }
+      // Started UPWIND of the roof, as he was — he did not choose the Trocadéro,
+      // the wind gave it to him. At half scale the crossing was short enough
+      // that any breeze was survivable; at full scale a headwind on the slow
+      // No. 5 with a leaking valve made it simply unwinnable, which a pilot
+      // reported. Now the day's wind is always at her back.
+      {
+        const t = placeLegacy('trocadero');
+        const w = ctx.wind || { x: 1, z: 0 };
+        const L = Math.hypot(w.x, w.z) || 1;
+        ctx.place(t.x - (w.x / L) * 620, 150, t.z - (w.z / L) * 620,
+          Math.atan2(w.z / L, w.x / L) * -1);
+      }
       ctx.ship.gas = 80;
       { const t = placeLegacy('trocadero'); ctx.setZone(V(t.x, 40, t.z), 140); }
       ctx.setCenter('August 8th, 1901', 'The valve is gone. The Trocadéro roof or nothing. (green ring)');
     },
     tick(ctx, dt) {
       ctx.ship.gas = Math.max(55, ctx.ship.gas - 0.35 * dt);
-      const d = Math.hypot(ctx.ship.pos.x - 20, ctx.ship.pos.z - 140);
-      const onRoof = d < 70 && ctx.ship.pos.y > 12 && ctx.ship.pos.y < 45;
+      const d = ctx.zoneDist();
+      const onRoof = d < ctx.zoneR() && ctx.ship.pos.y > 12 && ctx.ship.pos.y < 45;
       if (onRoof && ctx.ship.vel.length() < 10) {
         ctx.ship.wreck('scripted');
         ctx.complete('The keel braces against the courtyard wall — “the thin pine scantlings and piano wires of Nice had saved my life!” The firemen of Passy are coming.');
@@ -165,10 +176,9 @@ export const SCENARIOS = [
       ctx.setCenter('June 23rd, 1903, 4 a.m.', 'Your door is on the Champs-Élysées. (green ring — land gently in the avenue)');
     },
     tick(ctx) {
-      const _a = placeLegacy('etoile');
-      const d = Math.hypot(ctx.ship.pos.x - (_a.x + 268), ctx.ship.pos.z - (_a.z + 134));
+      const d = ctx.zoneDist();
       if (ctx.ship.wrecked) return ctx.fail('The chimney-pots claimed her. The avenue next time.');
-      if (ctx.ship.landed && d < 26) {
+      if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('Two servants catch and steady the ship while you go up for coffee. “From my round bay window I looked down upon the air-ship.”');
       }
     },
@@ -187,9 +197,9 @@ export const SCENARIOS = [
     },
     tick(ctx, dt) {
       ctx.ship.gas = Math.max(82, ctx.ship.gas - 0.12 * dt);
-      const d = Math.hypot(ctx.ship.pos.x - 40, ctx.ship.pos.z);
+      const d = ctx.zoneDist();
       if (ctx.ship.wrecked) return ctx.fail('“Balloon, keel, and motor were fished up the next day.” History repeats — unless you fly it better.');
-      if (ctx.ship.landed && d < 45) {
+      if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('Home dry — the ending the real February 14th never had. The maritime experiments continue.');
       }
     },
@@ -238,11 +248,11 @@ export const SCENARIOS = [
         ctx.ship.sputtering = true;
         ctx.addMsg('sc7', 'The capricious motor stops — "the air-ship, bereft of its power, was carried off." Work the levers, or pick your tree.', 0);
       }
-      const d = Math.hypot(ctx.ship.pos.x + 2065, ctx.ship.pos.z);
+      const d = ctx.zoneDist();
       if (ctx.ship.wrecked) {
         return ctx.fail('Down hard. The chestnut would have been kinder.');
       }
-      if (ctx.ship.landed && d < 120) {
+      if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('Home to the timekeepers in the fortieth minute — "after a terrific struggle with the element."');
       } else if (ctx.ship.landed && ctx.world.isInBois(ctx.ship.pos.x, ctx.ship.pos.z)) {
         ctx.complete('You settle into the tree-tops of the park, propeller touching the grass. Princess Isabel sends up your lunch, and a medal of St. Benedict follows by post.');
@@ -268,7 +278,7 @@ export const SCENARIOS = [
       const p = ctx.ship.pos;
       const d = Math.hypot(p.x + 1250, p.z - 200);
       if (ctx.ship.wrecked) return ctx.fail('An air-ship down among the troops. Not the impression intended.');
-      if (d < 180 && p.y > 12 && p.y < 90) {
+      if (d < ctx.zoneR() && p.y > 12 && p.y < 90) {
         this.over += dt;
         if (!this.saluted && this.over > 6) {
           this.saluted = true;
