@@ -1,2 +1,9 @@
 Thumbs.db
 .DS_Store
+
+# The Supabase service role. Anyone holding it can read and write everything,
+# including the bug reports, which carry screenshots of pilots' screens.
+# tools/bugs.py reads it from here or from SUPABASE_SERVICE_KEY.
+.supabase_service_key
+bug-*.png
+bug-*.jpg
