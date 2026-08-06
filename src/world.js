@@ -5,6 +5,28 @@
 
 import * as THREE from 'three';
 import { geo, place, placeLegacy, SEINE, ORIGIN_XZ, LEGACY_ORIGIN, LEGACY_SCALE } from './paris_geo.js';
+import { HF as PHF, groundAt as parisGroundASL, slopeAt as parisSlope,
+         SEINE_XZ, riverNear, RIVER_HALF } from './paris_terrain.js';
+
+/**
+ * Paris has relief, and it always did — the game simply had not measured it.
+ *
+ * The datum is the Eiffel Tower's own foot, 33.7 m above the sea, because that
+ * is where the world's y = 0 has been all along: every gate, every scenario
+ * height, every tuned number in this file is written against it. Keeping it
+ * means the ground moves and nothing else has to.
+ *
+ * So the Champ de Mars stays at 0, the Seine runs about seven metres BELOW it
+ * in its valley — which is why there are quays and steps down to them — the
+ * Trocadero stands on the Chaillot bluff twenty-six metres up, and Montmartre
+ * is a butte eighty-six metres over the Tower's feet.
+ *
+ * The barometer is left reading from the datum rather than from the ground
+ * underneath, which is what a barometer does: it cannot see that there is a
+ * hill below it.
+ */
+export const PARIS_DATUM = 33.7;
+export function parisGround(x, z) { return parisGroundASL(x, z) - PARIS_DATUM; }
 const placeLegacy0 = (lat, lon) => {
   const p = geo(lat, lon);
   return { x: LEGACY_ORIGIN.x + (p.x - ORIGIN_XZ.x) / LEGACY_SCALE,
@@ -285,14 +307,44 @@ export function buildWorld(scene) {
   scene.add(hemi);
   const sun = makeShadowSun(scene, sunDir, 2.6);
 
-  // ---------- ground (subtle patchwork texture so the plain isn't flat) ----------
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(9000, 56),
-    new THREE.MeshLambertMaterial({ map: makeGroundTexture() })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  // ---------- the ground, as surveyed ----------
+  // It was a flat disc nine kilometres across. It is now IGN's bare-earth model
+  // (src/paris_terrain.js) at twice the survey's resolution, with the same
+  // patchwork texture over it so the open country still reads as country.
+  // Beyond the survey a flat skirt carries on to the horizon at the datum.
+  {
+    const SUB = 2;
+    const gx = (PHF.nx - 1) * SUB, gz = (PHF.nz - 1) * SUB;
+    const st = PHF.step / SUB;
+    const g = new THREE.PlaneGeometry(gx * st, gz * st, gx, gz);
+    g.rotateX(-Math.PI / 2);
+    const cx = PHF.x0 + (gx * st) / 2, cz = PHF.z0 + (gz * st) / 2;
+    const a = g.attributes.position;
+    for (let i = 0; i < a.count; i++) {
+      a.setY(i, parisGround(a.getX(i) + cx, a.getZ(i) + cz));
+    }
+    g.computeVertexNormals();
+    const tex = makeGroundTexture();
+    tex.repeat.set(gx * st / 256, gz * st / 256);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    const terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
+    terrain.position.set(cx, 0, cz);
+    terrain.receiveShadow = true;
+    terrain.userData.noLift = true;
+    scene.add(terrain);
+
+    // A RING outside the survey, not a disc. A disc laid at a single height
+    // under the whole world buries anything the ground dips below it — and the
+    // Seine runs seven metres down in its valley, so the river disappeared
+    // under its own horizon filler.
+    const inner = Math.hypot(gx * st, gz * st) / 2;
+    const skirt = new THREE.Mesh(new THREE.RingGeometry(inner, inner + 12000, 64, 1),
+      new THREE.MeshLambertMaterial({ map: makeGroundTexture() }));
+    skirt.rotation.x = -Math.PI / 2;
+    skirt.position.set(cx, -2.0, cz);
+    skirt.userData.noLift = true;
+    scene.add(skirt);
+  }
 
   // paved city base (east of the Seine)
   // The "paved city base" was a single rectangular slab laid under the whole
@@ -314,10 +366,26 @@ export function buildWorld(scene) {
 
   // ---------- the Seine: stone quays and living, reflecting water ----------
   const riverPts = seinePoints();
-  scene.add(makeRibbon(riverPts, 184, 0xa39a86, 0.18));  // quays
+  // TWO bands, one per bank, and nothing across the middle.
+  //
+  // It used to be a single 184 m ribbon, which was fine on a flat plain and is
+  // not on a real one: a ribbon carries two vertices per station, one at each
+  // edge, so once the ground had a valley in it the quad between them ran
+  // straight from bank to bank — a stone sheet a few centimetres over the
+  // surface, paving the Seine from Austerlitz to Suresnes.
+  for (const side of [-1, 1]) {
+    const q = makeBankRibbon(riverPts, RIVER_HALF - 4, 92, side, 0xa39a86, 0.18);
+    q.userData.noLift = true;                     // already draped, vertex by vertex
+    scene.add(q);
+  }
   const seine = makeWaterSurface(ribbonGeoXY(riverPts, 140), sunDir, 0x24405a);
   seine.rotation.x = -Math.PI / 2;
-  seine.position.y = 0.3;
+  // One flat sheet, and the terrain generator lays the river flat to match it
+  // (the measured fall is 3.4 m over 23 km — one part in seven thousand). The
+  // bed is carved 1.4 m under the surface, so the sheet is never below its own
+  // river bed and the quays are never left standing proud of the water.
+  seine.position.y = riverPts[0].y;      // the surface is one level — see paris_terrain.js
+  seine.userData.noLift = true;
   scene.add(seine);
   addBridges(scene, riverPts);
 
@@ -330,7 +398,9 @@ export function buildWorld(scene) {
   // Out here the Seine has grass banks and a towpath rather than the cut-stone
   // quays of the city reaches: the last third of the trace is banked in green.
   const westPts = riverPts.slice(Math.floor(riverPts.length * 0.62));
-  scene.add(makeRibbon(westPts, 176, 0x6d7a4d, 0.16, true));
+  { const banks = makeRibbon(westPts, 176, 0x6d7a4d, 0.16, true);
+    banks.userData.noLift = true;
+    scene.add(banks); }
   // the Pont de St-Cloud: a stone road bridge, well clear of the Avre aqueduct
   // downstream of it (the two stood a few hundred metres apart in life, and
   // sat one on top of the other here)
@@ -440,7 +510,7 @@ export function buildWorld(scene) {
         const b = pos.length / 3;
         for (const [px, pz] of [[x1 - ex + nx, z1 - ez + nz], [x1 - ex - nx, z1 - ez - nz],
           [x2 + ex + nx, z2 + ez + nz], [x2 + ex - nx, z2 + ez - nz]]) {
-          pos.push(px, 0.16, pz);
+          pos.push(px, parisGround(px, pz) + 0.16, pz);
           col.push(c.r, c.g, c.b);
         }
         // Wound so the normals point UP. Written the other way round the whole
@@ -459,7 +529,7 @@ export function buildWorld(scene) {
       const c = st.dirt ? dirt : paved;
       for (const [vx, vz] of st.pts) {
         const b = pos.length / 3, r = st.w / 2, N = 8;
-        pos.push(vx, 0.16, vz); col.push(c.r, c.g, c.b);
+        pos.push(vx, parisGround(vx, vz) + 0.16, vz); col.push(c.r, c.g, c.b);
         for (let k = 0; k <= N; k++) {
           const a2 = (k / N) * Math.PI * 2;
           pos.push(vx + Math.cos(a2) * r, 0.16, vz + Math.sin(a2) * r);
@@ -474,6 +544,7 @@ export function buildWorld(scene) {
     g2.setIndex(idx);
     g2.computeVertexNormals();
     const roads = new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    roads.userData.noLift = true;                 // every vertex is already on the ground
     roads.receiveShadow = true;
     scene.add(roads);
   }
@@ -719,14 +790,34 @@ export function buildWorld(scene) {
     }
   }
 
+  // ---------- put it all on the ground ----------
+  // Everything above is placed flat, on the plain, exactly as it always was.
+  // This is where Paris gets its hills. It must run BEFORE the clouds, which
+  // belong in the sky and are not to be lifted with the houses.
+  liftToTerrain(scene);
+  for (const b of buildings) {
+    b.y = parisGround(b.x, b.z);
+    if (b.top !== undefined) b.top += b.y;
+  }
+  for (const t of trees) if (t && t.x !== undefined) t.y = parisGround(t.x, t.z);
+
   // ---------- clouds ----------
   const windB = new THREE.Vector3(4.2, 0, 0.8);
-  const clouds = makeClouds(scene, windB);
+  const clouds = makeClouds(scene, windB, {
+    box: { x0: PHF.x0, x1: PHF.x0 + (PHF.nx - 1) * PHF.step,
+           z0: PHF.z0, z1: PHF.z0 + (PHF.nz - 1) * PHF.step },
+    base: 260,                       // Montmartre stands 86 m over the datum
+    ground: parisGround,
+  });
+  keepOutOfReflection(seine, clouds.map((c) => c.grp));
 
   const LM = (id) => { const q = placeLegacy(id); return { x: q.x, z: q.z }; };
   return {
     name: 'Paris, 1901',
     sun, sunDir, sky, waters: [seine], tick,
+    // the ground is no longer a plane: the ship, the guide rope and every
+    // spawn measure their height from here
+    groundAt: parisGround,
     flags: [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag],
     buildings, clouds, riverPts, trees,
     towerPos: TOWER_POS, padPos: PAD_POS,
@@ -809,6 +900,49 @@ export function buildWorld(scene) {
 }
 
 // ======================================================================
+
+/**
+ * Put everything on the ground.
+ *
+ * Paris is built flat — every landmark, tree, house and shed is placed at y = 0
+ * on the plain, as it has been since the first version — and then lifted here in
+ * one pass. It is the same trick the world already used to go from half scale to
+ * full: change one function, not two hundred call sites, and nothing can be
+ * half-converted.
+ *
+ * Three cases, and they matter:
+ *
+ *   noLift     the terrain itself, the skirt, the sky, the river's own sheet.
+ *              Already at their true heights.
+ *   instanced  the city's houses, roofs and chimneys, and the trees. Thousands
+ *              of them share one mesh at the origin, so each instance's own
+ *              matrix has to be read, lifted at its own (x, z), and written back.
+ *   the rest   a group or a mesh standing at a place — lift it by the ground
+ *              under that place.
+ *
+ * Only the scene's top-level children are walked. Lifting a group AND its
+ * children would raise the hangar's flagpole twice.
+ */
+function liftToTerrain(scene) {
+  const m = new THREE.Matrix4();
+  const pos = new THREE.Vector3(), qt = new THREE.Quaternion(), scl = new THREE.Vector3();
+  for (const o of scene.children) {
+    if (o.userData && o.userData.noLift) continue;
+    if (o.isInstancedMesh) {
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, m);
+        m.decompose(pos, qt, scl);
+        pos.y += parisGround(pos.x, pos.z);
+        o.setMatrixAt(i, m.compose(pos, qt, scl));
+      }
+      o.instanceMatrix.needsUpdate = true;
+      if (o.boundingSphere) o.boundingSphere = null;
+      o.computeBoundingSphere();
+      continue;
+    }
+    o.position.y += parisGround(o.position.x, o.position.z);
+  }
+}
 
 function makeSkyDome() {
   const c = document.createElement('canvas');
@@ -1342,6 +1476,15 @@ function addBookPlaces(scene, buildings) {
     const q = H2(-2300 - scRand() * 110, -400 + scRand() * 800);
     const x = q.x, z = q.z;
     if (Math.hypot(x - PAD_POS.x, z - PAD_POS.z) < 340) continue;   // keep the field clear
+    // ...and out of the Seine. The village is scattered across a rectangle and
+    // was only ever asked to keep off the aerodrome, because the hand-drawn
+    // river of the time did not come anywhere near it. The real one does: its
+    // western loop runs right through here on its way past Suresnes, and four
+    // of these houses were standing in it.
+    {
+      const near = riverNear(x, z);
+      if (near && near.dist < RIVER_HALF + 20) continue;
+    }
     const w = 24 + scRand() * 20, d = 20 + scRand() * 16, h = 8 + scRand() * 7;
     const house = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), scWall);
     house.position.set(x, h / 2, z);
@@ -1556,13 +1699,41 @@ export function nearPolyline(pts, x, z, half) {
  * doubled together. See fullScalePass().
  */
 function seinePoints() {
-  const curve = new THREE.CatmullRomCurve3(
-    SEINE.map(([lat, lon]) => {
-      const p = geo(lat, lon);
-      return new THREE.Vector3(LEGACY_ORIGIN.x + (p.x - ORIGIN_XZ.x) / LEGACY_SCALE, 0,
-        LEGACY_ORIGIN.z + (p.z - ORIGIN_XZ.z) / LEGACY_SCALE);
-    }));
-  return curve.getPoints(200);
+  // From src/paris_terrain.js, walked through OpenStreetMap's own ordered ways
+  // — and carrying the water's real height with it, which falls 27.1 m to 23.7
+  // across the map. The twenty-eight-point hand trace this replaces was out by
+  // as much as 1.5 km and spent a fifth of its length on dry land.
+  return SEINE_XZ.map(([x, z, y]) => new THREE.Vector3(x, y - PARIS_DATUM, z));
+}
+
+/**
+ * One bank of a river: a band from `inner` to `outer` metres out on `side`,
+ * laid on the ground. Deliberately NOT a full-width ribbon — see the Seine's
+ * quays, where a full-width one paved the river.
+ */
+function makeBankRibbon(pts, inner, outer, side, color, lift) {
+  const pos = [], idx = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const t = (i < pts.length - 1 ? pts[i + 1].clone().sub(p) : p.clone().sub(pts[i - 1])).normalize();
+    const n = new THREE.Vector3().crossVectors(up, t).normalize().multiplyScalar(side);
+    for (const off of [inner, outer]) {
+      const x = p.x + n.x * off, z = p.z + n.z * off;
+      pos.push(x, parisGround(x, z) + lift, z);
+    }
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
+  m.receiveShadow = true;
+  return m;
 }
 
 function makeRibbon(pts, width, color, y, dull) {
@@ -1572,8 +1743,16 @@ function makeRibbon(pts, width, color, y, dull) {
     const p = pts[i];
     const t = (i < pts.length - 1 ? pts[i + 1].clone().sub(p) : p.clone().sub(pts[i - 1])).normalize();
     const n = new THREE.Vector3().crossVectors(up, t).normalize();
-    pos.push(p.x + n.x * width / 2, y, p.z + n.z * width / 2);
-    pos.push(p.x - n.x * width / 2, y, p.z - n.z * width / 2);
+    // `y` is a LIFT above whatever is underneath, not an absolute height: the
+    // quays follow the river down into its valley and up the far bank.
+    //
+    // It must follow the GROUND and not be clamped up to the water: the quay
+    // band is wider than the channel, so over the middle of the river a clamp
+    // put the stone a few centimetres over the surface and paved the Seine.
+    const ax = p.x + n.x * width / 2, az = p.z + n.z * width / 2;
+    const bx = p.x - n.x * width / 2, bz = p.z - n.z * width / 2;
+    pos.push(ax, parisGround(ax, az) + y, az);
+    pos.push(bx, parisGround(bx, bz) + y, bz);
     if (i > 0) {
       const a = (i - 1) * 2;
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
@@ -1691,14 +1870,26 @@ export function generateFrontages(streets, canPlace, rand, opts = {}) {
 // and the Exposition pavilion rows along the river quays.
 function buildCity(scene, riverPts) {
   const rand = mulberry32(42);
+  // To the LINE, not to every second point on it.
+  //
+  // Sampling the vertices and taking the nearest is only right if you happen to
+  // be near a vertex: halfway along a segment the nearest vertex is half the
+  // spacing further off than the river is, and this walked every second point of
+  // a ninety-metre polyline — so a house ninety metres out could measure a
+  // hundred and eighty and be waved through. Thirteen of them ended up standing
+  // in the Seine.
   const distToRiver = (x, z) => {
-    let d = 1e9;
-    for (let i = 0; i < riverPts.length; i += 2) {
-      const p = riverPts[i];
-      const dd = (p.x - x) ** 2 + (p.z - z) ** 2;
-      if (dd < d) d = dd;
+    let best = Infinity;
+    for (let i = 0; i < riverPts.length - 1; i++) {
+      const a = riverPts[i], b = riverPts[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const L2 = dx * dx + dz * dz;
+      const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2)) : 0;
+      const qx = a.x + dx * t - x, qz = a.z + dz * t - z;
+      const dd = qx * qx + qz * qz;
+      if (dd < best) best = dd;
     }
-    return Math.sqrt(d);
+    return Math.sqrt(best);
   };
   // The Bois de Boulogne is woodland with a racecourse in it, not a suburb. The
   // frontage generator was building houses along every surveyed road that runs
@@ -1790,8 +1981,22 @@ export function addBuildingMeshes(scene, list, colorOf) {
 // the white pavilions of the 1900 Exposition, domed, along the riverfront
 function addExpoPavilions(scene, riverPts, list, rand) {
   const pav = [];
-  for (let i = 60; i <= 94; i += 3) {
-    const p = riverPts[i], q2 = riverPts[i + 1];
+  // BY PLACE, not by index.
+  //
+  // This used to walk riverPts[60..94], which picked out the Champ de Mars
+  // reach when the river was a hand-drawn curve sampled at two hundred points.
+  // The Seine is the real one now — different points, different spacing — and
+  // the same indices landed four pavilions in the water out by Suresnes, five
+  // kilometres from the Exposition they belong to.
+  //
+  // They stand where the Exposition of 1900 stood: the riverfront either side
+  // of the Pont d'Iena, under the Tower. So that is what is asked for.
+  const twr = placeLegacy('eiffel');
+  const REACH = 1300;                       // the Exposition's stretch of quay
+  for (let i = 1; i < riverPts.length - 1; i += 3) {
+    const p = riverPts[i];
+    if (Math.hypot(p.x - twr.x, p.z - twr.z) > REACH) continue;
+    const q2 = riverPts[i + 1];
     const tx = q2.x - p.x, tz = q2.z - p.z;
     const tl = Math.hypot(tx, tz) || 1;
     const nx = -tz / tl, nz = tx / tl;
@@ -1800,6 +2005,12 @@ function addExpoPavilions(scene, riverPts, list, rand) {
       if (rand() < 0.2) continue;
       const cx = p.x + nx * 128 * side, cz = p.z + nz * 128 * side;
       if (inSite(cx, cz)) continue;
+      // A hundred and twenty-eight metres along ONE station's tangent is not
+      // a hundred and twenty-eight metres from the river: on the inside of a
+      // bend it is a good deal less, and on a tight one it is back in the
+      // water. Ask the river how far off this actually is.
+      const near = riverNear(cx, cz);
+      if (near && near.dist < RIVER_HALF + 24) continue;
       pav.push({ x: cx, z: cz, ry, r: rand() });
       const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
       list.push({ x: cx, z: cz, w: 28 * c + 16 * s, d: 28 * s + 16 * c, h: 14, top: 21, nChim: 0, r: 0 });
