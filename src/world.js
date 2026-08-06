@@ -388,7 +388,12 @@ export function buildWorld(scene) {
           pos.push(px, 0.16, pz);
           col.push(c.r, c.g, c.b);
         }
-        idx.push(b, b + 1, b + 2, b + 2, b + 1, b + 3);
+        // Wound so the normals point UP. Written the other way round the whole
+        // network faced the ground: back-face culled, invisible from the air,
+        // and the city looked like grass and dirt with houses standing in rows
+        // along avenues that were not there. (n x d is +Y, so (-n) x d is -Y —
+        // the same winding trap the Seine ribbon fell into.)
+        idx.push(b, b + 2, b + 1, b + 2, b + 3, b + 1);
       }
     }
     const g2 = new THREE.BufferGeometry();
