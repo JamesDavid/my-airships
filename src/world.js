@@ -526,6 +526,12 @@ export function buildWorld(scene) {
   }
   // Longchamps pelouse
   addOval(scene, LONGCHAMPS.x, LONGCHAMPS.z, LONGCHAMPS.rx, LONGCHAMPS.rz, 0x86a05e, 0.12);
+
+  // the gardens' turf — the Champ de Mars already has its strip above
+  for (const g of GARDENS.map(gardenGeom)) {
+    if (g.turfed) continue;
+    addStrip(scene, g.a.x, g.a.z, g.b.x, g.b.z, g.half * 2, 0x7f9159, 0.11);
+  }
   // aerodrome grounds
   addFlat(scene, PAD_POS.x, PAD_POS.z, 500, 500, 0x84925f, 0.1);   // the flying ground
 
@@ -820,7 +826,7 @@ export function buildWorld(scene) {
   }
 
   // ---------- the Bois ----------
-  const trees = addTrees(scene);
+  const trees = addTrees(scene, buildings);
 
   // ---------- Eiffel Tower ----------
   const tower = makeTower();
@@ -1166,6 +1172,41 @@ function addFlat(scene, x, z, w, d, color, y) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color }));
   m.rotation.x = -Math.PI / 2; m.position.set(x, y, z);
   scene.add(m);
+}
+
+// ---------------------------------------------------------------- the gardens
+// THE GREAT PUBLIC GARDENS OF 1901, which were bare ground until now.
+//
+// The Bois has 1,250 scattered trees and the Champ de Mars had a green strip
+// laid down it, and that was the whole of Paris's greenery: the Tuileries, the
+// Luxembourg, Monceau, the Plantes, the Esplanade and the Palais-Royal were
+// mown grass at best and open dirt at worst, from the air indistinguishable
+// from a building site. They are the shapes a pilot navigates by — "on the
+// return trip I had kept my eyes fixed on the verdure of the Bois de Boulogne"
+// (Ch. XV) — and half of them are directly under the courses.
+//
+// Each is given by the two ends of its LONG AXIS in real coordinates plus a
+// half-width, so the shape and the angle come from the ground rather than from
+// a guess. `formal` gardens (the French ones: allees flanking an open centre)
+// get their trees in rows down both sides with the middle left clear; the rest
+// are planted through.
+const GARDENS = [
+  // id, lat/lon of each end of the long axis, half-width, formal, already turfed
+  ['champdemars', 48.8584, 2.2945, 48.8517, 2.3018, 108, true,  true],
+  ['tuileries',   48.8637, 2.3227, 48.8630, 2.3345, 140, true,  false],
+  ['luxembourg',  48.8478, 2.3350, 48.8443, 2.3378, 165, true,  false],
+  ['monceau',     48.8805, 2.3075, 48.8792, 2.3110, 125, false, false],
+  ['plantes',     48.8455, 2.3565, 48.8432, 2.3635, 115, true,  false],
+  ['invalides',   48.8628, 2.3135, 48.8574, 2.3120, 112, true,  false],
+  ['palaisroyal', 48.8659, 2.3370, 48.8648, 2.3380,  45, true,  false],
+];
+
+function gardenGeom(g) {
+  const a = geo(g[1], g[2]), b = geo(g[3], g[4]);
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const L = Math.hypot(dx, dz) || 1;
+  return { id: g[0], a, b, L, ux: dx / L, uz: dz / L,
+    half: g[5], formal: g[6], turfed: g[7] };
 }
 
 function addOval(scene, x, z, rx, rz, color, y) {
@@ -2550,7 +2591,36 @@ function makeMadeleine() {
 }
 
 // ---------------------------------------------------------------- Bois
-function addTrees(scene) {
+function addTrees(scene, standing) {
+  // Nothing is planted through a wall or out in the river. The garden shapes
+  // below are rectangles laid over their real axes, and a rectangle round the
+  // Tuileries or the Esplanade catches the blocks along its edges and, at the
+  // Plantes, the water: 81 trees were growing indoors and 8 midstream.
+  const cell = 120, occupied = new Map();
+  for (const b of (standing || [])) {
+    const k = Math.floor(b.x / cell) + ',' + Math.floor(b.z / cell);
+    if (!occupied.has(k)) occupied.set(k, []);
+    occupied.get(k).push(b);
+  }
+  const indoors = (x, z) => {
+    const gx = Math.floor(x / cell), gz = Math.floor(z / cell);
+    for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) {
+      for (const b of (occupied.get((gx + a) + ',' + (gz + c)) || [])) {
+        const ry = b.ry || 0;
+        const hw = (b.rw !== undefined ? b.rw : b.w) / 2 + 2;
+        const hd = (b.rd !== undefined ? b.rd : b.d) / 2 + 2;
+        const cs = Math.cos(ry), sn = Math.sin(ry);
+        const px = x - b.x, pz = z - b.z;
+        const lx = px * cs - pz * sn, lz = px * sn + pz * cs;
+        if (Math.abs(lx) <= hw && Math.abs(lz) <= hd) return true;
+      }
+    }
+    return false;
+  };
+  const plantable = (x, z) => {
+    const n = riverNear(x, z);
+    return !(n && n.dist < RIVER_HALF + 8) && !indoors(x, z);
+  };
   const rand = mulberry32(99);
   const pts = [];
   for (let i = 0; i < 1250; i++) {
@@ -2559,6 +2629,7 @@ function addTrees(scene) {
     if (dx * dx + dz * dz < 1) continue;
     if ((x - PAD_POS.x) ** 2 + (z - PAD_POS.z) ** 2 < 320 * 320) continue;
     if (distToStreets(x, z) < 26) continue; // keep the carriage roads clear
+    if (!plantable(x, z)) continue;   // nor through the Bois's own walls
     pts.push({ x, z, s: 3 + rand() * 3.4, r: rand() });
   }
 
@@ -2571,6 +2642,27 @@ function addTrees(scene) {
   //
   // Planted in four rows flanking the cascade, thinning as the slope falls to
   // the quay, and kept off the central axis where the water runs.
+  // THE GARDENS. Formal ones get allees down both flanks with the centre left
+  // open — which is what a French garden IS from the air, and what makes the
+  // Champ de Mars and the Esplanade read as avenues rather than as fields.
+  // The English ones (Monceau) are planted through.
+  for (const g of GARDENS.map(gardenGeom)) {
+    const step = 26;
+    for (let a = 30; a < g.L - 30; a += step) {
+      const offs = g.formal
+        ? [-g.half * 0.82, -g.half * 0.6, g.half * 0.6, g.half * 0.82]
+        : [-g.half * 0.75, -g.half * 0.35, 0, g.half * 0.35, g.half * 0.75];
+      for (const off of offs) {
+        if (rand() < (g.formal ? 0.12 : 0.42)) continue;      // gaps, and glades
+        const j = (rand() - 0.5) * (g.formal ? 7 : 34);
+        const w = off + j;
+        const x = g.a.x + g.ux * a - g.uz * w;
+        const z = g.a.z + g.uz * a + g.ux * w;
+        if (plantable(x, z)) pts.push({ x, z, s: 3.2 + rand() * 2.8, r: rand() });
+      }
+    }
+  }
+
   {
     const t = placeLegacy('trocadero'), e = placeLegacy('eiffel');
     const dx = e.x - t.x, dz = e.z - t.z, L = Math.hypot(dx, dz) || 1;
@@ -2583,7 +2675,7 @@ function addTrees(scene) {
           const px = t.x + ux * a - uz * wOff;
           const pz = t.z + uz * a + ux * wOff;
           if (rand() < 0.18) continue;               // gaps, not a plantation
-          pts.push({ x: px, z: pz, s: 3.4 + rand() * 2.6, r: rand() });
+          if (plantable(px, pz)) pts.push({ x: px, z: pz, s: 3.4 + rand() * 2.6, r: rand() });
         }
       }
     }

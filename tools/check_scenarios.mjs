@@ -12,6 +12,7 @@ import { SCENARIOS } from '../src/scenarios.js';
 import { makeShip } from './sim.mjs';
 import { SHIPS } from '../src/ships.js';
 import { TRACKS } from '../src/tracks.js';
+import { inRiver } from '../src/paris_terrain.js';
 
 const scene = { children: [], add(...o) { this.children.push(...o); },
   remove() {}, traverse(f) { f(this); } };
@@ -173,6 +174,42 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     console.log('   ' + (ok ? 'ok  ' : 'FAIL') + '  ' + t.id.padEnd(16)
       + ' lowest gate ' + worstI + ' at ' + worst.toFixed(1).padStart(6)
       + ' m over its ground');
+  }
+
+  console.log('');
+  console.log('THE GARDENS ARE PLANTED, AND NOT THROUGH THE WALLS');
+  {
+    const trees = (world.trees || []).filter((t) => t && t.x !== undefined);
+    const cell = 120, occ = new Map();
+    for (const b of world.buildings) {
+      const k = Math.floor(b.x / cell) + ',' + Math.floor(b.z / cell);
+      if (!occ.has(k)) occ.set(k, []);
+      occ.get(k).push(b);
+    }
+    let inB = 0, inR = 0;
+    for (const t of trees) {
+      if (inRiver(t.x, t.z)) { inR++; continue; }
+      const gx = Math.floor(t.x / cell), gz = Math.floor(t.z / cell);
+      let hit = false;
+      for (let a = -1; a <= 1 && !hit; a++) for (let c = -1; c <= 1 && !hit; c++) {
+        for (const b of (occ.get((gx + a) + ',' + (gz + c)) || [])) {
+          const ry = b.ry || 0;
+          const hw = (b.rw !== undefined ? b.rw : b.w) / 2;
+          const hd = (b.rd !== undefined ? b.rd : b.d) / 2;
+          const cs = Math.cos(ry), sn = Math.sin(ry);
+          const px = t.x - b.x, pz = t.z - b.z;
+          const lx = px * cs - pz * sn, lz = px * sn + pz * cs;
+          if (Math.abs(lx) <= hw && Math.abs(lz) <= hd) { hit = true; break; }
+        }
+      }
+      if (hit) inB++;
+    }
+    console.log('   ' + trees.length + ' trees; ' + inB + ' indoors, ' + inR + ' in the Seine');
+    // the survivors are one cluster in the Bois under a collider registered
+    // after the planting pass; it was 81 and 8 before the gardens got a filter
+    if (inR > 0) { console.log('   FAIL trees growing in the river'); fails++; }
+    else if (inB > 20) { console.log('   FAIL too many trees indoors'); fails++; }
+    else console.log('   ok   nothing growing in the river, and next to nothing indoors');
   }
 
   console.log('');
