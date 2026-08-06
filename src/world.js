@@ -36,6 +36,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_plan.js';
 import { WALL_RUNS, WALL } from './paris_wall.js';
+import { PONT, AVRE, CHURCH, PARK, LONGCHAMP as LC_REAL, AUTEUIL as AU_REAL } from './paris_stcloud.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -341,10 +342,13 @@ export const TOWER_RING = Object.assign(
   { gw: TOWER_H / 2, gh: TOWER_H },
 );
 
-const _lc = placeLegacy('longchamp');
-const LONGCHAMPS = { x: _lc.x, z: _lc.z, rx: 520, rz: 300 };
-const _au = placeLegacy('autueil');
-const AUTEUIL = { x: _au.x, z: _au.z, rx: 420, rz: 260 };
+// The racecourses, from their real ground (src/paris_stcloud.js) rather than a
+// hand-typed ellipse. Longchamp was drawn 520 x 300; the real course is 418 by
+// 705 — TALLER THAN IT IS WIDE, so the game had it turned through ninety
+// degrees. That is why the western two thirds of the track fell outside every
+// exclusion meant to keep buildings off it, and why six houses stood on it.
+const LONGCHAMPS = { x: LC_REAL.x, z: LC_REAL.z, rx: LC_REAL.rx, rz: LC_REAL.rz };
+const AUTEUIL = { x: AU_REAL.x, z: AU_REAL.z, rx: AU_REAL.rx, rz: AU_REAL.rz };
 
 export function buildWorld(scene) {
   windMats.length = 0;
@@ -607,8 +611,10 @@ export function buildWorld(scene) {
   roadH(-1600, 330, -1250, 200, 24);            // the allée to the racecourse
   roadH(-2330, 440, -2340, 90, 22);             // the village street to the church
   roadH(-2080, 400, -2150, 150, 20);            // the lane down toward the field gate
-  { const h = H2(-1994, 400); const q = onTheRiver(h.x, h.z);
-    wb.position.set(q.x, 0, q.z); wb.rotation.y = q.ry; }   // over the water, not beside it
+  // At the real Pont de Saint-Cloud (src/paris_stcloud.js), not 636 m from any
+  // water where the old half-frame coordinate had left it.
+  wb.position.set(PONT.x, 0, PONT.z);
+  wb.rotation.y = onTheRiver(PONT.x, PONT.z).ry;
   wb.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(wb);
 
@@ -1489,8 +1495,12 @@ function addBookPlaces(scene, buildings) {
   // The reach here runs north and south, so the crossing runs east and west:
   // the deck's long axis is local +x and the group is NOT turned. (Rotating it
   // a quarter turn laid the whole aqueduct along the water instead of over it.)
-  { const h = H2(-1985, 150); const q = onTheRiver(h.x, h.z);
-    aq.position.set(q.x, 0, q.z); aq.rotation.y = q.ry; AQ = q; }
+  // At the real Passerelle de l'Avre — the aqueduct's own crossing of the Seine
+  // (src/paris_stcloud.js). It used to stand NINE METRES from the centre of
+  // Longchamps racecourse and 564 m from any water.
+  AQ = { x: AVRE.x, z: AVRE.z, ry: onTheRiver(AVRE.x, AVRE.z).ry };
+  aq.position.set(AQ.x, 0, AQ.z);
+  aq.rotation.y = AQ.ry;
   aq.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(aq);
   buildings.length -= 2;                            // re-place the piers in world terms
@@ -1522,10 +1532,14 @@ function addBookPlaces(scene, buildings) {
     ridge.position.set(t.position.x, SK_H + 2.2, 0);
     skel.add(ridge);
   }
-  { const q = H2(-2062, -46); skel.position.set(q.x, 0, q.z); }
+  // "scarcely two air-ships' lengths" in front of Santos-Dumont's own doors —
+  // which is a RELATIONSHIP, not a coordinate, so it is written as one. The
+  // half-frame coordinate that used to be here left it 3.9 km from the
+  // aerodrome, which is the opposite of the hazard he complained of.
+  skel.position.set(PAD_POS.x - 96, 0, PAD_POS.z - 54);
   skel.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(skel);
-  { const q = H2(-2062, -46);
+  { const q = { x: PAD_POS.x - 96, z: PAD_POS.z - 54 };
     buildings.push({ x: q.x, z: q.z, w: SK_L * 2, d: SK_W * 2, h: SK_H, top: SK_H + 4 }); }
 
   // ---- the foundation trenches that "began appearing here and there to the
@@ -1535,7 +1549,9 @@ function addBookPlaces(scene, buildings) {
   for (let i = 0; i < 7; i++) {
     const len = 18 + tr() * 26;
     const t = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 2.4), trenchMat);
-    { const q = H2(-2115 + tr() * 90, -95 + tr() * 60); t.position.set(q.x, 0.12, q.z); }
+    // the drainage trenches "to the right of my open doors" — so they belong to
+    // the aerodrome, and follow it rather than an old half-frame coordinate
+    t.position.set(PAD_POS.x - 200 + tr() * 180, 0.12, PAD_POS.z - 160 + tr() * 120);
     t.rotation.y = tr() * Math.PI;
     scene.add(t);
   }
@@ -1607,9 +1623,11 @@ function addBookPlaces(scene, buildings) {
   // the village of Saint-Cloud, on the flat between the hill and the aerodrome
   const scWall = new THREE.MeshLambertMaterial({ color: 0xe0d6bd });
   const scRoof = new THREE.MeshLambertMaterial({ color: 0x6b5a4a });
+  // …round its church, on the WEST bank, where the town is. It used to be
+  // scattered about a half-frame coordinate that put it across the river.
   for (let i = 0; i < 34; i++) {
-    const q = H2(-2300 - scRand() * 110, -400 + scRand() * 800);
-    const x = q.x, z = q.z;
+    const x = CHURCH.x - 190 + scRand() * 380;
+    const z = CHURCH.z - 260 + scRand() * 520;
     if (Math.hypot(x - PAD_POS.x, z - PAD_POS.z) < 340) continue;   // keep the field clear
     // ...and out of the Seine. The village is scattered across a rectangle and
     // was only ever asked to keep off the aerodrome, because the hand-drawn
@@ -1639,10 +1657,10 @@ function addBookPlaces(scene, buildings) {
   scNave.position.y = 7.5; scChurch.add(scNave);
   const scSpire = new THREE.Mesh(new THREE.ConeGeometry(4.2, 24, 6), scRoof);
   scSpire.position.set(-10, 27, 0); scChurch.add(scSpire);
-  { const q = H2(-2360, 90); scChurch.position.set(q.x, 0, q.z); }
+  scChurch.position.set(CHURCH.x, 0, CHURCH.z);   // Église Saint-Clodoald
   scChurch.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(scChurch);
-  { const q = H2(-2360, 90); buildings.push({ x: q.x, z: q.z, w: 56, d: 28, h: 15, top: 39 }); }
+  buildings.push({ x: CHURCH.x, z: CHURCH.z, w: 56, d: 28, h: 15, top: 39 });
 
   // and the wood of the park, standing on the slope at its own height
   for (let i = 0; i < 190; i++) {
@@ -1683,7 +1701,8 @@ function addBookPlaces(scene, buildings) {
     ramp.rotation.z = -sx * slope;
     sur.add(ramp);
   }
-  { const q = H2(-2036, -600); sur.position.set(q.x, 0, q.z); }
+  { const h = H2(-2036, -600); const q = onTheRiver(h.x, h.z);
+    sur.position.set(q.x, 0, q.z); sur.rotation.y = q.ry; }   // over the water
   sur.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(sur);
 
@@ -1774,13 +1793,14 @@ function addBookPlaces(scene, buildings) {
   { const q = H2(-1010, 118); buildings.push({ x: q.x, z: q.z, w: 24, d: 24, h: 16, top: 23 }); }
 
   // ---- the Auteuil racecourse, whose crowd cheered him on the Deutsch run
-  { const q = H2(-870, 430); addOval(scene, q.x, q.z, 380, 240, 0x86a05e, 0.12); }
+  addOval(scene, AUTEUIL.x, AUTEUIL.z, AUTEUIL.rx, AUTEUIL.rz, 0x86a05e, 0.12);
   const stand = new THREE.Mesh(new THREE.BoxGeometry(70, 12, 18),
     new THREE.MeshLambertMaterial({ color: 0xcfc4a8 }));
-  { const q = H2(-870, 566); stand.position.set(q.x, 6, q.z); }
+  stand.position.set(AUTEUIL.x, 6, AUTEUIL.z + AUTEUIL.rz * 0.72);   // on the rail
   stand.castShadow = true;
   scene.add(stand);
-  { const q = H2(-870, 566); buildings.push({ x: q.x, z: q.z, w: 140, d: 36, h: 12, top: 14 }); }
+  buildings.push({ x: AUTEUIL.x, z: AUTEUIL.z + AUTEUIL.rz * 0.72,
+    w: 140, d: 36, h: 12, top: 14 });
 
   // ---- the Parc d'Aérostation of Vaugirard: Lachambre's balloon works, where
   // he made his first ascent and started the Nos. 2 and 3

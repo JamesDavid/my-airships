@@ -233,8 +233,60 @@ for what, needle in [
 print('   Paris had about thirty bridges in 1901; the crossings above are all')
 print('   the surveyed street network offers the bridge finder.')
 
+# --------------------------------------------------------------- Saint-Cloud
+print('\n5. SAINT-CLOUD, AND THE THINGS THAT USED TO STAND IN A FIELD')
+sc = read('paris_stcloud.js')
+
+
+def sc_const(name):
+    m = re.search(r'export const %s = \{ x: (-?[\d.]+), z: (-?[\d.]+), '
+                  r'rx: (-?[\d.]+), rz: (-?[\d.]+) \}' % name, sc)
+    return tuple(float(v) for v in m.groups())
+
+
+def to_river(x, z):
+    return min(math.hypot(p[0] - x, p[1] - z) for p in S)
+
+
+for _nm, _label in (('PONT', 'the Pont de Saint-Cloud'),
+                    ('AVRE', 'the Avre aqueduct')):
+    _x, _z, _rx, _rz = sc_const(_nm)
+    check(to_river(_x, _z) < 60, '%s is over the water' % _label,
+          '%.0f m from the river' % to_river(_x, _z))
+
+lcx, lcz, lcrx, lcrz = sc_const('LONGCHAMP')
+print('   Longchamp is %.0f x %.0f m about (%.0f, %.0f). It was drawn 520 x 300,'
+      % (lcrx * 2, lcrz * 2, lcx, lcz))
+print('   which is the wrong way round: the real course is taller than it is wide,')
+print('   and that is why its western two thirds fell outside every exclusion.')
+check(lcrz > lcrx, 'Longchamps is taller than it is wide, as the ground is')
+
+chx, chz, _a, _b = sc_const('CHURCH')
+# NOT the station nearest in z: the Seine loops round the Bois, so it crosses
+# any given latitude three times and "nearest by z" found a reach four
+# kilometres east. The nearest station in both axes is the bank it stands on.
+_st = min(S, key=lambda q: math.hypot(q[0] - chx, q[1] - chz))
+check(chx < _st[0], 'the village church is on the WEST bank, where the town is',
+      'church x %.0f, nearest river station x %.0f (%.0f m off)'
+      % (chx, _st[0], math.hypot(_st[0] - chx, _st[1] - chz)))
+
+wjs = read('world.js')
+for _needle, _what in (
+        ('skel.position.set(PAD_POS.x', "Deutsch's shed stands beside the aerodrome"),
+        ('wb.position.set(PONT.x', 'the road bridge is at the real Pont de Saint-Cloud'),
+        ('AQ = { x: AVRE.x', "the aqueduct is at the real Passerelle de l'Avre"),
+        ('scChurch.position.set(CHURCH.x', 'the church is at Saint-Clodoald'),
+        ('addOval(scene, AUTEUIL.x', 'Auteuil is drawn on its real ground')):
+    check(_needle in wjs, _what)
+_left = wjs.count('H2(-')
+print('   %d objects are still placed in the old half frame: a windmill, a' % _left)
+print('   railway halt and their colliders — Bois scenery with nothing nameable')
+print('   to anchor them to, so they are left where they were put.')
+check(_left <= 6, 'the half-frame placements are down to Bois scenery',
+      '%d left' % _left)
+
 # ---------------------------------------------------------------- the places
-print('\n5. THE PLACES AND THE COURSE')
+print('\n6. THE PLACES AND THE COURSE')
 geo = read('paris_geo.js')
 PL = re.findall(r'(\w+):\s*\[([\d.]+),\s*([\d.-]+)\]', geo.split('export const PLACES')[1].split('};')[0])
 OLAT = float(re.search(r'ORIGIN = \{ lat: ([\d.]+), lon: ([\d.]+)', geo).group(1))

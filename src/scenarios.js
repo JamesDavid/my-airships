@@ -1,4 +1,5 @@
 import { placeLegacy } from './paris_geo.js';
+import { ROTHSCHILD } from './paris_stcloud.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -63,6 +64,13 @@ export class Rival {
 
 // ---------------------------------------------------------------- scenarios
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// "standing in my basket at the top of the tallest chestnut, the propeller
+// touching the ground" — 13 July 1901. A little wide of the park's own hedge,
+// because a chestnut on its edge is still its chestnut.
+const inRothschild = (x, z) =>
+  ((x - ROTHSCHILD.x) / (ROTHSCHILD.rx + 70)) ** 2
+  + ((z - ROTHSCHILD.z) / (ROTHSCHILD.rz + 70)) ** 2 < 1;
 
 export const SCENARIOS = [
   {
@@ -286,8 +294,13 @@ export const SCENARIOS = [
       }
       if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('Home to the timekeepers in the fortieth minute — "after a terrific struggle with the element."');
+      } else if (ctx.ship.landed && inRothschild(ctx.ship.pos.x, ctx.ship.pos.z)) {
+        // THE park, not "anywhere in the Bois". He came down in M. Edmond de
+        // Rothschild's, and OpenStreetMap still knows where it is: the Parc de
+        // Boulogne — Edmond de Rothschild (src/paris_stcloud.js).
+        ctx.complete('You settle into the tree-tops of M. Edmond de Rothschild’s park, propeller touching the grass. Princess Isabel sends up your lunch, and a medal of St. Benedict follows by post.');
       } else if (ctx.ship.landed && ctx.world.isInBois(ctx.ship.pos.x, ctx.ship.pos.z)) {
-        ctx.complete('You settle into the tree-tops of the park, propeller touching the grass. Princess Isabel sends up your lunch, and a medal of St. Benedict follows by post.');
+        ctx.complete('Down among the trees of the Bois — whole, but a long walk from the timekeepers, and no lunch sent up.');
       } else if (ctx.ship.landed) {
         ctx.fail('Down in the open, far from St. Cloud and from any kindly tree.');
       }

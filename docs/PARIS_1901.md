@@ -287,3 +287,16 @@ Said plainly so nobody spends a week on it:
   ran 1.5 km wide of the real river and spent a fifth of its length on dry land.
   If it cannot be fetched and screened by a script in `tools/`, it should not
   go in.
+
+---
+
+## Backlog
+
+- **Ballast by ship: sand or water.** The UI button says SAND for every ship.
+  The book does not use one material throughout — check `docs/BOOK_REFERENCE.md`
+  and the memoir per vessel, and label the button with what that ship actually
+  carried. Small, and it is the sort of detail this project is for.
+- **Versailles cannot be shown.** The Château is 12.2 km west and 6.2 km south
+  of the Tower, which is far outside the survey (x −5100..6100, z −3800..2500).
+  Only the Paris–Versailles road toward it is in frame, and it is drawn. If
+  Versailles is ever wanted, the survey has to grow, not the scenery.
