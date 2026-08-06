@@ -282,7 +282,7 @@ export function buildWorld(scene) {
   // Longchamps pelouse
   addOval(scene, LONGCHAMPS.x, LONGCHAMPS.z, LONGCHAMPS.rx, LONGCHAMPS.rz, 0x86a05e, 0.12);
   // aerodrome grounds
-  { const a = H2(-2140, 0); addFlat(scene, a.x, a.z, 480, 480, 0x84925f, 0.1); }
+  addFlat(scene, PAD_POS.x, PAD_POS.z, 500, 500, 0x84925f, 0.1);   // the flying ground
 
   // ---------- the Seine: stone quays and living, reflecting water ----------
   const riverPts = seinePoints();
@@ -582,10 +582,59 @@ export function buildWorld(scene) {
     }
   };
 
-  // ---------- aerodrome ----------
-  const hangar = makeHangar();
-  hangar.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  scene.add(hangar);
+  // ---------- the Aéro-Club de France's ground at Saint-Cloud ----------
+  // Everything here hangs off PAD_POS, which is itself chosen by measurement,
+  // so the field, the shed and the club buildings cannot drift apart from the
+  // spot the ships actually stand on — which is what happened when they were
+  // written as absolute numbers and the world changed scale under them.
+  let hangar;                       // its flag is a wind vane the HUD streams
+  {
+    const field = new THREE.Group();
+    field.position.set(PAD_POS.x, 0, PAD_POS.z);
+
+    hangar = makeHangar();
+    hangar.position.set(-85, 0, 0);        // the balloon shed, west of the field
+    hangar.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    field.add(hangar);
+    scene.add(field);
+    buildings.push({ x: PAD_POS.x - 85, z: PAD_POS.z, w: 52, d: 34, h: 15, top: 18 });
+
+    // the club house, the gas plant and the sheds along the north side: the
+    // Aéro-Club's park had a good deal more standing in it than one tent
+    const clubW = new THREE.MeshLambertMaterial({ color: 0xe4dac1 });
+    const clubR = new THREE.MeshLambertMaterial({ color: 0x6a5442 });
+    const put = (dx, dz, w, d, h, ry) => {
+      const b = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), clubW);
+      body.position.y = h / 2; b.add(body);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 1.1, 2.4, d * 1.1), clubR);
+      roof.position.y = h + 1.2; b.add(roof);
+      b.position.set(dx, 0, dz); b.rotation.y = ry || 0;
+      b.traverse((o) => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+      field.add(b);
+      buildings.push({ x: PAD_POS.x + dx, z: PAD_POS.z + dz, w, d, h, top: h + 2.4 });
+    };
+    put(-150, -110, 34, 20, 11);            // the club house
+    put(-150, -60, 22, 16, 8);              // the secretary's office
+    put(-190, 40, 26, 14, 7);               // the gas plant
+    put(-190, 80, 26, 14, 7);
+    put(-60, -150, 40, 18, 9, 0.2);         // the carriage sheds
+    // the hydrogen cylinders, in their rows
+    const cyl = new THREE.MeshLambertMaterial({ color: 0x5c6b52 });
+    for (let i = 0; i < 14; i++) {
+      const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 5.5, 8), cyl);
+      c2.position.set(-205 + (i % 7) * 4.5, 2.75, 120 + Math.floor(i / 7) * 6);
+      c2.castShadow = true; field.add(c2);
+    }
+    // the paling that shut the ground off from the park
+    const paleM = new THREE.MeshLambertMaterial({ color: 0x7d6a4c });
+    for (let i = 0; i < 44; i++) {
+      const a = (i / 44) * Math.PI * 2;
+      const pale = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.2, 0.5), paleM);
+      pale.position.set(Math.cos(a) * 235, 1.6, Math.sin(a) * 235);
+      field.add(pale);
+    }
+  }
 
   // ---------- clouds ----------
   const windB = new THREE.Vector3(4.2, 0, 0.8);
@@ -1947,26 +1996,26 @@ function makeHangar() {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1);
   const body = new THREE.Mesh(new THREE.BoxGeometry(44, 15, 18),
     new THREE.MeshLambertMaterial({ map: tex }));
-  body.position.set(-2225, 7.5, 0);
+  body.position.set(0, 7.5, 0);
   g.add(body);
   const roof = new THREE.Mesh(new THREE.BoxGeometry(46, 2.5, 20),
     new THREE.MeshLambertMaterial({ color: 0x8a3a28 }));
-  roof.position.set(-2225, 16.2, 0);
+  roof.position.set(0, 16.2, 0);
   g.add(roof);
   const door = new THREE.Mesh(new THREE.PlaneGeometry(15, 12),
     new THREE.MeshLambertMaterial({ color: 0x241a12 }));
   door.rotation.y = Math.PI / 2;
-  door.position.set(-2202.9, 6, 0);
+  door.position.set(22.1, 6, 0);
   g.add(door);
   // flag mast
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 22, 6),
     new THREE.MeshLambertMaterial({ color: 0x5a4632 }));
-  mast.position.set(-2240, 11, 14); g.add(mast);
+  mast.position.set(-15, 11, 14); g.add(mast);
   const flagGeo = new THREE.PlaneGeometry(6, 3);
   flagGeo.translate(3, 0, 0); // pivot at the mast so it can stream downwind
   const flag = new THREE.Mesh(flagGeo,
     new THREE.MeshLambertMaterial({ color: 0xb5442f, side: THREE.DoubleSide }));
-  flag.position.set(-2240, 20.5, 14); g.add(flag);
+  flag.position.set(-15, 20.5, 14); g.add(flag);
   g.userData.flag = flag;
   return g;
 }
