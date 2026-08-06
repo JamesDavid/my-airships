@@ -1654,7 +1654,12 @@ function buildCity(scene, riverPts) {
     }
     return Math.sqrt(d);
   };
-  const canPlace = (x, z) => !inSite(x, z) && distToRiver(x, z) > 116;
+  // The Bois de Boulogne is woodland with a racecourse in it, not a suburb. The
+  // frontage generator was building houses along every surveyed road that runs
+  // through it — forty-six of them stood among the trees. Same bounds as
+  // world.isInBois, plus the Longchamps and Auteuil grounds.
+  const inBois = (x, z) => x >= -3800 && x <= -680 && Math.abs(z) <= 1120;
+  const canPlace = (x, z) => !inSite(x, z) && !inBois(x, z) && distToRiver(x, z) > 116;
 
   const list = generateFrontages(STREETS, canPlace, rand);
 
