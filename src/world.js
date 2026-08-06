@@ -472,12 +472,24 @@ export function buildWorld(scene) {
     const wg = new THREE.BufferGeometry();
     wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     wg.setIndex(idx);
+    // The OUTER FACE AND PARAPET IN MASONRY, the rest in earth. Built all in
+    // one grass-green it read as a berm — "you said paris was a walled city yet
+    // i don't see the city walls" — and it was not a berm: the Thiers enceinte
+    // was a stone-faced escarp above its ditch, with the earth rampart behind.
+    // The quads come off the cross-section in order, so the first two of every
+    // four are the outer face and the parapet.
+    const perStation = (SEC.length - 1) * 6;
+    for (let i = 0; i < idx.length; i += perStation) {
+      wg.addGroup(i, 12, 0);                       // outer face + parapet: stone
+      wg.addGroup(i + 12, perStation - 12, 1);     // terreplein + inner slope: earth
+    }
     wg.computeVertexNormals();
     // DoubleSide, which is how this project sidesteps the winding trap rather
     // than guessing at it — see the Monaco roads and the Seine ribbon.
-    const wall = new THREE.Mesh(wg, new THREE.MeshLambertMaterial({
-      color: 0x8a8b6a, side: THREE.DoubleSide,
-    }));
+    const wall = new THREE.Mesh(wg, [
+      new THREE.MeshLambertMaterial({ color: 0xa9a294, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x7c8558, side: THREE.DoubleSide }),
+    ]);
     wall.receiveShadow = true;
     wall.castShadow = true;
     wall.userData.noLift = true;                 // already draped, station by station

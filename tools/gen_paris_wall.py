@@ -69,69 +69,68 @@ for e in d['elements']:
 print('%d inner-carriageway ways, %d nodes' % (len(segs), sum(len(s) for s in segs)))
 
 
-def stitch(segs):
-    segs = [list(s) for s in segs]
-    ring = segs.pop(0)
-    while segs:
-        best, bi, brev, bend = 1e9, -1, False, False
-        for i, s in enumerate(segs):
-            for rev in (False, True):
-                t = s[::-1] if rev else s
-                d0 = math.dist(ring[-1], t[0])
-                d1 = math.dist(ring[0], t[-1])
-                if d0 < best:
-                    best, bi, brev, bend = d0, i, rev, True
-                if d1 < best:
-                    best, bi, brev, bend = d1, i, rev, False
-        if best > 400:
-            break
-        s = segs.pop(bi)
-        if brev:
-            s = s[::-1]
-        ring = ring + s[1:] if bend else s[:-1] + ring
-    return ring
-
-
-ring = stitch(segs)
-print('stitched to %d points' % len(ring))
-
+# ORDER THEM BY BEARING, not by stitching endpoints.
+#
+# The first attempt walked the ways end to end, which is how the Seine was
+# walked — and it gave up as soon as two ways failed to meet within 400 m,
+# leaving most of the ring unstitched. What came out was the northern arc only:
+# the WESTERN wall, the one between the city and the Bois that every Deutsch
+# flight crossed, was missing entirely, and a pilot said so — "you said paris
+# was a walled city yet i don't see the city walls."
+#
+# The enceinte is a simple closed loop about the middle of Paris, so it does not
+# need stitching at all. Sort every node by its bearing from Châtelet, take the
+# median radius in each half-degree of arc, and the ring falls out in order with
+# the slip roads and interchange loops averaged away.
 cx, cz = xz(*CENTRE)
-rad = [math.hypot(p[0] - cx, p[1] - cz) for p in ring]
-print('radius about Châtelet %.0f..%.0f m' % (min(rad), max(rad)))
+pts = [p for seg in segs for p in seg]
+inframe = [p for p in pts if X0 <= p[0] <= X1 and Z0 <= p[1] <= Z1]
+print('%d nodes, %d inside the survey' % (len(pts), len(inframe)))
 
-# The Périphérique carries slip roads and interchange loops that dive well
-# inside and outside the ring. The wall was a smooth oval; anything far off the
-# local trend is a bretelle, not a rampart.
-med = sorted(rad)[len(rad) // 2]
-keep = [p for p, r in zip(ring, rad) if 0.80 * med < r < 1.25 * med]
-print('%d of %d stations kept (%d on slip roads and loops)'
-      % (len(keep), len(ring), len(ring) - len(keep)))
+BINS = 720                                   # half a degree of arc
+bins = {}
+for x, z in inframe:
+    a = math.atan2(z - cz, x - cx)
+    b = int((a + math.pi) / (2 * math.pi) * BINS) % BINS
+    bins.setdefault(b, []).append(math.hypot(x - cx, z - cz))
 
-# resample to an even 60 m and clip to the survey
-out = []
-for i, p in enumerate(keep):
-    if out and math.dist(out[-1], p) < 60:
+ring = []
+for b in range(BINS):
+    rs = bins.get(b)
+    if not rs:
+        ring.append(None)                    # the ring is outside the frame here
         continue
-    if math.dist(out[-1] if out else p, p) > 500:      # a cut where a lobe was
-        out.append(None)
-    out.append(p)
+    rs.sort()
+    r = rs[len(rs) // 2]                     # median: a bretelle cannot drag it
+    a = (b + 0.5) / BINS * 2 * math.pi - math.pi
+    ring.append((cx + math.cos(a) * r, cz + math.sin(a) * r))
+
+have = [r for r in ring if r]
+rad = [math.hypot(p[0] - cx, p[1] - cz) for p in have]
+print('%d of %d half-degree bins have wall in them; radius %.0f..%.0f m'
+      % (len(have), BINS, min(rad), max(rad)))
+
+# Walk the bins in order. An EMPTY bin is not a break — the Périphérique's
+# nodes are sparse in places and the ring is still the ring across a gap of a
+# few degrees. Only a real jump ends a run, which is where the wall leaves the
+# survey and comes back somewhere else.
 runs, cur = [], []
-for p in out:
-    if p is None:
-        if len(cur) > 3:
+for p in [ring[i] for i in range(BINS) if ring[i]] + [None]:
+    if p is None or (cur and math.dist(cur[-1], p) > 420):
+        if len(cur) > 4:
             runs.append(cur)
         cur = []
-    elif X0 <= p[0] <= X1 and Z0 <= p[1] <= Z1:
+    if p:
         cur.append(p)
-    else:
-        if len(cur) > 3:
-            runs.append(cur)
-        cur = []
-if len(cur) > 3:
+if len(cur) > 4:
     runs.append(cur)
 L = sum(math.dist(r[i - 1], r[i]) for r in runs for i in range(1, len(r)))
 print('%d run%s inside the survey, %.1f km of rampart'
       % (len(runs), '' if len(runs) == 1 else 's', L / 1000))
+for r in runs:
+    print('   %3d stations  x %6.0f..%-6.0f  z %6.0f..%-6.0f'
+          % (len(r), min(q[0] for q in r), max(q[0] for q in r),
+             min(q[1] for q in r), max(q[1] for q in r)))
 
 body = ',\n'.join(
     '  [' + ','.join('[%g,%g]' % (round(x, 1), round(z, 1)) for x, z in r) + ']'

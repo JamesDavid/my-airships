@@ -30,7 +30,7 @@ export const TRACKS = [
       return ellipse(L.x, L.z, 600, 380, 6, 60, 20); })(),
   },
   {
-    id: 'gymkhana', location: 'paris', laps: 2, v: 3,
+    id: 'gymkhana', location: 'paris', laps: 2, v: 4,
     name: 'The Aerial Gymkhana',
     sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
     // Hung off the landmarks themselves rather than written out: the places
@@ -49,7 +49,17 @@ export const TRACKS = [
         { x: roue.x + 88, y: 42, z: roue.z, r: 30 },
         { x: (twr.x + ec.x) / 2, y: 25, z: (twr.z + ec.z) / 2, r: 34 }, // low over the Champ de Mars
         { x: twr.x, y: 35, z: twr.z - 150, r: 34 },               // the Tower's shoulder
-        { x: troc.x, y: 50, z: troc.z, r: 34 },                   // over the Trocadéro dome
+        // PAST the palace front, not through it. This gate sat on the rotunda
+        // at 50 m with a radius of 34, and gateHeadings pointed it down the
+        // z axis — which is exactly the line the Trocadéro's two 70 m towers
+        // stand on, at 21 m either side of the centre. You were being asked to
+        // fly between them through a ring wider than the gap: "this goal is
+        // twisted should be turned so not blocked by towers" (bug #37).
+        //
+        // Sixty-two metres out over the forecourt keeps the low pass and the
+        // drama — the rotunda is 18 m across and the curved galleries all sweep
+        // the OTHER way, toward the Tower — with eighteen metres of daylight.
+        { x: troc.x - 62, y: 44, z: troc.z, r: 26 },
         { x: arc.x + 300, y: 16, z: arc.z + 150, r: 26 },         // DOWN the Champs-Élysées
         { x: arc.x, y: 13, z: arc.z, r: 11, ang: -2.034 },        // UNDER the Arc
       ];

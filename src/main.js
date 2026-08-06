@@ -2679,14 +2679,38 @@ function checkCollisions(dt) {
     return;
   }
 
-  // buildings (AABB vs each hull sphere)
+  // Buildings: the ORIENTED box, not the axis-aligned one.
+  //
+  // `w`/`d` are the world-axis extents — a bounding box round a turned
+  // building — while `rw`/`rd`/`ry` are the building itself. Testing against
+  // w/d meant a block of 8 x 29 m standing at 26 degrees had a 30 x 20 m
+  // collider: 147% too much area, and a pilot "about to go thru the ring"
+  // took a keel smash from a wall ten metres away from any masonry. He
+  // diagnosed it himself — "make sure colliders and buildings are the same
+  // bounding box" — and with twelve thousand surveyed footprints standing at
+  // every angle of the compass it had stopped being a rare annoyance.
+  //
+  // So the hull point is taken into the building's own frame, clamped there,
+  // and brought back. `b.y` is the ground it stands on, so the box runs from
+  // that up to `b.top`, not from zero.
   for (const b of world.buildings) {
     if (Math.abs(b.x - ship.pos.x) > 90 || Math.abs(b.z - ship.pos.z) > 90) continue;
+    const ry = b.ry || 0;
+    const hw = (b.rw !== undefined ? b.rw : b.w) / 2;
+    const hd = (b.rd !== undefined ? b.rd : b.d) / 2;
+    const cs = Math.cos(ry), sn = Math.sin(ry);
+    const base = b.y || 0;
     for (const { q, r, s, keel } of pts) {
       if (q.y > b.top + r) continue;
-      const cx = Math.max(b.x - b.w / 2, Math.min(b.x + b.w / 2, q.x));
-      const cy = Math.min(b.top, Math.max(0, q.y));
-      const cz = Math.max(b.z - b.d / 2, Math.min(b.z + b.d / 2, q.z));
+      // world -> the building's own axes (the mesh is built with rotation.y)
+      const px = q.x - b.x, pz = q.z - b.z;
+      const lx = px * cs - pz * sn, lz = px * sn + pz * cs;
+      const kx = Math.max(-hw, Math.min(hw, lx));
+      const kz = Math.max(-hd, Math.min(hd, lz));
+      const cy = Math.min(b.top, Math.max(base, q.y));
+      // …and back again
+      const cx = b.x + kx * cs + kz * sn;
+      const cz = b.z - kx * sn + kz * cs;
       const d = Math.hypot(q.x - cx, q.y - cy, q.z - cz);
       if (d < r) {
         const n = d > 0.001
@@ -3170,6 +3194,14 @@ function frame(now) {
     inBois: world.isInBois(ship.pos.x, ship.pos.z),
     buildings: world.buildings,
     airY: verticalAir(world, ship.pos.x, ship.pos.y, ship.pos.z, windGustT),
+    // THE GROUND. Airship.groundUnder() reads this, and ground contact, the
+    // wreck's rest and the guide rope's floor all measure from it — but it was
+    // never in the env, so groundUnder() returned zero for every ship in every
+    // world. On the flat that is invisible. On the Chaillot bluff and the
+    // Passy slope it is not: a ship that came down hard rested at absolute
+    // zero and sank fifteen metres into the hill, which two pilots filed as
+    // "I fell through the ground after crashing" and "Sank below the earth".
+    groundAt: world.groundAt,
   };
   // the air itself is worth remarking on when it takes hold of the ship
   if (env.airY > 0.75) addMsg('updraft', 'The air itself is lifting you — a column of it, rising to build the cloud above.', 26);
