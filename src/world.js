@@ -35,6 +35,7 @@ const placeLegacy0 = (lat, lon) => {
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_plan.js';
+import { WALL_RUNS, WALL } from './paris_wall.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -395,6 +396,53 @@ export function buildWorld(scene) {
       apron.userData.noLift = true;
       scene.add(apron);
     }
+  }
+
+  // ---------- the Thiers fortifications ----------
+  // Paris was a WALLED CITY until 1919, and this world has never had an edge:
+  // it simply thinned out into countryside. The enceinte was a bastioned
+  // rampart with a ditch and a quarter-kilometre of cleared glacis outside it
+  // on which building was forbidden — the zone non aedificandi — which is why
+  // it reads as a green belt in every period photograph. See src/paris_wall.js
+  // for where the line comes from, and docs/PARIS_1901.md for why.
+  for (const run of WALL_RUNS) {
+    if (run.length < 4) continue;
+    const pos = [], idx = [];
+    // the cross-section, across the wall and up it: outer toe, outer crest,
+    // parapet, terreplein, inner toe. Outward is +v.
+    const SEC = [
+      [WALL.base / 2, 0], [WALL.base / 2 - 7, WALL.rampart],
+      [WALL.base / 2 - 10, WALL.rampart + WALL.parapet],
+      [WALL.base / 2 - 13, WALL.rampart], [-WALL.base / 2, 0],
+    ];
+    for (let i = 0; i < run.length; i++) {
+      const [x, z] = run[i];
+      const a = run[Math.max(0, i - 1)], b = run[Math.min(run.length - 1, i + 1)];
+      const tx = b[0] - a[0], tz = b[1] - a[1];
+      const tl = Math.hypot(tx, tz) || 1;
+      const nx = -tz / tl, nz = tx / tl;
+      const g0 = parisGround(x, z);
+      for (const [v, up] of SEC) pos.push(x + nx * v, g0 + up, z + nz * v);
+      if (i > 0) {
+        const a0 = (i - 1) * SEC.length, b0 = i * SEC.length;
+        for (let k = 0; k < SEC.length - 1; k++) {
+          idx.push(a0 + k, a0 + k + 1, b0 + k, a0 + k + 1, b0 + k + 1, b0 + k);
+        }
+      }
+    }
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    wg.setIndex(idx);
+    wg.computeVertexNormals();
+    // DoubleSide, which is how this project sidesteps the winding trap rather
+    // than guessing at it — see the Monaco roads and the Seine ribbon.
+    const wall = new THREE.Mesh(wg, new THREE.MeshLambertMaterial({
+      color: 0x8a8b6a, side: THREE.DoubleSide,
+    }));
+    wall.receiveShadow = true;
+    wall.castShadow = true;
+    wall.userData.noLift = true;                 // already draped, station by station
+    scene.add(wall);
   }
 
   // paved city base (east of the Seine)

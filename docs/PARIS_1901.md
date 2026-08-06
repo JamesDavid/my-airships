@@ -192,7 +192,20 @@ and that a source has to settle rather than memory:
    the whole reason this is possible; the point is to stop the Louvre being a
    procedural box the size of a Louvre-shaped block.
 
-4. **The Thiers enceinte**, traced as above. It gives Paris an edge.
+4. ~~**The Thiers enceinte**~~ — **DONE.** `src/paris_wall.js`, 5.6 km of
+   rampart in two runs, built as a bastioned earthwork with a parapet and
+   draped on the terrain. The city now stops at a wall instead of thinning out.
+
+   The obvious source turned out to be the wrong one. The commune boundary
+   follows the wall — that is what the street screen uses — **except round the
+   two Bois**, annexed in 1859 and lying *outside* the enceinte, where the
+   boundary runs along the far edge of the wood up to two kilometres beyond the
+   rampart. The Bois de Boulogne is the western side, which is the side inside
+   this map and the side every Deutsch flight crossed. So the wall is traced off
+   the **Périphérique** after all, exactly as first proposed.
+
+   Only a sixth of the ring is in frame at all: the world is centred on the
+   Tower and reaches west to Saint-Cloud, so eastern Paris is off the map.
 
 5. **The eleven landmarks**, modelled from photographs with a source cited per
    building — the same discipline as
