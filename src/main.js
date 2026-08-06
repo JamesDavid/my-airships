@@ -594,6 +594,12 @@ function canChangeShip() {
 function clearAfterWreck() {
   if (!ship.wrecked) return;
   endTrack(); clearRivals(); scenario = null; editing = null;
+  // …and today's sky back. A scenario may have set its own weather for the
+  // afternoon it reconstructs (VII does, 16 km/h from the aerodrome), and
+  // crashing out of it used to leave that wind blowing over free flight and
+  // over every race started from there: "16km/h wind again".
+  dailyWind.copy(todaysWind);
+  wind.copy(dailyWind);
   if (scenRing) scenRing.visible = false;
   if (scenBeacon) scenBeacon.visible = false;
 }
@@ -1335,6 +1341,15 @@ function flightBegin(kind, ref) {
   flight = { kind, ref, at: performance.now(), ship: currentShip, place: currentLocation };
 }
 function flightEnd(outcome, detail) {
+  // Today's sky back, whatever else happens. A scenario may reconstruct its own
+  // afternoon with ctx.setWind — VII does — and a flight can end in more ways
+  // than there are places to remember that: completed, failed, wrecked, walked
+  // away from. Putting it here means every one of them is covered, and a
+  // scenario that wants its own weather sets it again in setup. Without it,
+  // 1901 kept blowing over free flight and over every race started from there:
+  // "16km/h wind again".
+  dailyWind.copy(todaysWind);
+  wind.copy(dailyWind);
   if (!flight) return;
   const f = flight;
   flight = null;                             // before the send: never log twice

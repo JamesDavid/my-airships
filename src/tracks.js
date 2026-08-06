@@ -1,5 +1,6 @@
 import { placeLegacy } from './paris_geo.js';
 import { place as placeMC, groundAt as groundMC } from './monaco_geo.js';
+import { LONGCHAMP } from './paris_stcloud.js';
 // storage can throw outright (iOS private browsing) — never let it stop a flight
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not saved */ } }
@@ -14,20 +15,26 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not saved 
 
 export const TRACKS = [
   {
-    id: 'longchamps', location: 'paris', laps: 3,
+    id: 'longchamps', location: 'paris', laps: 3, v: 2,
     name: 'The Longchamps Circuit',
     sub: '“Ten times in succession I made the circuit of Longchamps” — 3 laps',
-    gates: (() => { const L = placeLegacy('longchamp');
-      return ellipse(L.x, L.z, 600, 380, 6, 60, 20); })(),
+    // ON the racecourse, and the right way round. This was a 600 x 380 ellipse
+    // typed by hand; the real course is 418 x 705 — TALLER THAN IT IS WIDE — so
+    // the circuit was turned through ninety degrees and stood wider than the
+    // ground it was named for: "the rings seem wider than the track" (bug #44).
+    // Taken from the course itself now (src/paris_stcloud.js), inset so the
+    // gates sit over the track rather than outside the rail.
+    gates: ellipse(LONGCHAMP.x, LONGCHAMP.z,
+      LONGCHAMP.rx * 0.86, LONGCHAMP.rz * 0.86, 6, 60, 20),
   },
   {
     // his own exercise of 12 July 1901, and the hardest kind of flying there is:
     // not speed, but arriving at a named spot and stopping there
-    id: 'longchamps-ten', location: 'paris', laps: 3, stops: true,
+    id: 'longchamps-ten', location: 'paris', laps: 3, stops: true, v: 2,
     name: 'The Longchamps Ten',
     sub: '“stopping each time at a point designed beforehand” — halt in the first ring each lap',
-    gates: (() => { const L = placeLegacy('longchamp');
-      return ellipse(L.x, L.z, 600, 380, 6, 60, 20); })(),
+    gates: ellipse(LONGCHAMP.x, LONGCHAMP.z,
+      LONGCHAMP.rx * 0.86, LONGCHAMP.rz * 0.86, 6, 60, 20),
   },
   {
     id: 'gymkhana', location: 'paris', laps: 2, v: 4,

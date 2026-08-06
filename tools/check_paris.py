@@ -363,6 +363,35 @@ for _n, _w in (('ctx.setWind(', 'the scenario sets its own weather'),
                ('ROTHSCHILD.x - ux * 900', 'the start is derived from the park')):
     check(_n in _sc, _w)
 
+# -------------------------------------------------- can the prize be won at all
+print('\n8. THE DEUTSCH PRIZE — CAN IT BE WON?')
+_m6 = re.search(r"id: 'no6'.*?thrust: ([\d.]+), dragQ: ([\d.]+)", _sh, re.S)
+_v6 = math.sqrt(float(_m6.group(1)) / float(_m6.group(2)))
+_twr = re.search(r'eiffel:\s*\[([\d.]+),\s*([\d.-]+)\]', _geo)
+_tx = _ox + (float(_twr.group(2)) - _olon) * _mlon
+_tz = _oz - (float(_twr.group(1)) - _olat) * 111320.0
+_th = int(re.search(r'export const TOWER_H = (\d+)', wjs).group(1))
+_padx, _padz = _scx + 400, _scz - 200
+_stx, _stz = _padx + 220, _padz - 40
+_D = math.hypot(_stx - (_tx + 340), _stz - _tz)
+_wb = re.search(r'const windB = new THREE\.Vector3\(([\d.]+), 0, ([\d.]+)\)', wjs)
+_base = math.hypot(float(_wb.group(1)), float(_wb.group(2)))
+_worst = _base * 1.25 * 1.3            # the strongest daily draw, aloft
+print('   No. 6 makes %.1f km/h; ring to tower gate %.0f m, there and back %.2f km'
+      % (_v6 * 3.6, _D, 2 * _D / 1000))
+print('   the daily wind is drawn from %.1f m/s, up to %.1f km/h aloft'
+      % (_base, _worst * 3.6))
+_t = _D / (_v6 - _worst) + _D / (_v6 + _worst)
+print('   worst case out-and-back: %.1f min against the historic half-hour'
+      % (_t / 60))
+check(_v6 > _worst * 1.4, 'the No. 6 can make headway against the strongest day',
+      '%.1f vs %.1f km/h' % (_v6 * 3.6, _worst * 3.6))
+check(_t < 1800 * 0.85, 'the prize is winnable with time in hand for the motor',
+      '%.1f min of the 30' % (_t / 60))
+for _n, _w in (('dailyWind.copy(todaysWind)', "a scenario's weather is put back"),):
+    check(wjs.count('setWind') >= 0 and read('main.js').count(_n) >= 3,
+          _w, '%d restore sites' % read('main.js').count(_n))
+
 # ---------------------------------------------------------------- the places
 print('\n7. THE PLACES AND THE COURSE')
 geo = read('paris_geo.js')
