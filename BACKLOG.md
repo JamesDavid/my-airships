@@ -95,6 +95,14 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
   online it degrades to nothing: unconfigured, the button is never built. See
   docs/ONLINE.md.
 
+- [ ] **St. Louis: survey the fair** — the OpenStreetMap flow that re-built Paris and
+  Monaco CANNOT be used here: the Exposition was pulled down in 1905 and OSM maps
+  present-day Forest Park, so running it would import golf courses and a zoo into
+  1904. The source is the official 1904 plat, georeferenced against the four things
+  that still stand. Art Hill is also nearly four times too tall — the game builds
+  46 m, the ground rises 12. Scoped in full, with the measurements, in
+  [docs/STLOUIS_PLAT.md](docs/STLOUIS_PLAT.md).
+
 - [ ] **Virtual reality (WebXR / Quest)** — three.js has it built in: `renderer.xr.enabled`,
   an XRButton, and `setAnimationLoop`. It runs in the Quest browser off the same Pages URL,
   no store. The game suits it unusually well: you sit still in a detailed cockpit while the
