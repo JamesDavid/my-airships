@@ -5,6 +5,11 @@
 
 import * as THREE from 'three';
 import { geo, place, placeLegacy, SEINE, ORIGIN_XZ, LEGACY_ORIGIN, LEGACY_SCALE } from './paris_geo.js';
+const placeLegacy0 = (lat, lon) => {
+  const p = geo(lat, lon);
+  return { x: LEGACY_ORIGIN.x + (p.x - ORIGIN_XZ.x) / LEGACY_SCALE,
+           z: LEGACY_ORIGIN.z + (p.z - ORIGIN_XZ.z) / LEGACY_SCALE };
+};
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_plan.js';
@@ -403,6 +408,62 @@ export function buildWorld(scene) {
 
   // ---------- the city: buildings along their real street frontages ----------
   const buildings = buildCity(scene, riverPts);
+
+  // ---------- the bridges of the city ----------
+  // The Seine runs the length of Paris and had nothing across it. These are the
+  // crossings that stood in 1901, by their real positions; each is laid square
+  // across the river at the point it meets it, taking its span and its bearing
+  // from the trace rather than from a guess.
+  {
+    const CROSSINGS = [
+      [48.8628, 2.2795, 'Passy'], [48.8600, 2.2930, 'Iéna'],
+      [48.8640, 2.3010, 'Alma'], [48.8639, 2.3135, 'Alexandre III'],
+      [48.8635, 2.3215, 'Concorde'], [48.8617, 2.3290, 'Solférino'],
+      [48.8600, 2.3330, 'Royal'], [48.8586, 2.3370, 'Carrousel'],
+      [48.8575, 2.3410, 'Pont Neuf'], [48.8558, 2.3470, 'Saint-Michel'],
+      [48.8530, 2.3550, 'Sully'], [48.8480, 2.3620, 'Austerlitz'],
+      [48.8508, 2.2740, 'Grenelle'], [48.8462, 2.2700, 'Mirabeau'],
+    ];
+    const stone = new THREE.MeshLambertMaterial({ color: 0xb0a894 });
+    const dark2 = new THREE.MeshLambertMaterial({ color: 0x8a8272 });
+    for (const [lat, lon] of CROSSINGS) {
+      const c = placeLegacy0(lat, lon);
+      // the nearest point of the trace, and which way the water runs there
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < riverPts.length; i++) {
+        const d = (riverPts[i].x - c.x) ** 2 + (riverPts[i].z - c.z) ** 2;
+        if (d < bd) { bd = d; bi = i; }
+      }
+      if (bd > 400 * 400) continue;                 // not on this river
+      const p = riverPts[bi];
+      const q = riverPts[Math.min(riverPts.length - 1, bi + 2)];
+      const tx = q.x - p.x, tz = q.z - p.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      const ang = Math.atan2(-tz / tl, tx / tl);    // along the water
+      const SPAN = 230, DECKW = 20, DECKY = 9;
+      const g2 = new THREE.Group();
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(DECKW, 2.2, SPAN), stone);
+      deck.position.y = DECKY; g2.add(deck);
+      const para = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, SPAN), dark2);
+      for (const sx of [-1, 1]) {
+        const r = para.clone();
+        r.position.set(sx * (DECKW / 2 - 0.6), DECKY + 1.9, 0); g2.add(r);
+      }
+      // piers and the arches they carry
+      for (const t of [-0.62, -0.21, 0.21, 0.62]) {
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(DECKW * 0.8, DECKY, 9), stone);
+        pier.position.set(0, DECKY / 2, t * SPAN); g2.add(pier);
+        const arch = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, DECKW * 0.8, 12, 1, false, 0, Math.PI), dark2);
+        arch.rotation.z = Math.PI / 2;
+        arch.position.set(0, DECKY - 1.5, t * SPAN + SPAN * 0.105); g2.add(arch);
+      }
+      g2.position.set(p.x, 0, p.z);
+      g2.rotation.y = ang;                          // deck long axis across the water
+      g2.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      scene.add(g2);
+      buildings.push({ x: p.x, z: p.z, w: 60, d: 60, h: DECKY, top: DECKY + 2 });
+    }
+  }
 
   // ---------- the Bois ----------
   const trees = addTrees(scene);
@@ -1669,7 +1730,13 @@ function addTrees(scene) {
 // the base, three platforms, the campanile and the lightning conductor he
 // rounded "at a distance of about 50 metres". Every member goes into ONE
 // instanced mesh — some four hundred of them for a single draw call.
-const TOWER_ANCH = [[0, 52], [100, 21], [200, 9.5], [295, 2.4], [305, 2.0]];
+// Her real proportions. The platforms stand at 57, 115 and 276 metres — not the
+// round 100/200/292 that were here — and she is 300 m to the top of the
+// campanile, 312 with the conductor above it. The half-offsets are the leg
+// centrelines: a 100 m square at the feet, 65 at the first platform, 30 at the
+// second, 9 at the third.
+const TOWER_ANCH = [[0, 50], [57, 32.5], [115, 15], [276, 4.5], [300, 3.2], [312, 2.2]];
+const PLATFORMS = [57, 115, 276];
 
 // half-offset of a leg's centre line from the axis, at height y
 function legHalf(y) {
@@ -1694,13 +1761,39 @@ function makeTower() {
   const levels = [];
   for (let y = 0; y <= 300; y += 6) levels.push(y);
 
-  // ---- the four legs, each a chain following the curve
+  // ---- the four legs ----
+  // Each leg is a LATTICE COLUMN in its own right, not a single girder: four
+  // uprights on a little square with cross-bracing on all four of its own
+  // faces. That is the ironwork you see under the arches, and drawing the leg
+  // as one line left the base looking like scaffolding poles. What stays open
+  // below the first platform is the space BETWEEN the legs, which the arches
+  // frame — see the face bracing further down.
+  const legW = (y) => 15 - 11 * Math.min(1, y / 300);      // 15 m at the feet, 4 at the top
   for (const [sx, sz] of corners) {
     for (let i = 1; i < levels.length; i++) {
       const y0 = levels[i - 1], y1 = levels[i];
       const h0 = legHalf(y0), h1 = legHalf(y1);
-      const w = 3.4 - 2.6 * (y0 / 300);
-      put(sx * h0, y0, sz * h0, sx * h1, y1, sz * h1, w);
+      const w0 = legW(y0) / 2, w1 = legW(y1) / 2;
+      const gird = 1.5 - 1.0 * (y0 / 300);
+      // the four uprights of this leg
+      for (const ox of [-1, 1]) for (const oz of [-1, 1]) {
+        put(sx * h0 + ox * w0, y0, sz * h0 + oz * w0,
+            sx * h1 + ox * w1, y1, sz * h1 + oz * w1, gird);
+      }
+      // and the X-bracing round the leg's own four faces, every other course
+      if (i % 2 === 0) {
+        const br = gird * 0.6;
+        const P = (y, h, w, ox, oz) => [sx * h + ox * w, y, sz * h + oz * w];
+        const ring = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+        for (let c = 0; c < 4; c++) {
+          const [ax2, az2] = ring[c], [bx2, bz2] = ring[(c + 1) % 4];
+          const a0 = P(y0, h0, w0, ax2, az2), b0 = P(y0, h0, w0, bx2, bz2);
+          const a1 = P(y1, h1, w1, ax2, az2), b1 = P(y1, h1, w1, bx2, bz2);
+          put(a0[0], a0[1], a0[2], b1[0], b1[1], b1[2], br);
+          put(b0[0], b0[1], b0[2], a1[0], a1[1], a1[2], br);
+          put(a1[0], a1[1], a1[2], b1[0], b1[1], b1[2], br * 0.9);
+        }
+      }
     }
   }
 
@@ -1709,7 +1802,7 @@ function makeTower() {
   // nothing between them: that is the whole look of the thing, and it is why a
   // daring pilot can fly through her, which the collision code has always
   // allowed. Bracing every face from the ground up walled the base in.
-  const FIRST_PLATFORM = 100;
+  const FIRST_PLATFORM = PLATFORMS[0];
   for (let i = 2; i < levels.length; i += 2) {
     const y0 = levels[i - 2], y1 = levels[i];
     if (y1 <= FIRST_PLATFORM) continue;
@@ -1730,9 +1823,11 @@ function makeTower() {
     for (let i = 0; i < N; i++) {
       const u0 = i / N, u1 = (i + 1) / N;
       const pt = (u) => {
-        const h = legHalf(8 + u * 48);
+        // the arch springs from the leg and rises to just under the platform:
+        // its crown sits at about 39 m, as the real one does
+        const h = legHalf(10 + u * 40);
         const x = (ax + (bx - ax) * u) * h, z = (az + (bz - az) * u) * h;
-        return [x, 14 + Math.sin(Math.PI * u) * 44, z];
+        return [x, 12 + Math.sin(Math.PI * u) * 27, z];
       };
       const [x0, y0, z0] = pt(u0), [x1, y1, z1] = pt(u1);
       put(x0, y0, z0, x1, y1, z1, 1.6);
@@ -1772,9 +1867,9 @@ function makeTower() {
     const inner = new THREE.Mesh(new THREE.BoxGeometry(half * 2.1, 3, half * 2.1), deckMat);
     inner.position.y = y + thick / 2 + 1.2; g.add(inner);   // hollow it with an inset block
   };
-  platform(100, legHalf(100) + 8, 5);
-  platform(200, legHalf(200) + 5, 4);
-  platform(292, legHalf(292) + 4, 3.4);
+  platform(PLATFORMS[0], legHalf(PLATFORMS[0]) + 9, 5);
+  platform(PLATFORMS[1], legHalf(PLATFORMS[1]) + 6, 4);
+  platform(PLATFORMS[2], legHalf(PLATFORMS[2]) + 4, 3.4);
 
   // ---- the campanile, the lantern, and the conductor at the very top
   const capMat = new THREE.MeshLambertMaterial({ color: 0x5a4d3c });
@@ -1791,11 +1886,15 @@ function makeTower() {
 }
 
 // tower collision radius by height (0 at base widest)
+/**
+ * The flight model's profile of her, taken FROM the shape she is drawn with
+ * rather than written out beside it — the two used to be separate sets of
+ * numbers and could drift apart. A leg centreline is legHalf from the axis, so
+ * the corner is that by root two, and a little over for the girderwork.
+ */
 export function towerRadiusAt(y) {
-  if (y > 318) return 0;
-  if (y < 100) return 55 - (y / 100) * 33;   // 55 -> 22
-  if (y < 200) return 22 - ((y - 100) / 100) * 12; // -> 10
-  return Math.max(3, 10 - ((y - 200) / 95) * 7);
+  if (y > 318 || y < 0) return 0;
+  return legHalf(y) * Math.SQRT2 + 3;
 }
 
 // ---------------------------------------------------------------- aerodrome
