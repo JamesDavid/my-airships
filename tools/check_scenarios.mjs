@@ -282,22 +282,34 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
 
   console.log('');
   console.log('THE BASKET IS FLYABLE FROM INSIDE IT (headset)');
-  console.log('   A cord you cannot reach is a control you do not have, and a');
-  console.log('   slate 29 cm from your eyes is 77 degrees of instrument panel.');
+  console.log('   A cord you cannot reach is a control you do not have; two that');
+  console.log('   overlap are worse; and a slate 29 cm from your eyes is 77');
+  console.log('   degrees of instrument panel.');
   console.log('');
   {
     const V3 = makeShip('no6').pos.constructor;
-    let worstCord = 0, worstSlate = 0, behind = 0, missing = 0;
+    let worstCord = 0, worstSlate = 0, behind = 0, missing = 0, nearest = Infinity;
     for (const id of Object.keys(SHIPS)) {
       const sh = makeShip(id);
       sh.reset({ x: 0, y: 100, z: 0 }, 0);
       sh.updateTransforms(0);
       const eye = new V3();
       (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
-      for (const c of ['ballast', 'vent']) {
+      // ALLUM. is only fitted where there is a motor to light
+      const want = sh.spec.prop === 'none' ? ['ballast', 'vent']
+        : ['ballast', 'vent', 'spark'];
+      const got = {};
+      for (const c of want) {
         const p2 = sh.cordAt(c);
         if (!p2) { missing++; continue; }
+        got[c] = p2.clone();
         worstCord = Math.max(worstCord, eye.distanceTo(p2));
+      }
+      // and no two fittings may sit inside one another's grab radius, or a
+      // hand reaching for the valve throws the spark instead
+      const ks = Object.keys(got);
+      for (let a = 0; a < ks.length; a++) for (let b2 = a + 1; b2 < ks.length; b2++) {
+        nearest = Math.min(nearest, got[ks[a]].distanceTo(got[ks[b2]]));
       }
       if (!sh.panelMesh) { missing++; continue; }
       const pm = new V3();
@@ -305,13 +317,15 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       worstSlate = Math.max(worstSlate, eye.distanceTo(pm));
       if (pm.x - eye.x < 0.05) behind++;
     }
-    console.log('   furthest cord ' + worstCord.toFixed(2) + ' m from the eye; '
-      + 'slate at ' + worstSlate.toFixed(2) + ' m; ' + behind + ' slates behind the pilot');
+    console.log('   furthest fitting ' + worstCord.toFixed(2) + ' m from the eye; '
+      + 'closest two ' + nearest.toFixed(2) + ' m apart (grab radius 0.16); '
+      + 'slate at ' + worstSlate.toFixed(2) + ' m');
     if (missing) { console.log('   FAIL ' + missing + ' ships have no cords or no slate'); fails++; }
     else if (worstCord > 0.9) { console.log('   FAIL a cord is out of reach'); fails++; }
     else if (worstSlate < 0.35) { console.log('   FAIL the slate is too close to focus on'); fails++; }
     else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
-    else console.log('   ok   both cords in reach, the slate readable and in front');
+    else if (nearest < 0.32) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
+    else console.log('   ok   ballast, valve and ALLUM. all in reach and distinct');
   }
 
   console.log('');

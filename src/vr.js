@@ -30,6 +30,7 @@ const hand = { left: null, right: null };
 // the controls, latched between frames like the ship's own levers
 const pad = { throttle: 0, rudder: 0, pitch: 0, vent: false, coax: false };
 let ballastEdge = false, ventEdge = false, camEdge = false, menuEdge = false;
+let sparkEdge = false, sparkHeld = 0;
 const pressed = new Set();
 
 /**
@@ -151,7 +152,8 @@ export function seatIn(eye, yaw) {
 //   left  stick  Y   the carburating lever — push forward for more
 //   right stick  X   the helm
 //   right stick  Y   the shifting weights (trim)
-//   either grip      coax the motor when she sputters (the F key)
+//   either grip      coax the motor when she sputters (the F key) — or take
+//                    hold of the ALLUM. lever itself and squeeze the trigger
 //   A / X            change the view
 //   B / Y            the menu
 //
@@ -185,8 +187,8 @@ export function pollVR(ship) {
   if (!enabled || !session) return null;
   pad.throttle = 0; pad.rudder = 0; pad.pitch = 0;
   pad.vent = false; pad.coax = false;
-  let sawBallast = false, sawCam = false, sawMenu = false;
-  reach.ballast = false; reach.vent = false;
+  let sawBallast = false, sawCam = false, sawMenu = false, sawSpark = false;
+  reach.ballast = false; reach.vent = false; reach.spark = false;
 
   let i = -1;
   for (const src of session.inputSources) {
@@ -215,7 +217,7 @@ export function pollVR(ship) {
     let onCord = null;
     if (ctrl && ship && ship.cordAt) {
       ctrl.getWorldPosition(_hp);
-      for (const id of ['ballast', 'vent']) {
+      for (const id of ['ballast', 'vent', 'spark']) {
         const cp = ship.cordAt(id, _cp);
         if (cp && _hp.distanceTo(cp) < GRAB) { onCord = id; reach[id] = true; break; }
       }
@@ -223,6 +225,7 @@ export function pollVR(ship) {
     if (trigger) {
       if (onCord === 'ballast') sawBallast = true;
       else if (onCord === 'vent') pad.vent = true;
+      else if (onCord === 'spark') sawSpark = true;
       else if (left) sawBallast = true;         // the plain-button fallback
       else pad.vent = true;
     }
@@ -230,6 +233,18 @@ export function pollVR(ship) {
 
   // edges, so holding a button does not fire it ninety times a second
   if (sawBallast && !ballastEdge) { VR_ACTIONS.ballast(); if (ship) ship.pullCord('ballast'); rumble(0.5, 45); }
+  // ALLUM. — a jab at the spark, which is `coax` and the F key. Held, it
+  // repeats slowly rather than sixty times a second, because that is what
+  // working a stiff lever feels like and what the motor is worth per jab.
+  if (sawSpark) {
+    sparkHeld += 1;
+    if (!sparkEdge || sparkHeld % 20 === 0) {
+      pad.coax = true;
+      if (ship) ship.pullCord('spark');
+      rumble(0.65, 35);
+    }
+  } else sparkHeld = 0;
+  sparkEdge = sawSpark;
   if (pad.vent && !ventEdge && ship) ship.pullCord('vent');
   if (sawCam && !camEdge) VR_ACTIONS.camera();
   if (sawMenu && !menuEdge) VR_ACTIONS.menu();
@@ -246,8 +261,8 @@ function handIndex(src, fallback) {
   return seen.get(src);
 }
 
-/** Is a hand on a cord right now? Used to light the toggle up. */
-export const reach = { ballast: false, vent: false };
+/** Is a hand on a cord or lever right now? Used to light the fitting up. */
+export const reach = { ballast: false, vent: false, spark: false };
 
 /** A short buzz in both hands — a cord pulled, a gate passed, a wall touched. */
 export function rumble(strength = 0.4, ms = 60) {

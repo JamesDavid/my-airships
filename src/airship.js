@@ -441,6 +441,12 @@ export class Airship {
     compass.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(compass);
 
+    // Everything in the basket a hand can take hold of in a headset: the two
+    // cords below, and ALLUM. The array is declared HERE because the levers are
+    // built before the cords are, and a push onto an undefined array is not a
+    // subtle failure — it is every ship in the game failing to construct.
+    this.pullCords = [];
+
     // carburating + spark levers on a brass quadrant beside the compass —
     // the carburating lever IS the throttle indicator, leaning forward as you open it
     this.carbLever = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.3, 5), brass);
@@ -465,6 +471,18 @@ export class Airship {
       this.pitchGroup.add(this.carbLever);
       this.sparkLever.position.set(bx + 0.48, -drop + 0.2, 0.43);
       this.pitchGroup.add(this.sparkLever);
+      // ALLUM. is grabbable too. It is the lever you work when she sputters —
+      // "cords... for striking the motor's electric spark" (Ch. XI) — and in a
+      // headset you should be able to take hold of the thing rather than press
+      // a button that means it. The grabbed point is the KNOB at the top, which
+      // is what a hand actually closes on; `lever` marks it as animating itself
+      // (sparkT kicks it) so the cord dip does not fight that.
+      // the grabbed point is the KNOB at the top of the lever, which is what a
+      // hand closes on — given as a local offset rather than by reaching into
+      // sparkLever.children[0], because that lever is a clone() and what a
+      // clone carries is three.js's business, not ours
+      this.pullCords.push({ id: 'spark', mesh: this.sparkLever, lever: true,
+        offset: new THREE.Vector3(0, 0.3, 0), rest: null, pulled: 0 });
     }
     this.sparkT = 0;
 
@@ -487,7 +505,6 @@ export class Airship {
     // Both hang within arm's reach of eyePoint, ballast to port and valve to
     // starboard, each ending in a turned wooden toggle you can actually see and
     // aim at. `vrGrab` is what src/vr.js tests against.
-    this.pullCords = [];
     {
       const cordMat = new THREE.LineBasicMaterial({ color: 0x2b2119 });
       const togMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2a });
@@ -968,12 +985,19 @@ export class Airship {
    */
   cordAt(id, out) {
     const c = (this.pullCords || []).find((k) => k.id === id);
-    if (!c) return null;
-    return c.mesh.getWorldPosition(out || new THREE.Vector3());
+    if (!c || !c.mesh) return null;
+    const v = out || new THREE.Vector3();
+    if (c.offset) { v.copy(c.offset); c.mesh.localToWorld(v); return v; }
+    return c.mesh.getWorldPosition(v);
   }
 
-  /** Pull a cord: it dips, and springs back over the next half second. */
+  /**
+   * Pull a cord, or throw a lever. A cord dips and springs back; ALLUM. kicks
+   * on its own clock, which is the animation it already had for the F key, so
+   * it is left to do that rather than being dipped as well.
+   */
   pullCord(id) {
+    if (id === 'spark') { this.sparkT = 0.35; return; }
     const c = (this.pullCords || []).find((k) => k.id === id);
     if (c) c.pulled = 1;
   }
@@ -1262,6 +1286,7 @@ export class Airship {
     // the pulled cord dips and springs back, so a hand that grabs it sees the
     // thing move — without that a headset gives you no answer at all
     for (const c of (this.pullCords || [])) {
+      if (c.lever) continue;                 // ALLUM. kicks on its own clock
       if (c.pulled > 0) {
         c.pulled = Math.max(0, c.pulled - dt * 2.4);
         c.mesh.position.y = c.rest.y - 0.09 * Math.sin(c.pulled * Math.PI);
