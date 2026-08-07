@@ -11,4 +11,14 @@ tools/.cache/
 
 # A stub three.js so the physics can be run headless (tools/sim.mjs). The game
 # itself takes three from the CDN importmap; nothing here is ever served.
-node_modules/
+#
+# THE STUB ITSELF IS KEPT. It is not a downloaded dependency — it is four
+# hundred lines written by hand, and half the checks in tools/ now measure
+# things that only exist because of it: the terrain's vertices, the instance
+# matrices of the trees and the buildings, whether a geometry is a cone. With
+# the whole directory ignored, all of that lived on one machine, and a fresh
+# clone would have run the same checks against a stub that answers 0 to
+# everything — which is not a failing check, it is a check that passes for the
+# wrong reason. It has to travel with the checks that depend on it.
+node_modules/*
+!node_modules/three/
