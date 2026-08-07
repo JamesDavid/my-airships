@@ -436,6 +436,17 @@ export class Airship {
       this.pitchGroup.add(this.deckPoint);
     }
 
+    // the panel itself: a board across the front of the basket carrying the
+    // compass, the barometer and (in a headset) the slate
+    {
+      const board = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.30, 0.70),
+        new THREE.MeshLambertMaterial({ color: 0x5d4a33 }));
+      board.position.set(bx + 0.665, -drop + 0.44, 0);
+      board.rotation.z = 0.18;                 // canted back toward the eye
+      board.castShadow = board.receiveShadow = true;
+      this.pitchGroup.add(board);
+    }
+
     // ---- the operating position (B7: wheel, carburating lever, spark lever;
     //      plus barometer, compass, and the ballast sacks on the rim) ----
     // Laid out around the pilot's eye in "Aboard" view: eye ~(bx+0.1, -drop+0.5).
@@ -539,7 +550,7 @@ export class Airship {
     this.baroNeedle.geometry.translate(0, 0.036, 0);
     this.baroNeedle.position.x = -0.04;
     baro.add(this.baroNeedle);
-    baro.position.set(bx + 0.5, -drop + 0.3, -0.2);
+    baro.position.set(bx + 0.64, -drop + 0.44, -0.24);
     baro.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(baro);
 
@@ -569,7 +580,7 @@ export class Airship {
     this.compassNeedle.geometry.translate(0, 0.064, 0);
     this.compassNeedle.position.x = -0.04;
     compass.add(this.compassNeedle);
-    compass.position.set(bx + 0.5, -drop + 0.3, 0.2);
+    compass.position.set(bx + 0.64, -drop + 0.44, 0.24);
     compass.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(compass);
 
@@ -792,7 +803,17 @@ export class Airship {
       // you look down and nowhere when you look out. The rim is at -drop+0.05;
       // the panel is 0.19 tall tilted 0.55 rad, so its top sits 0.081 above its
       // centre. Same angle as before, just moved.
-      slate.position.set(bx + 0.30, -drop - 0.03, 0);
+      // ON THE FORWARD PANEL with the brass, out of the way of the working
+      // levers and the tiller's swing: "move the compass baro and tablet to a
+      // panel that is mounted out front here so that it doesn't interfere with
+      // the levers and tiller". The gauges stand off to either side at +-0.24
+      // and the slate sits between them.
+      //
+      // Clear of the tiller stick, which sweeps y -drop+0.26 to +0.33 between
+      // x +0.41 and +0.74; this is at +0.44, eleven centimetres over it. And
+      // clear of the fore shifting weight, which hauls in only to x 1.62 and is
+      // 2.18 m ahead of here at its nearest.
+      slate.position.set(bx + 0.64, -drop + 0.44, 0);
       slate.rotation.y = -Math.PI / 2;
       this.pitchGroup.add(slate);
       const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.19),
