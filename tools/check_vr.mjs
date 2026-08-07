@@ -128,6 +128,27 @@ if (renderer.shadowMap.enabled) {
   gp.buttons[1].pressed = false; vr.pollVR(sh);
   if (!hasSet) { console.log('   FAIL CARB. does not report a lever position'); fails++; }
   else console.log('   ok   CARB. reports a lever POSITION, not a nudge');
+
+  // THE SLATE GROWS DOWNWARD. It is hung with its top edge on the upper rim so
+  // that it is there when the pilot looks down and nowhere when he looks out;
+  // an ending grows it, and growing it about its centre put the extra height
+  // across the horizon instead — "messages block view" (#68). Measured as the
+  // world height of its top corner, small against big.
+  {
+    const HALF_H = (0.133 / 2) * Math.cos(0.55);
+    const topEdge = () => sh.panelMesh.position.y + (sh.panelMesh.scale.y || 1) * HALF_H;
+    sh.bigPanel(false); const small = topEdge(); const nearSmall = sh.panelMesh.position.x;
+    sh.bigPanel(true);  const big = topEdge();   const nearBig = sh.panelMesh.position.x;
+    const grew = (sh.panelMesh.scale.y || 1) > 1.5;
+    const ok = grew && big <= small + 1e-6 && nearBig >= nearSmall - 1e-6;
+    if (!ok) fails++;
+    console.log('   %s  the slate grows %s and its top edge %s (%s -> %s m)',
+      ok ? 'ok  ' : 'FAIL',
+      grew ? 'for an ending' : 'NOT AT ALL',
+      big <= small + 1e-6 ? 'stays on the rim' : 'RISES INTO THE VIEW',
+      small.toFixed(4), big.toFixed(4));
+    sh.bigPanel(false);
+  }
 }
 
 // a session that ends must put everything back

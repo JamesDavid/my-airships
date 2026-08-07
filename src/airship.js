@@ -812,6 +812,7 @@ export class Airship {
       // 2.18 m ahead of here at its nearest.
       slate.position.set(bx + 0.70, -drop + 0.44, 0);
       this.panelHome = bx + 0.70;
+      this.panelHomeY = -drop + 0.44;        // bigPanel() grows down from here
       slate.rotation.y = -Math.PI / 2;
       this.pitchGroup.add(slate);
       // smaller and see-through: it is a reading, not a wall. At 0.30 x 0.19
@@ -1268,8 +1269,22 @@ export class Airship {
     this._panelBig = on;
     const k = on ? 2.4 : 1;
     this.panelMesh.scale.set(k, k, 1);
-    this.panelMesh.position.x = this.panelHome
-      ? this.panelHome + (on ? -0.10 : 0) : this.panelMesh.position.x;
+    // IT GROWS DOWNWARD, FROM THE RIM.
+    //
+    // The slate is hung where the pilot asked for it — top edge on the upper
+    // rim of the basket, so it is there when he looks down and nowhere when he
+    // looks out. Scaling about its centre put more than half the extra height
+    // ABOVE that edge and straight across the horizon, and it was then pulled
+    // ten centimetres nearer the eye as well, which widens the angle it covers
+    // again. Both together are "messages block view" (#68).
+    //
+    // So the top edge is pinned and the growth goes down into the basket,
+    // where there is nothing to see anyway, and the slate stays where it was
+    // fore-and-aft. HALF_H is the plane's half height carried through its own
+    // tilt, which is what actually sets how high the top corner sits.
+    const HALF_H = (0.133 / 2) * Math.cos(0.55);
+    this.panelMesh.position.y = this.panelHomeY - (k - 1) * HALF_H;
+    this.panelMesh.position.x = this.panelHome || this.panelMesh.position.x;
     this.panelMesh.traverse((o) => {
       if (o.material && o.material.transparent !== undefined) {
         o.material.opacity = on ? 1 : (o.geometry && o.geometry.type === 'BoxGeometry' ? 0.6 : 0.72);

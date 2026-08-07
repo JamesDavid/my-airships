@@ -3607,6 +3607,12 @@ function draw() {
 // The readings, on the slate wired to the basket rim. Frankly anachronistic —
 // there was no such thing in 1901 — but a headset cannot show the corners of a
 // screen, and flying blind is worse than flying with a slate.
+// Declared ABOVE the function that reads them. Three temporal dead zones have
+// blanked this page already; none of them will be this one.
+let _vrNote = '', _vrNoteAt = 0;
+// long enough to read a paragraph twice over, at a slow reading speed
+const BIG_SLATE_DWELL = 14000;
+
 function vrPanel() {
   if (!ship) return;
   const kmh = Math.hypot(ship.vel.x, ship.vel.z) * 3.6;
@@ -3625,9 +3631,24 @@ function vrPanel() {
   const sub = (document.getElementById('centerSub') || {}).textContent || '';
   const last = msgBox && msgBox.lastElementChild;
   const note = sub || (last ? last.textContent : '');
-  // an ending is a paragraph: grow the slate and make it solid for it, and let
-  // it shrink back to a see-through reading when the notice goes
-  ship.bigPanel(note.length > 90);
+  // An ending is a paragraph: grow the slate and make it solid for it, and let
+  // it shrink back to a see-through reading afterwards.
+  //
+  // "MESSAGES BLOCK VIEW" (#68). Two reasons, and the length test was both of
+  // them. A scenario's opening line is a paragraph as surely as its last one
+  // is — scenario II's is 113 characters — so the slate went big and opaque on
+  // the first frame of the flight and STAYED there, for the whole flight, with
+  // nothing to make it small again. It is meant to be a reading, not a wall;
+  // the comment on the geometry says as much, since 0.30 x 0.19 and opaque was
+  // condemned as "a slab across the front of the basket" once already and this
+  // is 0.50 x 0.32.
+  //
+  // So it grows only while a long notice is NEW, on the same dwell the flat
+  // game parks its centre notice on, and then hands the view back. The words
+  // stay on the slate either way — it is the size that goes away, not the
+  // message.
+  if (note !== _vrNote) { _vrNote = note; _vrNoteAt = performance.now(); }
+  ship.bigPanel(note.length > 90 && performance.now() - _vrNoteAt < BIG_SLATE_DWELL);
   ship.drawPanel(rows, note);
 }
 
