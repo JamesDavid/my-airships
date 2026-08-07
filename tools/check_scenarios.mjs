@@ -524,23 +524,52 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       }
     }
     console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
-    // ...and the city itself stands down for a block-sized stand-in, merged at
-    // runtime from the very footprints the game draws (see mergeIntoBlocks)
-    const { mergeIntoBlocks } = await import('../src/world.js');
-    const foot = world.buildings.filter((b) => b.rw !== undefined);
-    const blocks = mergeIntoBlocks(foot);
-    const ratio = blocks.length / foot.length;
-    console.log('   ' + foot.length + ' footprints stand in as ' + blocks.length
-      + ' blocks in a headset (' + (1 / ratio).toFixed(1) + 'x less geometry)');
-    if (ratio > 0.35) { console.log('   FAIL the blocks are barely a saving'); fails++; }
-    else if (blocks.length < 600) {
-      console.log('   FAIL too few blocks — connectivity has leaked across the streets');
-      fails++;
-    } else {
-      const longest = blocks.map((b) => Math.max(b.w, b.d)).sort((a, b) => a - b);
-      const med = longest[Math.floor(longest.length / 2)];
-      console.log('   ok   median block ' + med.toFixed(0)
-        + ' m on its longest side (a Haussmann block runs 60-120)');
+
+    // THE CITY IS CUT INTO CHUNKS, and only the near ones are drawn. It used
+    // to be MERGED instead — one box per city block, a third of the geometry
+    // and a bar chart to look at: "the giant buildings look bad in vr". These
+    // are the real buildings; there are simply fewer of them in view.
+    const { CITY_NEAR } = await import('../src/vr.js');
+    // NUMBERS, not truthiness. The headless stub answers unknown properties
+    // with a permissive callable, so `userData.chunkAt` is truthy on objects
+    // that have never heard of a chunk — one of them got in here and made the
+    // reach NaN, and `CITY_NEAR < NaN * 2` is false, so the haze test passed by
+    // being unanswerable. Ask for finite numbers and it cannot happen.
+    const chunks = scene.children.filter((o) => {
+      const u = o.userData || {};
+      return u.chunkAt && Number.isFinite(u.chunkAt.x) && Number.isFinite(u.chunkAt.z)
+        && Number.isFinite(u.chunkR);
+    });
+    const houses = world.buildings.filter((b) => b.rw !== undefined).length;
+    if (!chunks.length) { console.log('   FAIL the city is not built in chunks at all'); fails++; }
+    else {
+      // how much of the city is in view from the worst place to stand: the
+      // middle of it, where there is city on every side
+      const mid = { x: 900, z: 0 };
+      let near = 0;
+      for (const c of chunks) {
+        const u = c.userData;
+        if (Math.hypot(u.chunkAt.x - mid.x, u.chunkAt.z - mid.z) - u.chunkR < CITY_NEAR) near++;
+      }
+      const frac = near / chunks.length;
+      console.log('   ' + houses + ' houses in ' + chunks.length + ' chunk meshes; '
+        + near + ' chunks (' + Math.round(frac * 100) + '%) in view from mid-city');
+      // A quarter of Paris at a time is the trade: the merged city was a third
+      // of the geometry and every bit of it drawn, so this must beat that.
+      if (frac > 0.33) { console.log('   FAIL the chunks are barely a saving'); fails++; }
+      else console.log('   ok   a headset draws ' + Math.round(frac * 100)
+        + '% of the city, and every house in it is a real one');
+      // ...and the fog must close over before the chunks stop, or the city
+      // ends at a visible edge with Paris on the far side of it.
+      const reach = Math.max(...chunks.map((c) => c.userData.chunkR));
+      if (!Number.isFinite(reach) || !Number.isFinite(CITY_NEAR) || CITY_NEAR < reach * 2) {
+        console.log('   FAIL the haze closes nearer than a chunk is wide (reach '
+          + reach + ', haze ' + CITY_NEAR + ')');
+        fails++;
+      } else {
+        console.log('   ok   the haze closes at ' + CITY_NEAR + ' m, over chunks reaching '
+          + reach.toFixed(0) + ' m');
+      }
     }
     if (drawn > total * 0.55) { console.log('   FAIL the cull is not buying enough'); fails++; }
     else console.log('   ok   the cull takes it down to ' + Math.round(drawn / total * 100) + '%');

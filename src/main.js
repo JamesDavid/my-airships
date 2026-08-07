@@ -292,8 +292,26 @@ function makeRing(color, arrows, box) {
     collar(0x5fbf6a, -2.2, true);                     // entry: facing the pilot
     collar(0xc4544a, 2.2, false);                     // exit: facing away
   }
+  alwaysSeen(m);
   scene.add(m);
   return m;
+}
+
+/**
+ * A thing that comes through the haze at full strength, and is never culled.
+ *
+ * In a headset the city fades into ground fog past a kilometre or so, which is
+ * right for streets and housetops and quite wrong for the gate you are trying
+ * to fly through: "with the fog idea in vr always show goal rings and landmarks
+ * and clouds". The landmarks and the clouds are already marked by the world
+ * (vrFar); the rings are made here, so they are marked here.
+ */
+function alwaysSeen(o) {
+  if (!o) return o;
+  o.userData = o.userData || {};
+  o.userData.alwaysSeen = true;
+  o.userData.vrFar = true;          // ...and the distance cull leaves it alone
+  return o;
 }
 
 /**
@@ -356,6 +374,7 @@ function makeGateFrame(color, arrows, box) {
     collar(0x5fbf6a, -t * 1.6, true);                         // entry: green
     collar(0xc4544a, t * 1.6, false);                         // exit: red
   }
+  alwaysSeen(m);
   scene.add(m);
   return m;
 }
@@ -3664,18 +3683,24 @@ function frame(now) {
 // onBeforeRender is what Water does its reflection in, so taking it away stops
 // the extra pass and the rebinding both. The waves, the sun glitter and the
 // colour are all still there — the mirror simply stops being repainted.
-// The detailed city stands down in a headset and its block stand-in takes over
-// — a sixth of the geometry for the same skyline. Marked at build time
-// (userData.flatOnly / vrOnly) so nothing here has to know what a city is.
+// THE HEADSET GETS THE SAME CITY, AND LESS OF IT.
+//
+// This used to swap the whole of Paris for a merged stand-in — one box per
+// city block, marked flatOnly/vrOnly at build time. A third of the geometry,
+// and it read as a bar chart: "the giant buildings look bad in vr". Now the
+// real buildings are built in chunks (addBuildingMeshesChunked), the cull
+// drops the chunks past the haze, and the haze hides where they stop.
+//
+// The swap is kept for anything else a world still marks, because Monaco and
+// St. Louis are entitled to their own opinions about what belongs in a headset.
 function swapCityForVR(on) {
   if (!scene) return;
-  // built the first time a headset asks for it, not at every world load
-  if (on && world && world.makeBlocks) world.makeBlocks();
   for (const o of scene.children) {
     const u = o.userData || {};
     if (u.flatOnly) o.visible = !on;
     else if (u.vrOnly) o.visible = on;
   }
+  vr.cityFog(on, scene);
 }
 
 let waterHooks = null;

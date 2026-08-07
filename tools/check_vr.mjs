@@ -168,6 +168,44 @@ if (renderer.shadowMap.enabled) {
       ok ? 'ok  ' : 'FAIL', worstD.toFixed(3), worstShip);
   }
 
+  // THE HAZE TAKES THE CITY AND LEAVES THE LANDMARKS.
+  //
+  // "With the fog idea in vr always show goal rings and landmarks and clouds."
+  // three gives it for nothing — a material with fog:false is not touched —
+  // but only if the right things are marked. So: build a scene with something
+  // marked each way, run the real cityFog(), and see which materials it took
+  // the fog off, and that turning it off again puts every one of them back.
+  {
+    const scene2 = new THREE.Group();
+    const mk = (mark) => {
+      const o = new THREE.Mesh();
+      o.material = { fog: true, needsUpdate: false };
+      o.userData = mark ? { [mark]: true } : {};
+      scene2.add(o);
+      return o;
+    };
+    const monument = mk('vrFar'), ring = mk('alwaysSeen'), house = mk(null);
+    scene2.traverse = (f) => { f(scene2); for (const c of scene2.children) f(c); };
+    scene2.fog = null;
+
+    vr.cityFog(true, scene2);
+    const hazed = !!scene2.fog;
+    const keptClear = monument.material.fog === false && ring.material.fog === false;
+    const cityFades = house.material.fog === true;
+    vr.cityFog(false, scene2);
+    const putBack = monument.material.fog === true && ring.material.fog === true
+      && scene2.fog === null;
+
+    const ok = hazed && keptClear && cityFades && putBack;
+    if (!ok) fails++;
+    console.log('   %s  the haze %s, spares %s, fades %s, and %s',
+      ok ? 'ok  ' : 'FAIL',
+      hazed ? 'comes down' : 'NEVER COMES DOWN',
+      keptClear ? 'landmarks and rings' : 'NOTHING — THEY FADE TOO',
+      cityFades ? 'the housetops' : 'NOTHING',
+      putBack ? 'lifts again when the headset comes off' : 'IS NEVER LIFTED');
+  }
+
   // THE ROOM NOTICE STANDS DOWN. It was set when the room opened and never
   // taken away, so on the screen it parked at the top for the whole flight and
   // in a headset it rode along the bottom of the slate for ever, because the

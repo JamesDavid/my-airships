@@ -1117,8 +1117,8 @@ export function buildWorld(scene) {
     // half-widths match the water ribbons exactly (70 m and 64 m wide), so the
     // river is wet right out to the bank you can see
     // …but the Île de Puteaux is dry land in the middle of the reach
-    /** Build the headset's block city, once, on demand. See mergeIntoBlocks. */
-    makeBlocks: () => (buildCity.blocks ? buildCity.blocks() : []),
+    // makeBlocks is gone: the headset gets the real city in chunks now, not a
+    // merged stand-in. See addBuildingMeshesChunked.
     isWater: (x, z) => !onPuteaux(x, z)
       && nearPolyline(riverPts, x, z, 71, RIVER_GAP),
     /**
@@ -2581,35 +2581,23 @@ function buildCity(scene, riverPts) {
     }
   }
 
-  const cityMeshes = addBuildingMeshes(scene, list);
-
-  // ---- and the same city as one box per block, for the headset ----
-  // Twelve thousand instanced boxes is only a few draw calls, so it is not the
-  // draw calls that hurt: it is ~600k vertices an eye, 108 million a second at
-  // ninety hertz, which is about all a mobile chip has — and the overdraw of a
-  // thousand small boxes standing behind one another is worse.
+  // ---- the city, in chunks ----
   //
-  // Merged HERE, from `list`, and not from a generated file. The file version
-  // was built from the raw survey and so knew nothing of what this function
-  // throws away — the Champ de Mars, the Tower's own site, the river margin —
-  // and put a 173 x 127 m block on top of the Eiffel Tower.
-  // ...but not now. Merging fifteen thousand footprints takes a second or two,
-  // and nobody flying flat should pay it: it is built the first time a headset
-  // actually starts, while the pilot is still putting it on.
-  buildCity.blocks = () => {
-    if (buildCity._blocks) return buildCity._blocks;
-    const blockMeshes = addBuildingMeshes(scene, mergeIntoBlocks(list)) || [];
-    for (const m of blockMeshes) {
-      if (!m) continue;
-      m.visible = false;
-      m.userData.vrOnly = true;
-      m.userData.vrFar = true;               // a city seen from across the city
-    }
-    buildCity._blocks = blockMeshes;
-    return blockMeshes;
-  };
-  for (const m of (cityMeshes || [])) if (m) m.userData.flatOnly = true;
-  buildCity._blocks = null;
+  // ONE CITY, NOT TWO. The headset used to be given a different Paris: the
+  // fifteen thousand footprints merged into five thousand block-sized boxes,
+  // a third of the geometry for the same skyline. It was a good trade on paper
+  // and it looked like what it was — "the giant buildings look bad in vr" — a
+  // Haussmann block drawn as one sixty-metre slab, with no windows, no
+  // roofline and no street between it and the next.
+  //
+  // The real buildings go in instead, cut into chunks, and a headset draws the
+  // chunks near it and lets the rest go into the haze: "just do small
+  // buildings but limit it to closeby ones then have ground fog further away".
+  // Twelve thousand instanced boxes was never a draw-call problem — it is
+  // ~600k vertices an eye at ninety hertz, and the overdraw of a thousand small
+  // boxes standing behind one another. Both go away when only the near ones are
+  // drawn, and neither comes back as a slab.
+  const cityMeshes = addBuildingMeshesChunked(scene, list);
 
   // the Exposition pavilions of 1900 line both quays near the Tower
   addExpoPavilions(scene, riverPts, list, rand);
@@ -2706,6 +2694,51 @@ export function mergeIntoBlocks(list) {
     out.push({ x: cu * ca - cv * sa, z: cu * sa + cv * ca,
       w: u1 - u0, d: v1 - v0, h,
       rw: u1 - u0, rd: v1 - v0, ry: ang, r: (members.size % 10) / 10, nChim: 0 });
+  }
+  return out;
+}
+
+/**
+ * The same city, cut into square chunks.
+ *
+ * THE HEADSET USED TO GET A DIFFERENT CITY. Fifteen thousand footprints were
+ * merged into five thousand block-sized boxes, one per city block, which is a
+ * third of the geometry for the same skyline — and looks like what it is: "the
+ * giant buildings look bad in vr". A Haussmann block drawn as one 60 m slab has
+ * no windows, no roofline and no street, and from the air Paris turns into a
+ * bar chart.
+ *
+ * So the headset gets the REAL buildings, and gets fewer of them: "maybe we
+ * should just do small buildings but limit it to closeby ones then have ground
+ * fog further away". The city is built as one instanced set per chunk, and a
+ * chunk whose nearest corner is beyond the fog is simply not drawn. Nothing is
+ * merged, nothing is a stand-in, and what you fly over is what a pilot flying
+ * flat sees.
+ *
+ * Each chunk carries where it is and how far its corner reaches, so the cull
+ * can ask without measuring anything.
+ */
+export function addBuildingMeshesChunked(scene, list, colorOf, cell = 420) {
+  const bins = new Map();
+  for (const b of list) {
+    const cx = Math.floor(b.x / cell), cz = Math.floor(b.z / cell);
+    const k = cx + ',' + cz;
+    let g = bins.get(k);
+    if (!g) { g = { cx, cz, items: [] }; bins.set(k, g); }
+    g.items.push(b);
+  }
+  const out = [];
+  for (const g of bins.values()) {
+    const meshes = addBuildingMeshes(scene, g.items, colorOf) || [];
+    // the middle of the chunk, and the reach of its far corner
+    const mid = { x: (g.cx + 0.5) * cell, z: (g.cz + 0.5) * cell };
+    const r = Math.hypot(cell, cell) / 2;
+    for (const m of meshes) {
+      if (!m) continue;
+      m.userData.chunkAt = mid;
+      m.userData.chunkR = r;
+    }
+    out.push(...meshes);
   }
   return out;
 }

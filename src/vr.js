@@ -293,12 +293,22 @@ export function seatIn(deck, yaw, eye) {
 // fiction and the real rule culled the Eiffel Tower from the aerodrome. The
 // world knows which of its objects are monuments. Let it say so.
 const KEEP_NEAR = 900;
+// How far the city itself reaches before the haze takes it. The fog is set to
+// close over exactly this distance, so the chunk that stops being drawn was
+// already invisible when it did — see cityFog().
+export const CITY_NEAR = 1150;
 const SMALL = 60;             // half-extent, in metres: bigger than this is scenery you steer by
 
 let cullScene = null, cullList = null;
 
-/** Forget the list — the world has been rebuilt. */
-export function resetCull() { cullScene = null; cullList = null; }
+/**
+ * Forget the list — the world has been rebuilt.
+ *
+ * The haze goes with it: `unfogged` holds materials belonging to a scene that
+ * no longer exists, and putting fog back on those on the way out would be
+ * writing to the dead. main.js calls cityFog(true) again for the new world.
+ */
+export function resetCull() { cullScene = null; cullList = null; fogWas = null; unfogged = null; }
 
 /**
  * Hide the near-field clutter you have flown past.
@@ -325,6 +335,8 @@ export function cullForVR(from, scene) {
       if (!o || !o.position || o === rig) continue;
       const u = o.userData || {};
       if (u.noLift || u.vrFar) continue;
+      // a chunk of the city: culled by its own reach, not by a measured box
+      if (u.chunkAt) { cullList.push(o); continue; }
       if (o.isLight || o.isCamera || o.isInstancedMesh) continue;
       // measure once. A failure, or anything big, means KEEP — the cost of
       // being wrong that way is a few draw calls; the other way it is the sky.
@@ -340,12 +352,65 @@ export function cullForVR(from, scene) {
   }
   let hidden = 0;
   for (const o of cullList) {
-    const dx = o.position.x - from.x, dz = o.position.z - from.z;
-    const on = dx * dx + dz * dz < KEEP_NEAR * KEEP_NEAR;
+    const u = o.userData || {};
+    let on;
+    if (u.chunkAt) {
+      // measured to the chunk's NEAREST corner, or a chunk would blink out
+      // while a corner of it was still inside the haze
+      const dx = u.chunkAt.x - from.x, dz = u.chunkAt.z - from.z;
+      on = Math.hypot(dx, dz) - u.chunkR < CITY_NEAR;
+    } else {
+      const dx = o.position.x - from.x, dz = o.position.z - from.z;
+      on = dx * dx + dz * dz < KEEP_NEAR * KEEP_NEAR;
+    }
     if (o.visible !== on) o.visible = on;
     if (!on) hidden++;
   }
   return hidden;
+}
+
+// ---------------------------------------------------------------- the haze
+// GROUND FOG, so the city ENDS instead of stopping.
+//
+// The near buildings are the real ones and the far ones are not drawn at all;
+// without haze that is a clean edge with Paris on one side of it. A fog closing
+// over the same distance the chunks reach hides the edge, and what is left is a
+// city fading into the weather, which is what Paris looks like from an air-ship
+// anyway.
+//
+// ...BUT NOT THE THINGS YOU STEER BY. "With the fog idea in vr always show goal
+// rings and landmarks and clouds." three gives us that for nothing: a material
+// with `fog: false` is not touched by it. So everything the world marked vrFar
+// — the monuments, the sky, the clouds — and every ring the game hangs in the
+// air comes through the haze at full strength, and the ordinary streets and
+// housetops are what fades.
+let fogWas = null, unfogged = null;
+
+export function cityFog(on, scene) {
+  if (!scene) return;
+  if (on) {
+    if (fogWas === null) fogWas = scene.fog || false;
+    const tint = (fogWas && fogWas.color) ? fogWas.color.clone() : new THREE.Color(0xeccfa8);
+    scene.fog = new THREE.Fog(tint, CITY_NEAR * 0.42, CITY_NEAR);
+    if (!unfogged) {
+      unfogged = [];
+      scene.traverse((o) => {
+        const keep = o.userData && (o.userData.vrFar || o.userData.alwaysSeen);
+        if (!keep || !o.material) return;
+        for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+          if (!m || m.fog === false) continue;
+          m.fog = false; m.needsUpdate = true;
+          unfogged.push(m);
+        }
+      });
+    }
+  } else {
+    if (fogWas !== null) { scene.fog = fogWas || null; fogWas = null; }
+    if (unfogged) {
+      for (const m of unfogged) { m.fog = true; m.needsUpdate = true; }
+      unfogged = null;
+    }
+  }
 }
 
 /** Put everything back when the headset comes off. */
