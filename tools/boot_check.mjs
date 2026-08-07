@@ -39,4 +39,5 @@ globalThis.AudioContext = function(){ return { createGain: () => ({ connect(){},
   destination:{}, currentTime:0, state:'running', resume(){} }; };
 try { await import('../src/main.js'); console.log('main.js BOOTED with VR wired in'); }
 catch (e) { console.log('BOOT FAILED:', e.constructor.name + ': ' + e.message);
-  console.log((e.stack||'').split('\n').slice(1,4).join('\n')); }
+  console.log((e.stack||'').split('\n').slice(1,4).join('\n'));
+  process.exitCode = 1; }   // ...and SAY so: it used to fail and exit 0

@@ -82,7 +82,22 @@ export function buildWorldMonaco(scene) {
   // read as cliffs. It is built on groundRaw, which goes on down under the
   // water instead of stopping flat at zero: the shore then falls where the
   // interpolation crosses the waterline, rather than stepping round the grid in
-  // fifty-metre blocks — and there is nothing left to z-fight the sea plane.
+  // fifty-metre blocks.
+  //
+  // ...and MOSTLY there is nothing left to z-fight the sea plane. Mostly. The
+  // survey puts 7311 of its 7428 wet points on a seabed at -3 m and the other
+  // 117 at EXACTLY ZERO — the same plane the sea is drawn on. Those hundred-odd
+  // points are the waterline itself and the floor of the harbour, and every
+  // triangle between two of them lies flat in the surface of the water, winning
+  // and losing the depth test from one frame to the next: "Dark areas are water
+  // flickering dark to reflective looks wrong" (#69), the dark being this
+  // mesh's own seabed colour showing through the sea.
+  //
+  // So the bed is held clear of the surface. Only the wet side moves — a
+  // vertex the survey put above the waterline is the shore and is left exactly
+  // where it is, so the crossing still falls where the interpolation says.
+  const SEA_CLEAR = -0.5;              // metres of daylight under the sea plane
+  const bed = (h) => (h > 0 ? h : Math.min(h, SEA_CLEAR));
   const SUB = 2;
   const gx = (HF.nx - 1) * SUB, gz = (HF.nz - 1) * SUB;
   const step = HF.step / SUB;
@@ -98,7 +113,7 @@ export function buildWorldMonaco(scene) {
   for (let i = 0; i < tp.count; i++) {
     const wx = tp.getX(i) + cx0, wz = tp.getZ(i) + cz0;
     const h = groundRaw(wx, wz);
-    tp.setY(i, h);
+    tp.setY(i, bed(h));
     if (h <= 0.02) c.copy(seabed);
     else {
       const s = Math.min(1, slopeAt(wx, wz) / 0.75);       // bare where it is steep
@@ -132,7 +147,7 @@ export function buildWorldMonaco(scene) {
     for (let i = 1; i <= N; i++) edge.push([x1 - (x1 - x0) * (i / N), z1]);
     for (let i = 1; i <= N; i++) edge.push([x0, z1 - (z1 - z0) * (i / N)]);
     for (const [ex, ez] of edge) {
-      pos.push(ex, groundRaw(ex, ez), ez);
+      pos.push(ex, bed(groundRaw(ex, ez)), ez);   // the same bed, or a seam opens
       pos.push(ex, -240, ez);
     }
     for (let i = 0; i < edge.length - 1; i++) {

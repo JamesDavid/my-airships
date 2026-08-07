@@ -135,6 +135,45 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('NO SCENARIO PUTS GAS BACK INTO THE BALLOON');
+  console.log('   A scripted leak may only ever TAKE hydrogen. All three leaking');
+  console.log('   scenarios were written "gas = max(FLOOR, gas - rate*dt)", which');
+  console.log('   reads as "leak down to FLOOR" and means "hold the gas AT FLOOR" —');
+  console.log('   so a pilot who valved below it had the script re-inflate the');
+  console.log('   balloon under him, every tick. That is bug #70: the No. 6 into');
+  console.log('   Monaco, "vent button broken, stuck at 82%", 82 being the floor');
+  console.log('   written on that very line. Scenario I held 34 and II held 20.');
+  console.log('');
+  for (const def of SCENARIOS) {
+    const ship = makeShip(def.shipId);
+    let zone = null;
+    const ctx = {
+      ship, world, wind: { x: 0, y: 0, z: 0 },
+      place: (x, y, z, yaw) => ship.reset({ x, y, z }, yaw),
+      setWind: () => {}, setZone: (v, r) => { zone = { v, r }; }, clearZone: () => { zone = null; },
+      zoneDist: () => (zone ? Math.hypot(ship.pos.x - zone.v.x, ship.pos.z - zone.v.z) : 1e9),
+      zoneR: () => (zone ? zone.r : 0),
+      setCenter: () => {}, addMsg: () => {}, complete: () => {}, fail: () => {},
+      raceResult: () => null, setRoute: () => {},
+    };
+    def.setup(ctx);
+    // Sweep the whole range the pilot's own valve can put her at, and see
+    // whether the scenario ever hands any of it back.
+    let worst = 0, worstAt = 0;
+    for (let g = 0; g <= 100; g += 0.5) {
+      ship.gas = g;
+      def.tick(ctx, 1 / 30);
+      const rise = ship.gas - g;
+      if (rise > worst) { worst = rise; worstAt = g; }
+    }
+    const ok = worst <= 1e-9;
+    if (!ok) fails++;
+    console.log('   %s  %s  %s', ok ? 'ok  ' : 'FAIL', def.id.padEnd(14),
+      ok ? 'never raises the gas'
+        : `puts ${worst.toFixed(2)}% BACK when the pilot vents to ${worstAt}%`);
+  }
+
+  console.log('');
   console.log('SHIP SPEEDS AGAINST THE ONES HE WROTE DOWN');
   console.log('   Ch. XIII, the No. 5 round Longchamps with Maurice Farman keeping');
   console.log('   pace in his motor-car: "between 26 and 30 kilometres per hour with');

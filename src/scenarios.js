@@ -67,6 +67,29 @@ export class Rival {
 // ---------------------------------------------------------------- scenarios
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
+/**
+ * A SCRIPTED LEAK — the only way a scenario may touch the hydrogen.
+ *
+ * All three leaking scenarios used to be written
+ *
+ *     ctx.ship.gas = Math.max(FLOOR, ctx.ship.gas - RATE * dt);
+ *
+ * meaning to say "leak down to FLOOR and stop there". What it actually says is
+ * "put the gas back to FLOOR", every tick, for ever — so the moment the pilot
+ * pulled his valve below the floor the script re-inflated the balloon under
+ * him. A pilot flying the No. 6 into Monaco reported the vent "broken, stuck at
+ * 82%" (#70), which is exactly the floor written on that scenario's line, and
+ * the same fault was sitting in scenario I at 34 and scenario II at 20.
+ *
+ * A leak may only ever REMOVE gas. If the pilot has already vented past the
+ * floor, the leak has nothing left to take and does nothing.
+ */
+function leak(ctx, rate, floor, dt) {
+  const g = ctx.ship.gas;
+  if (g <= floor) return;
+  ctx.ship.gas = Math.max(floor, g - rate * dt);
+}
+
 // "standing in my basket at the top of the tallest chestnut, the propeller
 // touching the ground" — 13 July 1901. A little wide of the park's own hedge,
 // because a chestnut on its edge is still its chestnut.
@@ -89,7 +112,7 @@ export const SCENARIOS = [
       this.warned = false;
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(34, ctx.ship.gas - 0.45 * dt);
+      leak(ctx, 0.45, 34, dt);
       if (!this.warned && ctx.ship.gas < 70) {
         this.warned = true;
         ctx.addMsg('sc', '“The balloon began to fold in the middle like a pocket knife…” Throttle DOWN, nose down, ride her in.', 0);
@@ -164,7 +187,7 @@ export const SCENARIOS = [
       // faster once the envelope has slackened enough to foul the screw. She
       // has to still be flying when she reaches La Muette, which is the whole
       // shape of the afternoon: he got there, and THEN it went wrong.
-      ctx.ship.gas = Math.max(20, ctx.ship.gas - (this.dead ? 0.115 : 0.016) * dt);
+      leak(ctx, (this.dead ? 0.115 : 0.016), 20, dt);
       const u = this.u, t = this.tro;
       const rx = ctx.ship.pos.x - t.x, rz = ctx.ship.pos.z - t.z;
       const along = rx * u.x + rz * u.z;          // + is toward the Tower
@@ -353,7 +376,7 @@ export const SCENARIOS = [
         + ' and run for the stage.'));
     },
     tick(ctx, dt) {
-      ctx.ship.gas = Math.max(82, ctx.ship.gas - 0.12 * dt);
+      leak(ctx, 0.12, 82, dt);
       const d = ctx.zoneDist();
       if (ctx.ship.wrecked) return ctx.fail('“Balloon, keel, and motor were fished up the next day.” History repeats — unless you fly it better.');
       if (ctx.ship.landed && d < ctx.zoneR()) {
