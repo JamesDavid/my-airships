@@ -53,7 +53,8 @@ export const TRACKS = [
       LONGCHAMP.rx * LAP_INSET, LONGCHAMP.rz * LAP_INSET, 6, 60, 20),
   },
   {
-    id: 'gymkhana', location: 'paris', laps: 1, v: 6,
+    // v7: four rings moved off the roofs they were hung on — a different course
+    id: 'gymkhana', location: 'paris', laps: 1, v: 7,
     name: 'The Tour of Paris',
     sub: 'twelve landmarks, once round — the Tower, Montmartre, the Bastille, Notre-Dame',
     // ONE LAP OF THE WHOLE CITY, instead of two of six gates round the Champ de
@@ -69,23 +70,47 @@ export const TRACKS = [
     gates: (() => {
       const P = (id) => placeLegacy(id);
       const M = (id) => LANDMARKS.find((l) => l.id === id);
-      // [what, how high over its own ground, how wide the ring]
+      // [what, how high over its own ground, how wide the ring, and where the
+      //  ring stands relative to it]
       //
       // The heights clear what they are named for: the Tower is rounded at her
       // second platform rather than over the top, Montmartre's basilica stands
       // 86 m up on the butte before it starts, and the rest are flown past at
       // roof height, which is where a pilot of 1901 actually was.
+      //
+      // THE RING STANDS IN THE OPEN, NOT OVER THE ROOF. Every gate was hung on
+      // the landmark's own coordinate, which is the middle of the building —
+      // and a 34 m hoop centred on a building has that building through it.
+      // Measured: four of the twelve had a roof standing above the ring's lower
+      // rim, worst of all the Trocadero, whose 70 m towers came up through a
+      // ring whose rim was at 46 m. "The rings for the course should be in the
+      // avenue and not over the buildings."
+      //
+      // The offsets are measured, not guessed: for each blocked gate, the
+      // smallest distance at which the ring finds air, and among the points at
+      // that distance the one with the most open ground round it — which is
+      // how you end up in the place or the boulevard rather than tucked behind
+      // a corner. Sliding ALONG the course was tried first and moved the
+      // Madeleine's gate 370 m, which is no longer the Madeleine's gate.
+      //
+      // They are written down rather than computed at run time because
+      // src/anticheat.js replays a run through these same gates in the Edge
+      // Function, where there is no city to measure against. Both sides must
+      // read the same numbers. check_scenarios re-measures them against the
+      // built city and fails if the city moves under them.
       const STOPS = [
-        [P('eiffel'), 120, 46], [P('trocadero'), 58, 38],
-        [P('etoile'), 62, 36], [M('madeleine'), 52, 34],
+        [P('eiffel'), 120, 46], [P('trocadero'), 58, 38, -66, 24],
+        [P('etoile'), 62, 36], [M('madeleine'), 52, 34, 98, -69],
         [P('opera'), 58, 34], [P('montmartre'), 46, 40],
-        [M('republique'), 46, 34], [M('bastille'), 58, 34],
+        [M('republique'), 46, 34], [M('bastille'), 58, 34, 48, -13],
         [P('notredame'), 52, 36], [P('pantheon'), 58, 36],
-        [M('gareorsay'), 46, 34], [P('invalides'), 62, 36],
+        [M('gareorsay'), 46, 34, -122, -146], [P('invalides'), 62, 36],
       ];
-      return STOPS.filter(([p]) => p).map(([p, h, r]) => ({
-        x: p.x, y: parisGround(p.x, p.z) + h, z: p.z, r,
-      }));
+      return STOPS.filter(([p]) => p).map(([p, h, r, dx = 0, dz = 0]) => {
+        const x = p.x + dx, z = p.z + dz;
+        // the height is over the ground UNDER THE RING, not under the monument
+        return { x, y: parisGround(x, z) + h, z, r };
+      });
     })(),
   },
   {

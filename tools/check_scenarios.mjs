@@ -174,6 +174,38 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('EVERY RING HAS A HOLE IN IT');
+  console.log('   "Every gate has air in it" measured the ground under the gate and');
+  console.log('   nothing else, so it never noticed that four of the Tour of Paris\'s');
+  console.log('   twelve rings were hung on the middle of a BUILDING. The worst was');
+  console.log('   the Trocadero, whose 70 m towers came up through a ring whose lower');
+  console.log('   rim was at 46 m: "the rings for the course should be in the avenue');
+  console.log('   and not over the buildings."');
+  console.log('');
+  for (const t of TRACKS.filter((x) => x.location === 'paris')) {
+    let blocked = 0, worst = null;
+    for (let i = 0; i < t.gates.length; i++) {
+      const g = t.gates[i];
+      const rim = g.y - (g.r || 24);
+      for (const b of world.buildings) {
+        const d = Math.hypot(b.x - g.x, b.z - g.z) - Math.hypot(b.w, b.d) / 2;
+        if (d > (g.r || 24)) continue;
+        const top = b.top !== undefined ? b.top : b.h;
+        const over = top - rim;
+        if (over <= 0) continue;
+        blocked++;
+        if (!worst || over > worst.over) worst = { i: i + 1, over, top, rim };
+        break;
+      }
+    }
+    const ok = blocked === 0;
+    if (!ok) fails++;
+    console.log('   %s  %s  %d of %d rings have a roof through them%s',
+      ok ? 'ok  ' : 'FAIL', t.id.padEnd(16), blocked, t.gates.length,
+      worst ? ` (worst gate ${worst.i}: a ${worst.top.toFixed(0)} m roof through a rim at ${worst.rim.toFixed(0)} m)` : '');
+  }
+
+  console.log('');
   console.log('NOTHING IN PARIS IS BUILT UPSIDE DOWN');
   console.log('   Chasing #57 — "upside down cones like we had on the river bank" out');
   console.log('   in the Bois. Most of this world lives in instance matrices, and the');
