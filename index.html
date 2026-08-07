@@ -74,14 +74,26 @@
 
   #center { position:fixed; top:34%; left:0; right:0; text-align:center; pointer-events:none;
     transition: top .7s ease; }
-  #centerBig { font-size:52px; color:#41301f; font-style:italic; text-shadow:0 2px 6px rgba(255,240,214,.7);
-    transition: font-size .7s ease; }
-  #centerSub { font-size:19px; color:#5a4632; font-style:italic; margin-top:8px;
-    transition: font-size .7s ease; }
+  /* On a card, not on the sky. This was dark brown italic laid straight over
+     whatever happened to be behind it — bright cloud, dark ground, the river —
+     and a scenario's ending is a paragraph, not a word: "scenario complete
+     message is too hard to read". The card travels with the text and shrinks
+     with it when the notice parks. */
+  #centerBig { font-size:50px; color:#2e2114; font-style:italic;
+    display:inline-block; max-width:min(90vw, 900px);
+    background:rgba(247,240,224,.90); border:1px solid rgba(122,102,70,.55);
+    border-radius:5px; padding:4px 22px; box-shadow:0 3px 14px rgba(0,0,0,.28);
+    transition: font-size .7s ease, padding .7s ease; }
+  #centerSub { font-size:21px; line-height:1.45; color:#33261a; font-style:italic;
+    margin-top:9px; display:inline-block; max-width:min(88vw, 760px);
+    background:rgba(247,240,224,.93); border:1px solid rgba(122,102,70,.45);
+    border-radius:5px; padding:11px 18px; box-shadow:0 3px 14px rgba(0,0,0,.26);
+    transition: font-size .7s ease, padding .7s ease; }
+  #centerBig:empty, #centerSub:empty { display:none; }   /* no empty card */
   /* after a moment the notice parks at the top, out of the pilot's view */
   #center.parked { top:5.5%; }
-  #center.parked #centerBig { font-size:26px; }
-  #center.parked #centerSub { font-size:13.5px; }
+  #center.parked #centerBig { font-size:26px; padding:2px 14px; }
+  #center.parked #centerSub { font-size:15px; padding:7px 13px; }
 
   #help { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,22,14,.88);
     color:#e9dcc4; padding:26px 34px; font-size:14.5px; line-height:1.75; border:1px solid #7a6647;
