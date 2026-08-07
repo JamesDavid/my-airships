@@ -39,7 +39,6 @@ import { WALL_RUNS, WALL } from './paris_wall.js';
 import { PONT, AVRE, CHURCH, PARK, LONGCHAMP as LC_REAL, AUTEUIL as AU_REAL } from './paris_stcloud.js';
 import { LANDMARKS } from './paris_landmarks.js';
 import { OSM_BUILDINGS } from './paris_buildings.js';
-import { PARIS_BLOCKS } from './paris_blocks.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -375,6 +374,10 @@ export function buildWorld(scene) {
 
   const sunDir = new THREE.Vector3(1, 0.14, 0.16).normalize();
   const sky = makePhysicalSky(scene, sunDir, { rayleigh: 2.6, turbidity: 7 });
+  // the sky sits at the origin and is ten kilometres across: never cull it.
+  // Culling it by distance from the pilot turned the heavens black everywhere
+  // except within 900 m of the Eiffel Tower, which is where the origin is.
+  farSeen(sky);
   const hemi = new THREE.HemisphereLight(0xfde3bd, 0x6b6b52, 0.75);
   scene.add(hemi);
   const sun = makeShadowSun(scene, sunDir, 2.6);
@@ -988,6 +991,8 @@ export function buildWorld(scene) {
     base: 260,                       // Montmartre stands 86 m over the datum
     ground: parisGround,
   });
+  // never culled: they are the sky, and they are already few and large
+  for (const c of clouds) farSeen(c.grp);
   keepOutOfReflection(seine, clouds.map((c) => c.grp));
 
   const LM = (id) => { const q = placeLegacy(id); return { x: q.x, z: q.z }; };
@@ -1071,6 +1076,8 @@ export function buildWorld(scene) {
     // half-widths match the water ribbons exactly (70 m and 64 m wide), so the
     // river is wet right out to the bank you can see
     // …but the Île de Puteaux is dry land in the middle of the reach
+    /** Build the headset's block city, once, on demand. See mergeIntoBlocks. */
+    makeBlocks: () => (buildCity.blocks ? buildCity.blocks() : []),
     isWater: (x, z) => !onPuteaux(x, z)
       && nearPolyline(riverPts, x, z, 71, RIVER_GAP),
     /**
@@ -1244,8 +1251,24 @@ function gardenGeom(g) {
     half: g[5], formal: g[6], turfed: g[7] };
 }
 
+// Flat things laid ON other flat things — turf on grass, gravel on turf, a
+// paved oval on gravel — are coplanar to within a few centimetres, and a few
+// centimetres is nothing to a depth buffer. In a headset it is less than
+// nothing. polygonOffset settles the argument in the rasteriser instead, where
+// the answer does not depend on how far away you are or what the near plane is:
+// "darker green grass park areas fight with lighter grass areas. paths fight
+// with different ground also".
+let decalLayer = 0;
+function decalMat(color) {
+  decalLayer++;
+  return new THREE.MeshLambertMaterial({ color,
+    polygonOffset: true,
+    polygonOffsetFactor: -1 - decalLayer * 0.5,
+    polygonOffsetUnits: -1 - decalLayer * 0.5 });
+}
+
 function addOval(scene, x, z, rx, rz, color, y) {
-  const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshLambertMaterial({ color }));
+  const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), decalMat(color));
   m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.scale.set(rx, rz, 1);
   scene.add(m);
 }
@@ -1253,7 +1276,7 @@ function addOval(scene, x, z, rx, rz, color, y) {
 function addStrip(scene, x1, z1, x2, z2, w, color, y = 0.09) {
   const dx = x2 - x1, dz = z2 - z1;
   const len = Math.hypot(dx, dz);
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(len, w), new THREE.MeshLambertMaterial({ color }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(len, w), decalMat(color));
   m.rotation.x = -Math.PI / 2;
   m.rotation.z = -Math.atan2(dz, dx); // plane local +x along strip after x-rot
   m.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
@@ -2503,25 +2526,127 @@ function buildCity(scene, riverPts) {
   // Twelve thousand instanced boxes is only a few draw calls, so it is not the
   // draw calls that hurt: it is ~600k vertices an eye, 108 million a second at
   // ninety hertz, which is about all a mobile chip has — and the overdraw of a
-  // thousand little boxes standing behind one another is worse. These 1,907
-  // blocks carry the same silhouette for a sixth of the geometry. Built once,
-  // hidden, and swapped in when a headset starts (src/vr.js).
-  const blockList = PARIS_BLOCKS.map(([bx, bz, bw, bl, bry, bh]) => ({
-    x: bx, z: bz, w: bl, d: bw, h: bh,
-    rw: bl, rd: bw, ry: bry, r: ((bx * 7 + bz * 13) % 1000) / 1000, nChim: 0,
-  }));
-  const blockMeshes = addBuildingMeshes(scene, blockList) || [];
-  for (const m of blockMeshes) {
-    if (!m) continue;
-    m.visible = false;
-    m.userData.vrOnly = true;
-    m.userData.vrFar = true;                 // a city seen from across the city
-  }
+  // thousand small boxes standing behind one another is worse.
+  //
+  // Merged HERE, from `list`, and not from a generated file. The file version
+  // was built from the raw survey and so knew nothing of what this function
+  // throws away — the Champ de Mars, the Tower's own site, the river margin —
+  // and put a 173 x 127 m block on top of the Eiffel Tower.
+  // ...but not now. Merging fifteen thousand footprints takes a second or two,
+  // and nobody flying flat should pay it: it is built the first time a headset
+  // actually starts, while the pilot is still putting it on.
+  buildCity.blocks = () => {
+    if (buildCity._blocks) return buildCity._blocks;
+    const blockMeshes = addBuildingMeshes(scene, mergeIntoBlocks(list)) || [];
+    for (const m of blockMeshes) {
+      if (!m) continue;
+      m.visible = false;
+      m.userData.vrOnly = true;
+      m.userData.vrFar = true;               // a city seen from across the city
+    }
+    buildCity._blocks = blockMeshes;
+    return blockMeshes;
+  };
   for (const m of (cityMeshes || [])) if (m) m.userData.flatOnly = true;
+  buildCity._blocks = null;
 
   // the Exposition pavilions of 1900 line both quays near the Tower
   addExpoPavilions(scene, riverPts, list, rand);
   return list;
+}
+
+/**
+ * One box per CITY BLOCK, for the headset.
+ *
+ * FOUND BY CONNECTIVITY, NOT ON A GRID, because a grid cuts across the streets
+ * and would pave over the Champs-Elysees. The buildings of a terrace touch each
+ * other and a street is fifteen to twenty-five metres of nothing, so stamping
+ * the footprints into a coarse raster and taking the connected components gives
+ * back the block plan of the city.
+ *
+ * Each block becomes one box at the dominant angle of the buildings in it,
+ * sized to enclose them and as tall as the tallest.
+ */
+export function mergeIntoBlocks(list) {
+  const CELL = 3;                 // finer than a street, coarser than a party wall
+  const cells = new Map();
+  const corners = (b) => {
+    const c = Math.cos(b.ry || 0), s2 = Math.sin(b.ry || 0);
+    const hw = (b.rw !== undefined ? b.rw : b.w) / 2;
+    const hd = (b.rd !== undefined ? b.rd : b.d) / 2;
+    const out = [];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      out.push([b.x + sx * hw * c + sz * hd * s2, b.z - sx * hw * s2 + sz * hd * c]);
+    }
+    return out;
+  };
+  list.forEach((b, i) => {
+    const cs = corners(b);
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [px, pz] of cs) {
+      if (px < x0) x0 = px; if (px > x1) x1 = px;
+      if (pz < z0) z0 = pz; if (pz > z1) z1 = pz;
+    }
+    // ...stamping only the cells the building ACTUALLY covers. The axis-aligned
+    // box of a long frontage at forty-five degrees is twice its area, and the
+    // surplus reaches over the street and welds the next block on.
+    const c = Math.cos(b.ry || 0), s2 = Math.sin(b.ry || 0);
+    const hw = (b.rw !== undefined ? b.rw : b.w) / 2;
+    const hd = (b.rd !== undefined ? b.rd : b.d) / 2;
+    for (let gx = Math.floor(x0 / CELL) - 1; gx <= Math.ceil(x1 / CELL) + 1; gx++) {
+      for (let gz = Math.floor(z0 / CELL) - 1; gz <= Math.ceil(z1 / CELL) + 1; gz++) {
+        const px = (gx + 0.5) * CELL - b.x, pz = (gz + 0.5) * CELL - b.z;
+        if (Math.abs(px * c - pz * s2) > hw || Math.abs(px * s2 + pz * c) > hd) continue;
+        // a single integer key: string keys and split(',') were most of the
+        // two and a half seconds this used to take at load
+        const k = (gx + 32768) * 65536 + (gz + 32768);
+        let a = cells.get(k);
+        if (!a) { a = []; cells.set(k, a); }
+        a.push(i);
+      }
+    }
+  });
+
+  const seen = new Set(), out = [];
+  for (const key of cells.keys()) {
+    if (seen.has(key)) continue;
+    const queue = [key]; seen.add(key);
+    const members = new Set();
+    while (queue.length) {
+      const k = queue.pop();
+      for (const i of cells.get(k)) members.add(i);
+      const gx = Math.floor(k / 65536), gz = k - gx * 65536;
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const n = (gx + dx) * 65536 + (gz + dz);
+        if (cells.has(n) && !seen.has(n)) { seen.add(n); queue.push(n); }
+      }
+    }
+    if (!members.size) continue;
+    // the block's angle is the dominant one of its buildings — they already
+    // stand at whatever angle their street runs
+    let ang = 0, bestW = -1, h = 0;
+    for (const i of members) {
+      const b = list[i];
+      const wgt = (b.rw !== undefined ? b.rw : b.w) * (b.rd !== undefined ? b.rd : b.d);
+      if (wgt > bestW) { bestW = wgt; ang = b.ry || 0; }
+      if (b.h > h) h = b.h;
+    }
+    const c = Math.cos(-ang), s2 = Math.sin(-ang);
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const i of members) {
+      for (const [px, pz] of corners(list[i])) {
+        const u = px * c - pz * s2, v = px * s2 + pz * c;
+        if (u < u0) u0 = u; if (u > u1) u1 = u;
+        if (v < v0) v0 = v; if (v > v1) v1 = v;
+      }
+    }
+    const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    out.push({ x: cu * ca - cv * sa, z: cu * sa + cv * ca,
+      w: u1 - u0, d: v1 - v0, h,
+      rw: u1 - u0, rd: v1 - v0, ry: ang, r: (members.size % 10) / 10, nChim: 0 });
+  }
+  return out;
 }
 
 /** Builds the instanced city and RETURNS its meshes, so a caller can swap them. */

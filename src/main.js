@@ -152,6 +152,9 @@ function spawnShip(specId, where = null) {
   ship.eyeNear = measureEyeNear(ship);
   setCenter('', '');   // clear any wreck notice from the previous ship
   labelBallast();
+  // the new ship's slate: showPanel was only called when the session started,
+  // so changing ship inside a headset left you with no readings at all
+  ship.showPanel(vr.inVR());
   document.getElementById('helpTitle').textContent = `My Airships — ${ship.spec.name}`;
   addMsg('ship', `${ship.spec.name} — ${ship.spec.sub}`, 0);
 }
@@ -3533,6 +3536,8 @@ function frame(now) {
 // (userData.flatOnly / vrOnly) so nothing here has to know what a city is.
 function swapCityForVR(on) {
   if (!scene) return;
+  // built the first time a headset asks for it, not at every world load
+  if (on && world && world.makeBlocks) world.makeBlocks();
   for (const o of scene.children) {
     const u = o.userData || {};
     if (u.flatOnly) o.visible = !on;

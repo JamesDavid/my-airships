@@ -52,6 +52,7 @@ function makeHand() {
 const pad = { throttle: 0, rudder: 0, pitch: 0, vent: false, coax: false };
 let ballastEdge = false, ventEdge = false, camEdge = false, menuEdge = false;
 let sparkEdge = false, sparkHeld = 0, menuPressEdge = false;
+let trimHand = -1, trimFrom = 0, trimBase = 0, trimHeldValue = 0;
 const pressed = new Set();
 
 /**
@@ -105,8 +106,21 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
     session = renderer.xr.getSession();
     enabled = true;
     floorFix = null; headMax = 0; seatFrames = 0;   // re-measure for this session
-    // the eye is IN the basket, so the near plane has to let the instruments in
-    camera.near = 0.05;
+    // THE DEPTH RANGE, which is not a detail.
+    //
+    // The eye is in the basket, so the near plane has to let the instruments
+    // and your own hands in — but I set it to 0.05 against a far plane of
+    // 12,000, and a 240,000:1 range leaves so little precision that every
+    // painted thing on the ground fights the ground: "a lot of zfighting with
+    // different paths on the ground".
+    //
+    // 0.15 still admits a hand at arm's length and the slate at 0.44 m, and
+    // 6,500 still shows the Eiffel Tower from the aerodrome 5.4 km off, which
+    // is the furthest anything has to be seen. 43,000:1 — the flat game runs at
+    // 24,000:1, so this is the same order rather than ten times worse.
+    farWas = camera.far;
+    camera.near = 0.15;
+    camera.far = 6500;
     camera.updateProjectionMatrix();
     if (camera.parent !== rig) rig.add(camera);
 
@@ -131,6 +145,7 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
     session = null;
     enabled = false;
     camera.near = 0.5;
+    if (farWas) { camera.far = farWas; farWas = 0; }
     camera.updateProjectionMatrix();
     if (camera.parent === rig) rig.remove(camera);
     if (shadowWas !== null && renderer.shadowMap) { renderer.shadowMap.enabled = shadowWas; }
@@ -202,7 +217,7 @@ export async function offerVR(mount, onEnter) {
  */
 let floorFix = null;          // measured once a session: does the space have a floor?
 let headMax = 0, seatFrames = 0;
-let shadowWas = null;
+let shadowWas = null, farWas = 0;
 
 /**
  * Put the pilot in the basket. `deck` is the top of the floor he stands on —
@@ -256,6 +271,7 @@ export function seatIn(deck, yaw, eye) {
 // fiction and the real rule culled the Eiffel Tower from the aerodrome. The
 // world knows which of its objects are monuments. Let it say so.
 const KEEP_NEAR = 900;
+const SMALL = 60;             // half-extent, in metres: bigger than this is scenery you steer by
 
 let cullScene = null, cullList = null;
 
@@ -263,21 +279,40 @@ let cullScene = null, cullList = null;
 export function resetCull() { cullScene = null; cullList = null; }
 
 /**
- * Hide the near-field scenery you have flown past. One squared distance per
- * top-level object; the ground, the river, the roads and the sky are exempt
- * (they are single meshes covering everything and carry `noLift`), and so is
- * anything the world marked `vrFar`.
+ * Hide the near-field clutter you have flown past.
+ *
+ * SAFE BY DEFAULT, and it was not: the first version culled anything it had
+ * not been told to keep, and what it took away was the sky. The sky dome sits
+ * at the origin and is ten kilometres across, so from the aerodrome it was
+ * 4.9 km off and went black — while within 900 m of the Eiffel Tower, which is
+ * where the origin is, it came back. "The sky is black unless im near the
+ * eiffel tower" is exactly that, and the clouds went with it.
+ *
+ * So the rule is inverted. An object is culled only if it is BOTH far away AND
+ * measurably small; if it cannot be measured it is kept. Anything the world
+ * marked (noLift for the ground and the river, vrFar for the monuments, the
+ * sky and the clouds) is never even considered.
  */
 export function cullForVR(from, scene) {
   if (!enabled || !scene) return 0;
   if (cullScene !== scene) {
     cullScene = scene;
     cullList = [];
+    const box = new THREE.Box3(), sz = new THREE.Vector3();
     for (const o of scene.children) {
       if (!o || !o.position || o === rig) continue;
       const u = o.userData || {};
       if (u.noLift || u.vrFar) continue;
-      if (o.isLight || o.isCamera) continue;
+      if (o.isLight || o.isCamera || o.isInstancedMesh) continue;
+      // measure once. A failure, or anything big, means KEEP — the cost of
+      // being wrong that way is a few draw calls; the other way it is the sky.
+      let r = Infinity;
+      try {
+        box.makeEmpty();
+        box.setFromObject(o);
+        if (!box.isEmpty()) { box.getSize(sz); r = Math.max(sz.x, sz.y, sz.z) * 0.5; }
+      } catch { r = Infinity; }
+      if (!Number.isFinite(r) || r > SMALL) continue;
       cullList.push(o);
     }
   }
@@ -432,29 +467,30 @@ function menuNav(sy, press) {
 // ---------------------------------------------------------------- the levers
 // Quest Touch, and anything reporting the same standard mapping:
 //
-//   left  stick  Y   the carburating lever — push forward for more
+//   GRIP             take hold of whatever your hand is touching. That is what
+//                    a grip button is FOR, and it was mapped to the ignition
+//                    instead — "the grip buttons are mapped to things that they
+//                    shouldnt be it should be mapped to grab whatever my hand
+//                    is touching". It is now the only thing it does.
+//   left  stick  Y   the carburating lever, when your hands are not busy
 //   right stick  X   the helm
-//   right stick  Y   the shifting weights (trim)
-//   either grip      coax the motor when she sputters (the F key) — or take
-//                    hold of the ALLUM. lever itself and squeeze the trigger
+//   right stick  Y   the shifting weights
 //   A / X            change the view
-//   B / Y            the menu — or pull the brass bell-ring in the basket
+//   B / Y            the ship's book (or pull the brass ring in the basket)
 //
-// BALLAST AND THE VALVE ARE NOT ON BUTTONS. They hang in the basket on their
-// own cords, and you pull them — reach a hand to the toggle and squeeze the
-// trigger. That is not decoration: it is how the ship was actually worked.
-// Ch. XI, of the No. 5's water ballast, "their two spigots were so arranged
-// that they could be opened and shut from my basket by means of two steel
-// wires." The valve was on a cord to the hand in the same way.
+// EVERY CONTROL IS A THING IN THE BASKET, and each carries an engraved plate:
 //
-// The trigger still works as a plain button when your hand is nowhere near a
-// cord — left for ballast, right for the valve — so a pilot who cannot reach,
-// or who is sitting down, is not locked out of half the ship.
+//   LEST      the ballast — a sack over the side, or the spigot on the water
+//             cylinder, depending on the ship (Ch. XI)
+//   SOUPAPE   the valve. Pull it and the hydrogen is gone for good
+//   ALLUM.    the ignition, for when she sputters
+//   CARB.     the carburating lever
+//   POIDS     the shifting weights: a fore-and-aft lever you take hold of and
+//             MOVE, because trim is a position and not a pull
+//   CARNET    the ship's book
 //
-// Sticks are DEAD-ZONED at 0.12: a Touch stick at rest reports a few
-// hundredths, and a helm that is never quite centred makes a ship that will not
-// fly straight, which on the Deutsch course is the difference between rounding
-// the Tower and drifting past it.
+// The trigger still does what the nearest fitting does, for anyone who finds a
+// grip awkward, and the sticks still fly her when no hand is holding anything.
 const DEAD = 0.12;
 const dz = (v) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
 const GRAB = 0.16;                 // how near the toggle a hand must be, in metres
@@ -471,7 +507,9 @@ export function pollVR(ship) {
   pad.throttle = 0; pad.rudder = 0; pad.pitch = 0;
   pad.vent = false; pad.coax = false;
   let sawBallast = false, sawCam = false, sawMenu = false, sawSpark = false;
-  reach.ballast = false; reach.vent = false; reach.spark = false; reach.menu = false;
+  reach.ballast = false; reach.vent = false; reach.spark = false;
+  reach.menu = false; reach.trim = false;
+  let anyHeld = false;
 
   let i = -1;
   for (const src of session.inputSources) {
@@ -479,8 +517,6 @@ export function pollVR(ship) {
     const g = src.gamepad;
     if (!g) continue;
     const ax = g.axes || [];
-    // xr-standard puts the thumbstick at axes 2/3; touchpad-only controllers
-    // put it at 0/1, so take whichever pair is present
     const sx = ax.length > 2 ? ax[2] : ax[0] || 0;
     const sy = ax.length > 3 ? ax[3] : ax[1] || 0;
     const trigger = !!(g.buttons[0] && g.buttons[0].pressed);
@@ -488,49 +524,68 @@ export function pollVR(ship) {
     const bA = !!(g.buttons[4] && g.buttons[4].pressed);
     const bB = !!(g.buttons[5] && g.buttons[5].pressed);
     const left = src.handedness === 'left';
+    const hold = grip || trigger;          // grip is the grab; trigger is a courtesy
 
-    // WITH THE BOARD UP THE STICKS DRIVE IT, not the ship. Otherwise choosing a
-    // scenario means shoving the helm hard over while you do it.
     if (menuOn) {
       if (src.handedness === 'right' || session.inputSources.length === 1) {
-        menuNav(sy, trigger && !menuPressEdge);
+        menuNav(sy, hold && !menuPressEdge);
       }
-      menuPressEdge = trigger;
+      menuPressEdge = hold;
       if (bB) sawMenu = true;
       continue;
     }
 
-    if (left) { pad.throttle = -dz(sy); }
-    else if (src.handedness === 'right') { pad.rudder = -dz(sx); pad.pitch = -dz(sy); }
-    if (grip) pad.coax = true;
+    // WHAT IS THIS HAND TOUCHING?
+    const ctrl = renderer.xr.getController(handIndex(src, i));
+    let on = null;
+    if (ctrl && ship && ship.cordAt && typeof ctrl.getWorldPosition === 'function') {
+      ctrl.getWorldPosition(_hp);
+      let best = GRAB;
+      for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim']) {
+        const cp = ship.cordAt(id, _cp);
+        if (!cp) continue;
+        const d = _hp.distanceTo(cp);
+        if (d < best) { best = d; on = id; }
+      }
+      if (on) reach[on] = true;
+    }
+
+    // THE SHIFTING WEIGHTS ARE HELD, not pulled: while a hand has the lever,
+    // where the hand is IS the trim, and it stays where you let go of it.
+    if (on === 'trim' && hold) {
+      // fore-and-aft along the SHIP, not along the world: her bow is
+      // (cos yaw, 0, -sin yaw), and the rig carries her yaw.
+      const yaw = rig.rotation.y;
+      const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
+      if (trimHand !== i) { trimHand = i; trimFrom = along; trimBase = trimHeldValue; }
+      trimHeldValue = Math.max(-1, Math.min(1, trimBase + (along - trimFrom) / 0.16));
+      ship.setTrimFromHand(trimHeldValue * 0.16);
+      anyHeld = true;
+    } else if (trimHand === i && !hold) { trimHand = -1; }
+
+    if (hold && on && on !== 'trim') {
+      anyHeld = true;
+      if (on === 'ballast') sawBallast = true;
+      else if (on === 'vent') pad.vent = true;
+      else if (on === 'spark') sawSpark = true;
+      else if (on === 'menu') sawMenu = true;
+    }
+
+    // the sticks fly her whenever that hand is not holding something
+    if (!(hold && on)) {
+      if (left) pad.throttle = -dz(sy);
+      else if (src.handedness === 'right') { pad.rudder = -dz(sx); pad.pitch = -dz(sy); }
+    }
     if (bA) sawCam = true;
     if (bB) sawMenu = true;
-
-    // where is this hand, and is it on a cord?
-    const ctrl = renderer.xr.getController(handIndex(src, i));
-    let onCord = null;
-    if (ctrl && ship && ship.cordAt) {
-      ctrl.getWorldPosition(_hp);
-      for (const id of ['ballast', 'vent', 'spark', 'menu']) {
-        const cp = ship.cordAt(id, _cp);
-        if (cp && _hp.distanceTo(cp) < GRAB) { onCord = id; reach[id] = true; break; }
-      }
-    }
-    if (trigger) {
-      if (onCord === 'ballast') sawBallast = true;
-      else if (onCord === 'vent') pad.vent = true;
-      else if (onCord === 'spark') sawSpark = true;
-      else if (onCord === 'menu') sawMenu = true;
-      else if (left) sawBallast = true;         // the plain-button fallback
-      else pad.vent = true;
-    }
   }
 
-  // edges, so holding a button does not fire it ninety times a second
+  // the lever HOLDS ITS SETTING, like the helm and the carburating lever: the
+  // shifting weights stay where you put them until you move them again
+  if (trimHeldValue !== 0) pad.pitch = trimHeldValue;
+
   if (sawBallast && !ballastEdge) { VR_ACTIONS.ballast(); if (ship) ship.pullCord('ballast'); rumble(0.5, 45); }
-  // ALLUM. — a jab at the spark, which is `coax` and the F key. Held, it
-  // repeats slowly rather than sixty times a second, because that is what
-  // working a stiff lever feels like and what the motor is worth per jab.
+  if (pad.vent && !ventEdge && ship) ship.pullCord('vent');
   if (sawSpark) {
     sparkHeld += 1;
     if (!sparkEdge || sparkHeld % 20 === 0) {
@@ -539,11 +594,9 @@ export function pollVR(ship) {
       rumble(0.65, 35);
     }
   } else sparkHeld = 0;
-  sparkEdge = sawSpark;
-  if (pad.vent && !ventEdge && ship) ship.pullCord('vent');
-  if (sawCam && !camEdge) VR_ACTIONS.camera();
   if (sawMenu && !menuEdge) { VR_ACTIONS.menu(); if (ship) ship.pullCord('menu'); rumble(0.4, 40); }
-  ballastEdge = sawBallast; ventEdge = pad.vent;
+  if (sawCam && !camEdge) VR_ACTIONS.camera();
+  ballastEdge = sawBallast; ventEdge = pad.vent; sparkEdge = sawSpark;
   camEdge = sawCam; menuEdge = sawMenu;
   return pad;
 }

@@ -97,6 +97,40 @@ function makeBaroFace() {
   return dialTexture(c);
 }
 
+// A small engraved plate for a single fitting. Every control in the basket
+// carries one — in a headset there is no tooltip and no key legend, so a cord
+// hanging in the air is a mystery until it is labelled. French, and period:
+// LEST is ballast, SOUPAPE the valve, ALLUM. the ignition, POIDS the shifting
+// weights, CARNET the ship's book.
+const PLACARDS = {};
+function makePlacard(text) {
+  if (PLACARDS[text]) return PLACARDS[text];
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e8dcc0'; x.fillRect(0, 0, 256, 64);
+  x.strokeStyle = '#8a7350'; x.lineWidth = 4; x.strokeRect(3, 3, 250, 58);
+  x.fillStyle = '#22180f';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold 30px Georgia, serif';
+  x.fillText(text, 128, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  PLACARDS[text] = t;
+  return t;
+}
+
+/** Hang a placard beside a fitting, facing the pilot. */
+function placard(parent, text, x, y, z) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.0375),
+    new THREE.MeshLambertMaterial({ map: makePlacard(text), emissive: 0x4a453c,
+      side: THREE.DoubleSide }));
+  m.position.set(x, y, z);
+  m.rotation.y = -Math.PI / 2;
+  parent.add(m);
+  return m;
+}
+
 // the engraved placard under the two levers, read from the pilot's seat
 function makeLeverPlate() {
   const c = document.createElement('canvas');
@@ -362,10 +396,20 @@ export class Airship {
       basket.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       this.pitchGroup.add(basket);
       this.basketMesh = basket;
-      const rim = new THREE.Mesh(new THREE.BoxGeometry(1.34 * big, 0.1, 1.14 * big),
-        new THREE.MeshLambertMaterial({ color: 0x6f5a3a }));
-      rim.position.set(bx, -drop + 0.05 * big, 0);
-      this.pitchGroup.add(rim);
+      // A RIM, NOT A LID. This was one 1.34 x 1.14 m slab laid across the top,
+      // which from outside reads as a rail and from inside is a ceiling six
+      // inches over your head: "the top of the basket is still closed... but it
+      // is hollow inside". Four bars round the edge, and the sky where the sky
+      // should be.
+      const rimMat = new THREE.MeshLambertMaterial({ color: 0x6f5a3a });
+      const RW = 1.34 * big, RD = 1.14 * big, RT = 0.09;
+      for (const [w2, d2, x2, z2] of [[RW, RT, 0, (RD - RT) / 2], [RW, RT, 0, -(RD - RT) / 2],
+                                      [RT, RD, (RW - RT) / 2, 0], [RT, RD, -(RW - RT) / 2, 0]]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w2, 0.1, d2), rimMat);
+        bar.position.set(bx + x2, -drop + 0.05 * big, z2);
+        bar.castShadow = true;
+        this.pitchGroup.add(bar);
+      }
       // where his boots actually are: the top of the floor he is standing on
       this.deckPoint = new THREE.Object3D();
       this.deckPoint.position.set(bx, cy - H / 2 + T, 0);
@@ -501,6 +545,41 @@ export class Airship {
       this.pitchGroup.add(this.carbLever);
       this.sparkLever.position.set(bx + 0.48, -drop + 0.2, 0.43);
       this.pitchGroup.add(this.sparkLever);
+      // THE SHIFTING WEIGHTS, on their own quadrant to port.
+      //
+      // POIDS is French for weights, and that is exactly what they are: "I
+      // placed two bags of ballast, one fore and one aft, suspended from the
+      // balloon envelope by cords. By means of lighter cords each of these two
+      // weights could be drawn into the basket, thus shifting the centre of
+      // gravity of the whole system" (Ch. VI). Pulling the fore weight in
+      // points her stem up; the aft one, down.
+      //
+      // Mounted like CARB. and ALLUM. — a wooden quadrant with an engraved
+      // plate — but on the other hand, because it is the other job. Trim is a
+      // POSITION and not a pull, so you take hold of it and move it fore and
+      // aft, and it stays where you leave it.
+      {
+        const quad = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.2), wood);
+        quad.position.set(bx + 0.48, -drop + 0.18, -0.38);
+        this.pitchGroup.add(quad);
+        const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.04),
+          new THREE.MeshLambertMaterial({ map: makePlacard('POIDS'), emissive: 0x4a453c }));
+        plate.rotation.y = -Math.PI / 2;
+        plate.position.set(bx + 0.398, -drop + 0.18, -0.38);
+        this.pitchGroup.add(plate);
+        const trim = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.3, 6), brass);
+        trim.geometry.translate(0, 0.15, 0);
+        const tknob = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6),
+          new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
+        tknob.position.y = 0.3;
+        trim.add(tknob);
+        trim.position.set(bx + 0.48, -drop + 0.2, -0.38);
+        this.pitchGroup.add(trim);
+        this.trimLever = trim;
+        this.pullCords.push({ id: 'trim', mesh: trim, lever: true,
+          offset: new THREE.Vector3(0, 0.3, 0), rest: null, pulled: 0 });
+      }
+
       // ALLUM. is grabbable too. It is the lever you work when she sputters —
       // "cords... for striking the motor's electric spark" (Ch. XI) — and in a
       // headset you should be able to take hold of the thing rather than press
@@ -555,6 +634,8 @@ export class Airship {
         ring.rotation.x = Math.PI / 2;
         ring.position.copy(bot).y += 0.075;
         this.pitchGroup.add(ring);
+        placard(this.pitchGroup, id === 'ballast' ? 'LEST' : 'SOUPAPE',
+          bot.x + 0.10, bot.y + 0.20, bot.z);
         this.pullCords.push({ id, mesh: tog, rest: bot.clone(), pulled: 0 });
       }
 
@@ -577,6 +658,7 @@ export class Airship {
           new THREE.MeshLambertMaterial({ color: 0xb08a3c }));
         ring.position.copy(bot);
         this.pitchGroup.add(ring);
+        placard(this.pitchGroup, 'CARNET', bot.x + 0.10, bot.y + 0.20, bot.z);
         this.pullCords.push({ id: 'menu', mesh: ring, rest: bot.clone(), pulled: 0 });
       }
     }
@@ -1363,6 +1445,13 @@ export class Airship {
     this.wheel.rotation.y = this.wheelA;
     this.updateTiller();
     this.carbLever.rotation.z = -0.55 + this.throttle * 0.9; // carburating lever = throttle
+    // POIDS reads the ship's own trim, so it moves whether the setting came
+    // from the keyboard, the touch slider or a hand in a headset — one state,
+    // one lever, and no way for the indicator to disagree with the ship
+    if (this.trimLever) {
+      const pm = this.spec.physics.pitchMax || 1;
+      this.trimLever.rotation.z = -Math.max(-1, Math.min(1, this.pitch / pm)) * 0.55;
+    }
     this.sparkT = Math.max(0, (this.sparkT || 0) - dt);
     this.sparkLever.rotation.z = 0.35 - (this.sparkT > 0 ? Math.sin(this.sparkT * 18) * 0.4 : 0);
     const altM = Math.max(0, this.pos.y - this.spec.keel.drop);

@@ -302,7 +302,7 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
       // ALLUM. is only fitted where there is a motor to light
       const want = sh.spec.prop === 'none' ? ['ballast', 'vent', 'menu']
-        : ['ballast', 'vent', 'spark', 'menu'];
+        : ['ballast', 'vent', 'spark', 'menu', 'trim'];
       const got = {};
       for (const c of want) {
         const p2 = sh.cordAt(c);
@@ -330,7 +330,7 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     else if (worstSlate < 0.35) { console.log('   FAIL the slate is too close to focus on'); fails++; }
     else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
     else if (nearest < 0.32) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
-    else console.log('   ok   ballast, valve, ALLUM. and the bell-pull in reach and distinct');
+    else console.log('   ok   LEST, SOUPAPE, ALLUM., POIDS and CARNET all in reach and distinct');
   }
 
   console.log('');
@@ -357,19 +357,20 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       }
     }
     console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
-    // ...and the city itself stands down for a block-sized stand-in
-    const { OSM_BUILDINGS } = await import('../src/paris_buildings.js');
-    const { PARIS_BLOCKS } = await import('../src/paris_blocks.js');
-    const ratio = PARIS_BLOCKS.length / OSM_BUILDINGS.length;
-    console.log('   ' + OSM_BUILDINGS.length + ' footprints stand in as '
-      + PARIS_BLOCKS.length + ' blocks in a headset ('
-      + (1 / ratio).toFixed(1) + 'x less geometry)');
+    // ...and the city itself stands down for a block-sized stand-in, merged at
+    // runtime from the very footprints the game draws (see mergeIntoBlocks)
+    const { mergeIntoBlocks } = await import('../src/world.js');
+    const foot = world.buildings.filter((b) => b.rw !== undefined);
+    const blocks = mergeIntoBlocks(foot);
+    const ratio = blocks.length / foot.length;
+    console.log('   ' + foot.length + ' footprints stand in as ' + blocks.length
+      + ' blocks in a headset (' + (1 / ratio).toFixed(1) + 'x less geometry)');
     if (ratio > 0.35) { console.log('   FAIL the blocks are barely a saving'); fails++; }
-    else if (PARIS_BLOCKS.length < 600) {
+    else if (blocks.length < 600) {
       console.log('   FAIL too few blocks — connectivity has leaked across the streets');
       fails++;
     } else {
-      const longest = PARIS_BLOCKS.map((b) => Math.max(b[2], b[3])).sort((a, b) => a - b);
+      const longest = blocks.map((b) => Math.max(b.w, b.d)).sort((a, b) => a - b);
       const med = longest[Math.floor(longest.length / 2)];
       console.log('   ok   median block ' + med.toFixed(0)
         + ' m on its longest side (a Haussmann block runs 60-120)');
