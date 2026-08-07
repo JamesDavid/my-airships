@@ -99,7 +99,7 @@ if (renderer.shadowMap.enabled) {
   const reached = [];
   gp.buttons[1].pressed = true;              // GRIP: grab whatever is nearest
   for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb',
-    'tillerP', 'tillerS']) {
+    'tiller']) {
     const p = sh.cordAt(id);
     if (!p) continue;
     ctrls[0].position.copy(p);               // put the hand ON it
@@ -113,7 +113,7 @@ if (renderer.shadowMap.enabled) {
   else console.log('   ok   every fitting can be grabbed without throwing');
   if (reached.length < 6) {
     console.log('   FAIL a hand laid on a fitting did not reach it: only '
-      + reached.length + ' of 8 answered');
+      + reached.length + ' of 7 answered');
     fails++;
   } else {
     console.log('   ok   all ' + reached.length + ' fittings answer a hand laid on them');

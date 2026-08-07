@@ -590,7 +590,7 @@ export function pollVR(ship) {
       ctrl.getWorldPosition(_hp);
       let best = GRAB;
       for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb',
-        'tillerP', 'tillerS']) {
+        'tiller']) {
         const cp = ship.cordAt(id, _cp);
         if (!cp) continue;
         const d = _hp.distanceTo(cp);
@@ -619,19 +619,20 @@ export function pollVR(ship) {
       anyHeld = true;
     } else if (trimHand === i && !hold) { trimHand = -1; }
 
-    // THE TILLER. Take either grip and move it fore and aft: pushing the port
-    // grip forward is pulling the starboard one back, so the two sides read
-    // opposite and the helm goes over the same way whichever hand you use.
-    if ((on === 'tillerP' || on === 'tillerS') && hold) {
+    // THE TILLER. Take the stick and swing it ACROSS the ship — which is how a
+    // tiller is steered, and why it has a stick: the bar itself belongs at the
+    // front of the basket, clear of everything and out of the eye-line, and
+    // that is 0.81 m away. Bringing the bar back to the hand put it through the
+    // middle of the ship instead: "now it collides with a ton of things".
+    if (on === 'tiller' && hold) {
       const yaw = rig.rotation.y;
-      const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
-      const side = on === 'tillerP' ? 1 : -1;
-      if (helmHand !== i) { helmHand = i; helmFrom = along; helmBase = helmValue; }
-      helmValue = Math.max(-1, Math.min(1, helmBase + side * (along - helmFrom) / 0.22));
+      const across = _hp.x * Math.sin(yaw) + _hp.z * Math.cos(yaw);
+      if (helmHand !== i) { helmHand = i; helmFrom = across; helmBase = helmValue; }
+      helmValue = Math.max(-1, Math.min(1, helmBase + (across - helmFrom) / 0.26));
       anyHeld = true;
     } else if (helmHand === i && !hold) {
       helmHand = -1;
-      helmValue *= 0.0;          // let go and she steadies, like a lashed helm let slip
+      helmValue = 0;             // let the stick go and she steadies
     }
 
     if (on === 'carb' && hold) {
@@ -643,8 +644,7 @@ export function pollVR(ship) {
       anyHeld = true;
     } else if (carbHand === i && !hold) { carbHand = -1; }
 
-    if (hold && on && on !== 'trim' && on !== 'carb'
-        && on !== 'tillerP' && on !== 'tillerS') {
+    if (hold && on && on !== 'trim' && on !== 'carb' && on !== 'tiller') {
       anyHeld = true;
       if (on === 'ballast') sawBallast = true;
       else if (on === 'vent') pad.vent = true;

@@ -441,11 +441,8 @@ export class Airship {
     if (prop !== 'none') {
       // waist height, and no higher: a bar across the eye-line would hide the
       // horizon, and the horizon is how an air-ship is flown
-      // INSIDE THE BASKET. The basket runs bx +-0.6, and this stood at +0.74 —
-      // through the front wall, and 0.81 m from the eye, which is past the end
-      // of an arm: "i cant grab the tiller still".
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.26, 6), dark);
-      post.position.set(bx + 0.46, -drop + 0.13, 0);
+      post.position.set(bx + 0.74, -drop + 0.13, 0);
       this.pitchGroup.add(post);
 
       const HALF = 0.27;                     // to each hand from the pivot
@@ -458,18 +455,39 @@ export class Airship {
         grip.position.z = sz * (HALF - 0.05);
         this.wheel.add(grip);
       }
-      this.wheel.position.set(bx + 0.46, -drop + 0.26, 0);
+      this.wheel.position.set(bx + 0.74, -drop + 0.26, 0);
       this.pitchGroup.add(this.wheel);
       this.tillerHalf = HALF;
-      // BOTH GRIPS ARE FITTINGS, so you steer by taking hold of the tiller and
-      // moving it, which is how a tiller is steered: "push one end away and
-      // pull the other back and the rudder swings". Registered at the grips
-      // rather than the pivot, because that is where a hand goes.
-      for (const [id2, sz] of [['tillerP', 1], ['tillerS', -1]]) {
-        this.pullCords.push({ id: id2, mesh: this.wheel, lever: true,
-          offset: new THREE.Vector3(0, 0, sz * (HALF - 0.05)),
-          side: sz, rest: null, pulled: 0 });
-      }
+      // AN EXTENSION, reaching back to the hand.
+      //
+      // The bar belongs at the front of the basket, where it is clear of
+      // everything and out of the eye-line; but that is 0.81 m from the pilot,
+      // past the end of an arm. Bringing the bar itself back put it through the
+      // middle of the ship. So it gets what a dinghy's tiller gets: a stick
+      // jointed at the middle of the bar and lying back toward the helmsman,
+      // which you hold and swing across to put the helm over.
+      const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.02, 0.34, 6), wood);
+      ext.geometry.translate(-0.17, 0, 0);        // jointed at the bar's centre
+      ext.rotation.z = 0.20;                      // lying back and a little up
+      this.wheel.add(ext);
+      const eknob = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6),
+        new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
+      eknob.position.set(-0.34, 0, 0);
+      ext.add(eknob);
+      this.tillerExt = ext;
+      this.tillerExtLen = 0.34;
+      // The grab point is carried by a marker hung DIRECTLY under pitchGroup
+      // and moved each frame, rather than by the stick itself. Two reasons: the
+      // stick is two levels deep and swings with the helm, and a fitting whose
+      // world position can only be had by walking a matrix chain is a fitting
+      // nothing here can check — tools/sim.mjs measured this one at 7.99 m from
+      // the eye and was believed for about a minute.
+      this.tillerGrip = new THREE.Object3D();
+      this.tillerGrip.position.set(bx + 0.74 - 0.34, -drop + 0.26, 0);
+      this.pitchGroup.add(this.tillerGrip);
+      this.tillerAt = { x: bx + 0.74, y: -drop + 0.26 };
+      this.pullCords.push({ id: 'tiller', mesh: this.tillerGrip, lever: true,
+        rest: null, pulled: 0 });
 
       // the two cords, laid out afresh each frame: both ends move, and so does
       // the rudder they pull on
@@ -1498,6 +1516,14 @@ export class Airship {
     // POIDS reads the ship's own trim, so it moves whether the setting came
     // from the keyboard, the touch slider or a hand in a headset — one state,
     // one lever, and no way for the indicator to disagree with the ship
+    // the tiller stick swings with the helm, and its grab point with it
+    if (this.tillerGrip && this.tillerAt) {
+      const a = this.wheel ? this.wheel.rotation.y : 0;
+      const L = this.tillerExtLen * Math.cos(0.20);
+      this.tillerGrip.position.set(this.tillerAt.x - L * Math.cos(a),
+        this.tillerAt.y + this.tillerExtLen * Math.sin(0.20),
+        L * Math.sin(a));
+    }
     if (this.trimLever) {
       const pm = this.spec.physics.pitchMax || 1;
       this.trimLever.rotation.z = -Math.max(-1, Math.min(1, this.pitch / pm)) * 0.55;

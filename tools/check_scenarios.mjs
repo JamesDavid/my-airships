@@ -302,7 +302,7 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
       // ALLUM. is only fitted where there is a motor to light
       const want = sh.spec.prop === 'none' ? ['ballast', 'vent', 'menu']
-        : ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb'];
+        : ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller'];
       const got = {};
       for (const c of want) {
         const p2 = sh.cordAt(c);
@@ -343,11 +343,11 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       const sh = makeShip(id);
       sh.reset({ x: 0, y: 100, z: 0 }, 0);
       sh.updateTransforms(0);
-      for (const want2 of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb']) {
+      for (const want2 of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller']) {
         const at = sh.cordAt(want2);
         if (!at) continue;
         let best = null, bestD = Infinity;
-        for (const other of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb']) {
+        for (const other of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller']) {
           const p3 = sh.cordAt(other);
           if (!p3) continue;
           const d = at.distanceTo(p3);
