@@ -1301,8 +1301,8 @@ export class Airship {
    * Redraws only when something has actually changed — a canvas upload every
    * frame at ninety hertz is a cost a headset cannot afford.
    */
-  drawPanel(lines, note) {
-    const key = JSON.stringify(lines) + '|' + (note || '');
+  drawPanel(lines, note, nav, toast) {
+    const key = JSON.stringify([lines, note || '', nav || [], toast || '']);
     if (key === this._panelKey) return;
     this._panelKey = key;
     const c = this.panelCanvas;
@@ -1314,31 +1314,96 @@ export class Airship {
     g.strokeStyle = '#6b5a3e'; g.lineWidth = 4;
     g.strokeRect(6, 6, c.width - 12, c.height - 12);
     g.textBaseline = 'middle';
-    let y = 42;
-    for (const [label, value] of lines) {
-      g.fillStyle = '#a99878';
-      g.font = '22px Georgia, serif';
-      g.fillText(String(label).toUpperCase(), 26, y);
-      g.fillStyle = '#f0e2c2';
-      g.font = 'bold 30px Georgia, serif';
-      g.textAlign = 'right';
-      g.fillText(String(value), c.width - 26, y);
+
+    // wrap `text` into the width, from `ly` down, and answer where it ended
+    const wrap = (text, x, ly, step, maxW, maxY) => {
+      let line = '';
+      for (const wd of String(text).split(' ')) {
+        if (line && g.measureText(line + wd).width > maxW) {
+          g.fillText(line, x, ly); line = ''; ly += step;
+          if (ly > maxY) return ly;
+        }
+        line += (line ? ' ' : '') + wd;
+      }
+      if (line && ly <= maxY) { g.fillText(line, x, ly); ly += step; }
+      return ly;
+    };
+
+    // A TOAST TAKES THE WHOLE SLATE, for a moment. "When there is a toast the
+    // tablet can replace the content with just the toast for a moment" — the
+    // readings are always a glance away and the message is not.
+    if (toast) {
+      g.fillStyle = '#f4e6bf';
+      g.font = 'italic 30px Georgia, serif';
+      g.textAlign = 'center';
+      const lines2 = [];
+      {
+        let line = '';
+        for (const wd of String(toast).split(' ')) {
+          if (line && g.measureText(line + wd).width > c.width - 64) { lines2.push(line); line = ''; }
+          line += (line ? ' ' : '') + wd;
+        }
+        if (line) lines2.push(line);
+      }
+      const step = 38;
+      let ly = c.height / 2 - ((lines2.length - 1) * step) / 2;
+      for (const l of lines2.slice(0, 7)) { g.fillText(l, c.width / 2, ly); ly += step; }
       g.textAlign = 'left';
-      y += 42;
+      this.panelTex.needsUpdate = true;
+      return;
     }
+
+    // the readings, in two columns so the lower half is free for the way home
+    const half = Math.ceil(lines.length / 2);
+    lines.forEach(([label, value], i) => {
+      const col = i < half ? 0 : 1;
+      const x0 = 26 + col * (c.width / 2 - 6);
+      const x1 = (col === 0 ? c.width / 2 - 12 : c.width - 26);
+      const y = 34 + (i - col * half) * 34;
+      g.fillStyle = '#a99878';
+      g.font = '19px Georgia, serif';
+      g.fillText(String(label).toUpperCase(), x0, y);
+      g.fillStyle = '#f0e2c2';
+      g.font = 'bold 25px Georgia, serif';
+      g.textAlign = 'right';
+      g.fillText(String(value), x1, y);
+      g.textAlign = 'left';
+    });
+
+    // THE WAY TO THE NEXT THING, and to anybody else in the sky.
+    //
+    // The same arrow as the wind and the roster: it turns with YOUR head, so
+    // straight up is dead ahead and a pilot can follow it out of the basket
+    // without doing sums.
+    let y = 34 + half * 34 + 16;
+    g.strokeStyle = '#5a4c34'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(22, y - 12); g.lineTo(c.width - 22, y - 12); g.stroke();
+    y += 14;
+    for (const n of (nav || []).slice(0, 3)) {
+      g.save();
+      g.translate(42, y);
+      g.rotate(((n.deg || 0) + 90) * Math.PI / 180);   // the glyph points up at 0
+      g.fillStyle = n.rival ? '#8fc6dd' : '#e8c477';
+      g.beginPath();
+      g.moveTo(0, -15); g.lineTo(10, 11); g.lineTo(0, 4); g.lineTo(-10, 11);
+      g.closePath(); g.fill();
+      g.restore();
+      g.fillStyle = '#f0e2c2';
+      g.font = 'bold 23px Georgia, serif';
+      g.fillText(String(n.far || ''), 66, y);
+      g.fillStyle = n.rival ? '#8fc6dd' : '#a99878';
+      g.font = '19px Georgia, serif';
+      const nx = 66 + g.measureText('88888 m').width + 8;
+      const nm = String(n.name || '');
+      g.fillText(g.measureText(nm).width > c.width - nx - 20
+        ? nm.slice(0, 22) + '…' : nm, nx, y);
+      y += 30;
+    }
+
     if (note) {
       g.fillStyle = '#e8c477';
-      g.font = 'italic 20px Georgia, serif';
-      const words = String(note).split(' ');
-      let line = '', ly = Math.max(y + 14, c.height - 76);
-      for (const wd of words) {
-        if (g.measureText(line + wd).width > c.width - 52) {
-          g.fillText(line, 26, ly); line = ''; ly += 26;
-          if (ly > c.height - 20) break;
-        }
-        line += wd + ' ';
-      }
-      if (ly <= c.height - 20) g.fillText(line, 26, ly);
+      g.font = 'italic 19px Georgia, serif';
+      wrap(note, 26, Math.max(y + 8, c.height - 68), 24, c.width - 52, c.height - 18);
     }
     this.panelTex.needsUpdate = true;
   }
@@ -1353,22 +1418,20 @@ export class Airship {
     this._panelBig = on;
     const k = on ? 2.4 : 1;
     this.panelMesh.scale.set(k, k, 1);
-    // IT GROWS DOWNWARD, FROM THE RIM.
+    // IT COMES UP AND IN TO BE READ, and goes back down to be flown over.
     //
-    // The slate is hung where the pilot asked for it — top edge on the upper
-    // rim of the basket, so it is there when he looks down and nowhere when he
-    // looks out. Scaling about its centre put more than half the extra height
-    // ABOVE that edge and straight across the horizon, and it was then pulled
-    // ten centimetres nearer the eye as well, which widens the angle it covers
-    // again. Both together are "messages block view" (#68).
-    //
-    // So the top edge is pinned and the growth goes down into the basket,
-    // where there is nothing to see anyway, and the slate stays where it was
-    // fore-and-aft. HALF_H is the plane's half height carried through its own
-    // tilt, which is what actually sets how high the top corner sits.
-    const HALF_H = (0.133 / 2) * Math.cos(0.55);
-    this.panelMesh.position.y = this.panelHomeY - (k - 1) * HALF_H;
-    this.panelMesh.position.x = this.panelHome || this.panelMesh.position.x;
+    // "When you make the tablet bigger move it up and closer to the user."
+    // Which was the opposite of the first answer to #68 — that pinned the top
+    // edge and grew it DOWNWARD, on the reasoning that anything above the rim
+    // is across the horizon. The reasoning was sound and the diagnosis was
+    // wrong: what actually made it a wall was that it grew for opening notices
+    // as well as endings and then never shrank, so it sat there for the whole
+    // flight. With that fixed it is big for fourteen seconds at a time, and for
+    // fourteen seconds you want it where you can read it — up at eye level and
+    // within arm's length, not down by your boots at 0.74 m.
+    this.panelMesh.position.y = this.panelHomeY + (on ? 0.17 : 0);
+    this.panelMesh.position.x = (this.panelHome || this.panelMesh.position.x)
+      - (on ? 0.17 : 0);            // nearer the eye: the pilot faces +x
     this.panelMesh.traverse((o) => {
       if (o.material && o.material.transparent !== undefined) {
         o.material.opacity = on ? 1 : (o.geometry && o.geometry.type === 'BoxGeometry' ? 0.6 : 0.72);

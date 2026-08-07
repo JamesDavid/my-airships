@@ -168,25 +168,54 @@ if (renderer.shadowMap.enabled) {
       ok ? 'ok  ' : 'FAIL', worstD.toFixed(3), worstShip);
   }
 
-  // THE SLATE GROWS DOWNWARD. It is hung with its top edge on the upper rim so
-  // that it is there when the pilot looks down and nowhere when he looks out;
-  // an ending grows it, and growing it about its centre put the extra height
-  // across the horizon instead — "messages block view" (#68). Measured as the
-  // world height of its top corner, small against big.
+  // ...and the slate must survive being DRAWN. It grew a navigation block and
+  // a toast mode, which is a good deal more of the 2-D canvas API than it used
+  // to touch (save/rotate/beginPath/fill), and a throw in here is a throw
+  // inside the frame loop with a headset on.
   {
-    const HALF_H = (0.133 / 2) * Math.cos(0.55);
-    const topEdge = () => sh.panelMesh.position.y + (sh.panelMesh.scale.y || 1) * HALF_H;
-    sh.bigPanel(false); const small = topEdge(); const nearSmall = sh.panelMesh.position.x;
-    sh.bigPanel(true);  const big = topEdge();   const nearBig = sh.panelMesh.position.x;
-    const grew = (sh.panelMesh.scale.y || 1) > 1.5;
-    const ok = grew && big <= small + 1e-6 && nearBig >= nearSmall - 1e-6;
-    if (!ok) fails++;
-    console.log('   %s  the slate grows %s and its top edge %s (%s -> %s m)',
-      ok ? 'ok  ' : 'FAIL',
-      grew ? 'for an ending' : 'NOT AT ALL',
-      big <= small + 1e-6 ? 'stays on the rim' : 'RISES INTO THE VIEW',
-      small.toFixed(4), big.toFixed(4));
+    let threw = null;
+    const cases = [
+      [[['height', '120 m'], ['speed', '31 km/h']], '', [], ''],
+      [[['height', '120 m'], ['speed', '31 km/h'], ['gas', '88%'],
+        ['ballast', '3 cyl'], ['petrol', '61%']],
+        'A cloud passes before the sun.',
+        [{ deg: -90, far: '340 m', name: 'gate 2 of 6' },
+         { deg: 40, far: '1.2 km', name: 'Alberto', rival: true }], ''],
+      [[], '', [], 'The valves hiss, easing a dangerous pressure.'],
+      [[['gas', '0%']], null, null, null],
+    ];
+    for (const [rows, note, nav, toast] of cases) {
+      // a fresh key each time, or drawPanel short-circuits and proves nothing
+      sh._panelKey = null;
+      try { sh.drawPanel(rows, note, nav, toast); }
+      catch (e) { threw = e.message; break; }
+    }
+    if (threw) { console.log('   FAIL drawing the slate threw — ' + threw); fails++; }
+    else console.log('   ok   the slate draws readings, bearings and a toast without throwing');
+  }
+
+  // THE SLATE COMES UP AND IN TO BE READ. "When you make the tablet bigger
+  // move it up and closer to the user." And it must go back EXACTLY home
+  // afterwards, or fourteen seconds at a time will walk it across the basket.
+  {
     sh.bigPanel(false);
+    const homeY = sh.panelMesh.position.y, homeX = sh.panelMesh.position.x;
+    sh.bigPanel(true);
+    const bigY = sh.panelMesh.position.y, bigX = sh.panelMesh.position.x;
+    const grew = (sh.panelMesh.scale.y || 1) > 1.5;
+    sh.bigPanel(false);
+    const backY = sh.panelMesh.position.y, backX = sh.panelMesh.position.x;
+    const up = bigY > homeY + 0.05;
+    const nearer = bigX < homeX - 0.05;         // the pilot faces +x
+    const home = Math.abs(backY - homeY) < 1e-9 && Math.abs(backX - homeX) < 1e-9;
+    const ok = grew && up && nearer && home;
+    if (!ok) fails++;
+    console.log('   %s  the slate grows %s, %s, %s, and %s',
+      ok ? 'ok  ' : 'FAIL',
+      grew ? 'to 2.4x' : 'NOT AT ALL',
+      up ? `up ${(bigY - homeY).toFixed(2)} m` : 'DOES NOT RISE',
+      nearer ? `in ${(homeX - bigX).toFixed(2)} m` : 'DOES NOT COME NEARER',
+      home ? 'goes exactly home again' : 'DRIFTS');
   }
 }
 

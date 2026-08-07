@@ -3612,6 +3612,9 @@ function draw() {
 let _vrNote = '', _vrNoteAt = 0;
 // long enough to read a paragraph twice over, at a slow reading speed
 const BIG_SLATE_DWELL = 14000;
+// ...and the toast holds the slate for as long as the flat game holds its
+// centre notice before parking it, so the two behave alike
+const TOAST_DWELL = 3500;
 
 function vrPanel() {
   if (!ship) return;
@@ -3648,8 +3651,48 @@ function vrPanel() {
   // stay on the slate either way — it is the size that goes away, not the
   // message.
   if (note !== _vrNote) { _vrNote = note; _vrNoteAt = performance.now(); }
-  ship.bigPanel(note.length > 90 && performance.now() - _vrNoteAt < BIG_SLATE_DWELL);
-  ship.drawPanel(rows, note);
+  const age = performance.now() - _vrNoteAt;
+
+  // WHERE TO GO, on the slate as well as on the screen. The next mark of
+  // whatever you are flying — a gate, a hoop, a gem, the landing, the starting
+  // line — and then whoever else is in the sky, nearest first. Same arrow as
+  // the wind and the roster: it turns with your own head, so up is dead ahead.
+  const nav = [];
+  const brgTo = (x, z) => -90 - (Math.atan2(-(z - ship.pos.z), x - ship.pos.x) - ship.yaw) * 180 / Math.PI;
+  const rangeTo = (x, z) => {
+    const d = Math.hypot(x - ship.pos.x, z - ship.pos.z);
+    return d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d / 5) * 5 + ' m';
+  };
+  {
+    const m = nextMark();
+    if (m) nav.push({ deg: brgTo(m.x, m.z), far: rangeTo(m.x, m.z), name: m.name });
+    const others = [];
+    for (const r of (live.roster ? live.roster() : [])) {
+      if (!r || r.self || !r.pos) continue;
+      others.push({ r, d: Math.hypot(r.pos.x - ship.pos.x, r.pos.z - ship.pos.z) });
+    }
+    others.sort((a, b) => a.d - b.d);
+    for (const o of others.slice(0, 3 - nav.length)) {
+      nav.push({ deg: brgTo(o.r.pos.x, o.r.pos.z), far: rangeTo(o.r.pos.x, o.r.pos.z),
+        name: o.r.pilot || 'a rival', rival: true });
+    }
+  }
+
+  // A TOAST TAKES THE SLATE for a moment — "when there is a toast the tablet
+  // can replace the content with just the toast". The readings are a glance
+  // away and always the same; the message is neither.
+  const toast = (note && age < TOAST_DWELL) ? note : '';
+
+  // ...and a long one gets the slate GROWN for it, up and in where it can be
+  // read, on the same dwell the flat game parks its centre notice on.
+  //
+  // "MESSAGES BLOCK VIEW" (#68) was this test with no clock on it: a
+  // scenario's opening line is a paragraph as surely as its last one is —
+  // scenario II's is 113 characters — so the slate went big and opaque on the
+  // first frame of the flight and STAYED there, for the whole flight, with
+  // nothing to make it small again.
+  ship.bigPanel(note.length > 90 && age < BIG_SLATE_DWELL);
+  ship.drawPanel(rows, toast ? '' : note, nav, toast);
 }
 
 renderer.setAnimationLoop(frame);
