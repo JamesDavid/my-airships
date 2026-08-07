@@ -97,8 +97,18 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
     // guarded: a runtime that hands back something other than an Object3D must
     // not take the whole game down at boot, which is the one thing this file is
     // not allowed to do
+    // THE GRIP POSE, NOT THE AIM POSE. getController() is the target RAY: its
+    // origin sits at the front of the controller and points where you aim,
+    // which is not where your hand is. Measuring grabs from it put the hand
+    // several centimetres ahead of itself — "even if my hand is dead bang on
+    // the carb lever" it found the next fitting along. getControllerGrip() is
+    // the hand.
     let c = null;
-    try { c = renderer.xr.getController(i); } catch { c = null; }
+    try { c = renderer.xr.getControllerGrip && renderer.xr.getControllerGrip(i); }
+    catch { c = null; }
+    if (!c || typeof c.add !== 'function') {
+      try { c = renderer.xr.getController(i); } catch { c = null; }
+    }
     if (!c || typeof c.add !== 'function') continue;
     c.add(makeHand());
     rig.add(c);
@@ -568,7 +578,13 @@ export function pollVR(ship) {
     }
 
     // WHAT IS THIS HAND TOUCHING?
-    const ctrl = renderer.xr.getController(handIndex(src, i));
+    const gi = handIndex(src, i);
+    let ctrl = null;
+    try { ctrl = renderer.xr.getControllerGrip && renderer.xr.getControllerGrip(gi); }
+    catch { ctrl = null; }
+    if (!ctrl || typeof ctrl.getWorldPosition !== 'function') {
+      try { ctrl = renderer.xr.getController(gi); } catch { ctrl = null; }
+    }
     let on = null;
     if (ctrl && ship && ship.cordAt && typeof ctrl.getWorldPosition === 'function') {
       ctrl.getWorldPosition(_hp);
@@ -594,7 +610,9 @@ export function pollVR(ship) {
       // BACK FOR UP, FORWARD FOR DOWN — which is also what the weights do:
       // "pulling in the fore weight would cause the stem of the balloon to
       // point diagonally upward" (Ch. VI), and you pull it in toward yourself.
-      trimHeldValue = Math.max(-1, Math.min(1, trimBase - (along - trimFrom) / 0.16));
+      // 0.30 m of travel, not 0.16: at 0.16 a wrist's movement went hard over
+      // and the pilot "lost all control of it"
+      trimHeldValue = Math.max(-1, Math.min(1, trimBase - (along - trimFrom) / 0.30));
       // the lever itself is driven from the ship's own `pitch` in
       // updateTransforms, so there is nothing to tell it here — one state, one
       // lever, and no second way to move it that could disagree
@@ -637,7 +655,14 @@ export function pollVR(ship) {
     // the sticks fly her whenever that hand is not holding something
     if (!(hold && on)) {
       if (left) pad.throttle = -dz(sy);
-      else if (src.handedness === 'right') { pad.rudder = -dz(sx); pad.pitch = -dz(sy); }
+      else if (src.handedness === 'right') {
+        pad.rudder = -dz(sx);
+        // THE STICK TAKES THE WEIGHTS BACK. The lever holds its setting, which
+        // is right — but it held it against everything, so once a hand had
+        // moved it there was no way to move it again except by grabbing it.
+        if (dz(sy) !== 0) trimHeldValue = -dz(sy);
+        pad.pitch = -dz(sy);
+      }
     }
     if (bA) sawCam = true;
     if (bB) sawMenu = true;

@@ -441,8 +441,11 @@ export class Airship {
     if (prop !== 'none') {
       // waist height, and no higher: a bar across the eye-line would hide the
       // horizon, and the horizon is how an air-ship is flown
+      // INSIDE THE BASKET. The basket runs bx +-0.6, and this stood at +0.74 —
+      // through the front wall, and 0.81 m from the eye, which is past the end
+      // of an arm: "i cant grab the tiller still".
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.26, 6), dark);
-      post.position.set(bx + 0.74, -drop + 0.13, 0);
+      post.position.set(bx + 0.46, -drop + 0.13, 0);
       this.pitchGroup.add(post);
 
       const HALF = 0.27;                     // to each hand from the pivot
@@ -455,7 +458,7 @@ export class Airship {
         grip.position.z = sz * (HALF - 0.05);
         this.wheel.add(grip);
       }
-      this.wheel.position.set(bx + 0.74, -drop + 0.26, 0);
+      this.wheel.position.set(bx + 0.46, -drop + 0.26, 0);
       this.pitchGroup.add(this.wheel);
       this.tillerHalf = HALF;
       // BOTH GRIPS ARE FITTINGS, so you steer by taking hold of the tiller and
@@ -544,7 +547,10 @@ export class Airship {
     this.carbLever.add(knob);
     this.sparkLever = this.carbLever.clone();
     if (prop !== 'none') {
-      const quadrant = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.2), wood);
+      // wide enough to carry BOTH levers: at 0.2 deep it spanned z 0.27..0.47
+      // and the levers stood at 0.26 and 0.48, one off each end of their own
+      // quadrant
+      const quadrant = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.34), wood);
       quadrant.position.set(bx + 0.48, -drop + 0.18, 0.37);
       this.pitchGroup.add(quadrant);
       // the engraved plate naming the two levers, facing the operator
@@ -717,7 +723,11 @@ export class Airship {
       // BEHIND. Set to port at z -0.30: the barometer is at -0.20 and the
       // compass at +0.20, and the slate was landing between them.
       const slate = new THREE.Group();
-      slate.position.set(bx + 0.40, -drop + 0.30, -0.30);
+      // LOW AND CENTRED, its top edge on the basket's rim, so it is there when
+      // you look down and nowhere when you look out. The rim is at -drop+0.05;
+      // the panel is 0.19 tall tilted 0.55 rad, so its top sits 0.081 above its
+      // centre. Same angle as before, just moved.
+      slate.position.set(bx + 0.30, -drop - 0.03, 0);
       slate.rotation.y = -Math.PI / 2;
       this.pitchGroup.add(slate);
       const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.19),
