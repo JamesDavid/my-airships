@@ -384,14 +384,21 @@ export function cullForVR(from, scene) {
 // — the monuments, the sky, the clouds — and every ring the game hangs in the
 // air comes through the haze at full strength, and the ordinary streets and
 // housetops are what fades.
+// COAL SMOKE, NOT SAND. The haze first took its colour from the world's own
+// distance fog, which in Paris is a warm 0xeccfa8 — and a sand-coloured haze
+// over a city reads as a desert: "instead of sand color can we have it be like
+// a gray city fog?" It is also the wrong history. Paris in 1901 burned coal for
+// everything, and what stood over it was grey. So the haze has its own colour,
+// a cool smoke grey with the faintest warmth left in it so it does not go blue
+// against a low sun.
+const SMOKE = 0xb2b3ae;
 let fogWas = null, unfogged = null;
 
 export function cityFog(on, scene) {
   if (!scene) return;
   if (on) {
     if (fogWas === null) fogWas = scene.fog || false;
-    const tint = (fogWas && fogWas.color) ? fogWas.color.clone() : new THREE.Color(0xeccfa8);
-    scene.fog = new THREE.Fog(tint, CITY_NEAR * 0.42, CITY_NEAR);
+    scene.fog = new THREE.Fog(new THREE.Color(SMOKE), CITY_NEAR * 0.42, CITY_NEAR);
     if (!unfogged) {
       unfogged = [];
       scene.traverse((o) => {

@@ -166,6 +166,49 @@ if (renderer.shadowMap.enabled) {
     if (!ok) fails++;
     console.log('   %s  the rudder cords pass %s m outside the pilot (worst: %s)',
       ok ? 'ok  ' : 'FAIL', worstD.toFixed(3), worstShip);
+
+    // NOR DOES THE SHIP'S OWN FRAME STAND IN HIM.
+    //
+    // The No. 9's keel had its third member down the centreline at -drop+0.55,
+    // which on a truss keel is a ridge well over your head and on a runabout
+    // with a 4.2 m drop is 1.55 m above the deck: a man's throat. "The runabout
+    // no9 the top bar of the keel goes through my body in vr." The same test as
+    // the cords, run over every keel member and every suspension wire in the
+    // fleet -- a rail is a horizontal cylinder along x, so it fouls him if its
+    // own (y, z) falls inside him.
+    let frameShip = null, frameD = Infinity, frameWhat = '';
+    for (const id of Object.keys(ALL)) {
+      const s4 = makeShip(id);
+      if (!s4.deckPoint) continue;
+      const d0 = s4.deckPoint.position;
+      const note = (d, what) => {
+        if (d < frameD) { frameD = d; frameShip = id; frameWhat = what; }
+      };
+      for (const r of (s4.keelRails || [])) {
+        // the rail runs the length of the ship, so it passes over him whatever
+        // its length: what matters is how far its axis is from his own
+        if (r.y < d0.y || r.y > d0.y + HEAD) continue;
+        note(Math.abs(r.z - d0.z) - SHOULDER - r.r, 'a keel rail');
+      }
+      const wp = s4.wires && s4.wires.geometry && s4.wires.geometry.attributes.position;
+      if (wp && wp.array) {
+        const a2 = wp.array;
+        for (let k = 0; k + 5 < a2.length; k += 6) {
+          for (let t = 0; t <= 1; t += 0.01) {
+            const y = a2[k + 1] + (a2[k + 4] - a2[k + 1]) * t;
+            if (y < d0.y || y > d0.y + HEAD) continue;
+            const x = a2[k] + (a2[k + 3] - a2[k]) * t;
+            const z = a2[k + 2] + (a2[k + 5] - a2[k + 2]) * t;
+            note(Math.hypot(x - d0.x, z - d0.z) - SHOULDER, 'a suspension wire');
+          }
+        }
+      }
+    }
+    const ok2 = frameD > 0.05;
+    if (!ok2) fails++;
+    console.log('   %s  the frame clears the pilot by %s m (worst: %s, %s)',
+      ok2 ? 'ok  ' : 'FAIL', Number.isFinite(frameD) ? frameD.toFixed(3) : 'n/a',
+      frameShip || '-', frameWhat || 'nothing near him');
   }
 
   // THE HAZE TAKES THE CITY AND LEAVES THE LANDMARKS.

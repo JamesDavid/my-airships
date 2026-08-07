@@ -378,29 +378,63 @@ export class Airship {
     const dark = new THREE.MeshLambertMaterial({ color: 0x2e241a });
     const drop = K.drop;
     this.keelY = -drop;
+    // every keel member, published, so a check can ask whether one of them is
+    // standing in the pilot — which is how the No. 9's ridge got through review
+    this.keelRails = [];
     const addRail = (y, dz, len, r) => {
       const rail = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 5), wood);
       rail.rotation.z = Math.PI / 2;
       rail.position.set(0, y, dz);
       this.pitchGroup.add(rail);
+      this.keelRails.push({ y, z: dz, len, r });
+      return rail;
     };
     if (K.type === 'truss' || K.type === 'saddle' || K.type === 'double') {
       // triangular truss (Nos. 4-7, 10) — thin open girder of pine and piano wire
       const r = K.type === 'saddle' ? 0.06 : 0.09;
+      // THE APEX HAS TO CLEAR A STANDING MAN, and on the No. 4 it did not.
+      //
+      // 1.1 m over the lower rails is a ridge two metres above the floor of a
+      // basket, which is well over your head. But the No. 4 has no basket: she
+      // is a bicycle saddle in an open web, and her deck point is set a crotch
+      // BELOW the saddle, so the same 1.1 m is only 1.35 m above where the
+      // pilot's boots are — through the chest of anyone standing up in their
+      // own room. It is the No. 9's fault over again, found by the check
+      // written for it. A seated rider on a bicycle frame would have ducked
+      // under it; a pilot in a headset is standing.
+      const APEX = K.type === 'saddle' ? 1.75 : 1.1;
       addRail(-drop, -0.7, K.length, r);
       addRail(-drop, 0.7, K.length, r);
-      addRail(-drop + 1.1, 0, K.length, r);
+      addRail(-drop + APEX, 0, K.length, r);
       // the apex: the single top member, and where the balloon's whole lift
       // comes into the keel. The suspension is landed on it below.
-      this.keelApexY = -drop + 1.1;
+      this.keelApexY = -drop + APEX;
     } else if (K.type === 'minimal') {
       // the No. 9's little frame — "the keel barely longer than the basket" —
       // a light pair of rails with cross-pieces, carrying basket and motor.
       // Without them her gear hung in mid-air under the egg.
+      //
+      // THE THIRD MEMBER GOES UNDERNEATH, NOT OVERHEAD.
+      //
+      // It used to run down the centreline at -drop + 0.55. On a truss keel
+      // that is a ridge well over the pilot's head; on a runabout with a 4.2 m
+      // drop it is 1.55 m above the deck, which is the height of a standing
+      // man's throat — "the runabout no9 the top bar of the keel goes through
+      // my body in vr". There is no room for a ridge over the basket of a ship
+      // this small, and she never had one: the No. 9 is the lightest thing he
+      // built.
+      //
+      // So it goes under the floor as a keelson, where it does the same work —
+      // tying the two longerons together down their length — and the balloon's
+      // lift comes into the SIDE rails instead: "should we have that bar on the
+      // bottom and then connect the gas bags to the side bars?" Which is what a
+      // two-longeron keel wants anyway, since a V taken to the rail on its own
+      // side never crosses the middle of the ship where the pilot is standing.
       addRail(-drop, -0.5, K.length, 0.05);
       addRail(-drop, 0.5, K.length, 0.05);
-      addRail(-drop + 0.55, 0, K.length * 0.8, 0.04);
-      this.keelApexY = -drop + 0.55;
+      addRail(-drop - 1.15, 0, K.length * 0.8, 0.04);   // the keelson, under the basket
+      this.keelApexY = -drop;            // the longerons themselves
+      this.keelLandZ = 0.5;              // ...each wire on to its own side
       for (const t of [-0.42, 0, 0.42]) {
         const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.05, 4), wood);
         cross.rotation.x = Math.PI / 2;
@@ -1096,8 +1130,11 @@ export class Airship {
         // actually FOR: "V wires should be attached to the top wood bar".
         // Ch. VI has the cords taken off the hems and into the keel, and the
         // apex is where a triangular girder takes them.
-        wirePts.push(ex, h.y, sz * h.z, fx, this.keelApexY !== undefined
-          ? this.keelApexY : -drop, 0);
+        // ...and on to the member that is actually there: the apex on a truss
+        // keel, or the longeron on this wire's OWN side where there is no apex
+        wirePts.push(ex, h.y, sz * h.z,
+          fx, this.keelApexY !== undefined ? this.keelApexY : -drop,
+          sz * (this.keelLandZ || 0));
       }
     }
     const wireGeo = new THREE.BufferGeometry();
