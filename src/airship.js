@@ -813,15 +813,18 @@ export class Airship {
       slate.position.set(bx + 0.70, -drop + 0.44, 0);
       slate.rotation.y = -Math.PI / 2;
       this.pitchGroup.add(slate);
-      const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.19),
-        new THREE.MeshBasicMaterial({ map: this.panelTex, transparent: true }));
+      // smaller and see-through: it is a reading, not a wall. At 0.30 x 0.19
+      // and opaque it was a slab across the front of the basket.
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.21, 0.133),
+        new THREE.MeshBasicMaterial({ map: this.panelTex, transparent: true,
+          opacity: 0.72, depthWrite: false }));
       pm.rotation.x = -0.55;                 // tipped up toward the eye
       pm.position.z = 0.004;                 // ...and proud of its own frame
       slate.add(pm);
       this.panelMesh = slate;
       slate.visible = false;                 // only in a headset
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.22, 0.012),
-        new THREE.MeshLambertMaterial({ color: 0x4a3a28 }));
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.153, 0.008),
+        new THREE.MeshLambertMaterial({ color: 0x4a3a28, transparent: true, opacity: 0.6 }));
       frame.rotation.x = -0.55;
       frame.position.z = -0.008;             // BEHIND the canvas, not in front
       slate.add(frame);
@@ -1591,7 +1594,11 @@ export class Airship {
     this.wheelA = (this.wheelA || 0) + ((-this.rudderInput * 0.62) - (this.wheelA || 0)) * Math.min(1, 6 * dt);
     this.wheel.rotation.y = this.wheelA;
     this.updateTiller();
-    this.carbLever.rotation.z = -0.55 + this.throttle * 0.9; // carburating lever = throttle
+    // THE LEVER FOLLOWS THE HAND. rotation.z positive tips the knob AFT, so
+    // written as -0.55 + throttle*0.9 the lever walked BACKWARD as the throttle
+    // opened — and a hand pushing it forward watched it go the other way:
+    // "they all move opposite of my hand movement". Forward is open.
+    this.carbLever.rotation.z = 0.55 - this.throttle * 0.9;
     // POIDS reads the ship's own trim, so it moves whether the setting came
     // from the keyboard, the touch slider or a hand in a headset — one state,
     // one lever, and no way for the indicator to disagree with the ship
@@ -1606,7 +1613,7 @@ export class Airship {
     }
     if (this.trimLever) {
       const pm = this.spec.physics.pitchMax || 1;
-      this.trimLever.rotation.z = -Math.max(-1, Math.min(1, this.pitch / pm)) * 0.55;
+      this.trimLever.rotation.z = Math.max(-1, Math.min(1, this.pitch / pm)) * 0.55;
     }
     this.sparkT = Math.max(0, (this.sparkT || 0) - dt);
     this.sparkLever.rotation.z = 0.35 - (this.sparkT > 0 ? Math.sin(this.sparkT * 18) * 0.4 : 0);

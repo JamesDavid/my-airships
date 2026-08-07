@@ -77,7 +77,7 @@ vr.initVR(renderer, camera, {
   onBallast: () => { if (ship && !ship.wrecked) ship.dropBallast(); },
   onCamera: () => cycleCamera(),
   onMenu: () => toggleMenu(),
-  onBug: () => (bugBookOpen() ? closeBugBook() : openBugBook()),
+  onBug: () => fileFaultFromVR(),
   onGo: () => tryStartRace(),
   onStart: () => {
     stillWater(true);
@@ -2163,6 +2163,29 @@ function wireBugBook() {
       note.textContent = net.phrase(r.reason);
     }
   };
+}
+
+// FILING A FAULT FROM INSIDE THE HEADSET.
+//
+// The fault book is a DOM panel with a textarea, which does not exist in WebXR
+// — and opening it took a picture, which means reading back the canvas while
+// an immersive session owns it. On a Quest that ends the browser: "bug report
+// causes oculus browser to crash".
+//
+// So from a headset the FAUTE button files straight away: no panel, no
+// textarea, and NO PICTURE. The state that rides with every report — ship,
+// place, position, gas, throttle — is the useful half of a fault report
+// anyway, and it is exactly the half a pilot in a headset cannot type.
+async function fileFaultFromVR() {
+  addMsg('bug', 'Filing a fault from the basket…', 0);
+  const r = await net.submitBug({
+    body: 'Looks wrong here. (Filed from the headset — no picture, and no '
+      + 'words: see the state for where and what.)',
+    state: faultState(), shot: null,
+  });
+  addMsg('bug', r.ok ? 'Your report is filed. Thank you.'
+    : 'The telegraph office would not take it: ' + net.phrase(r.reason), 0);
+  if (vr.rumble) vr.rumble(r.ok ? 0.6 : 0.2, 70);
 }
 
 // ---------------------------------------------------------------- world records

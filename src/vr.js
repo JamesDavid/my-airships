@@ -650,7 +650,11 @@ export function pollVR(ship) {
       //
       // The controller is a child of the rig, so its own position is already
       // relative to the basket. Nothing to project, and nothing to chase.
-      const across = ctrlLocal(ctrl).x;
+      // NEGATED so the ball follows the hand. The bar's swing is driven off
+      // the rudder (wheelA = -rudderInput), and that relationship is deliberate
+      // — the bar must not fight the rudder — so the correction goes here
+      // rather than on the mesh: "they all move opposite of my hand movement".
+      const across = -ctrlLocal(ctrl).x;
       if (helmHand !== i) { helmHand = i; helmFrom = across; helmBase = helmValue; }
       helmValue = Math.max(-1, Math.min(1, helmBase + (across - helmFrom) / 0.26));
       anyHeld = true;
