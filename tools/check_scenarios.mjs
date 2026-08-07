@@ -174,6 +174,47 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE BRIDGE REACHES THE OTHER BANK');
+  console.log('   The Pont de Saint-Cloud was written as a 96 m deck with its');
+  console.log('   abutments at +-41, which crosses a river 82 m wide. The Seine here');
+  console.log('   is 144. So it stopped 24 m short of the water on both sides and its');
+  console.log('   abutments stood out in the open stream: "the closer one looks like');
+  console.log('   one ramp was in the middle of the Seine."');
+  console.log('');
+  {
+    const { PONT } = await import('../src/paris_stcloud.js');
+    const { RIVER_HALF } = await import('../src/paris_terrain.js');
+    // walk out along the bridge's own axis and ask the world where the water is
+    const wb = scene.children.find((o) => o && o.position
+      && Math.abs(o.position.x - PONT.x) < 1 && Math.abs(o.position.z - PONT.z) < 1
+      && Array.isArray(o.children) && o.children.length > 8);
+    if (!wb) { console.log('   FAIL cannot find the bridge to measure'); fails++; }
+    else {
+      // the longest thing in it is the deck; the widest-spread children are the
+      // abutments and ramps
+      let deck = 0, outermost = 0;
+      for (const c of wb.children) {
+        const p = c && c.geometry && c.geometry.parameters;
+        if (p && p.width > deck) deck = p.width;
+        if (c && c.position) outermost = Math.max(outermost, Math.abs(c.position.x));
+      }
+      const spansWater = deck / 2 >= RIVER_HALF;
+      // and nothing solid may stand between the banks except the piers, which
+      // are meant to: the ABUTMENTS must be outside the waterline
+      const abut = wb.children.filter((c) => {
+        const p = c && c.geometry && c.geometry.parameters;
+        return p && p.width === 14 && p.height === 6.5;
+      });
+      const abutOk = abut.length > 0 && abut.every((c) => Math.abs(c.position.x) - 7 >= RIVER_HALF - 0.5);
+      const ok = spansWater && abutOk;
+      if (!ok) fails++;
+      console.log('   %s  deck %s m across a river %s m wide; abutments at +-%s m, waterline at %s m',
+        ok ? 'ok  ' : 'FAIL', deck.toFixed(0), (RIVER_HALF * 2).toFixed(0),
+        abut.length ? Math.abs(abut[0].position.x).toFixed(0) : '?', RIVER_HALF.toFixed(0));
+    }
+  }
+
+  console.log('');
   console.log('EVERY RING HAS A HOLE IN IT');
   console.log('   "Every gate has air in it" measured the ground under the gate and');
   console.log('   nothing else, so it never noticed that four of the Tour of Paris\'s');

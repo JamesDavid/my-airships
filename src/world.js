@@ -595,34 +595,55 @@ export function buildWorld(scene) {
   // downstream of it (the two stood a few hundred metres apart in life, and
   // sat one on top of the other here)
   const bridgeMat = new THREE.MeshLambertMaterial({ color: 0xa8a094 });
+  // A BRIDGE HAS TO REACH THE OTHER BANK.
+  //
+  // This one was written as a 96 m deck with its abutments at +-41, which is a
+  // handsome crossing of a river 82 m wide. The Seine here is 144: RIVER_HALF
+  // is 72 to each side. So the deck stopped 24 m short of the water's edge on
+  // both banks and the abutments — fourteen metres of solid masonry apiece —
+  // stood out in the open stream with the river running past them: "the closer
+  // one looks like one ramp was in the middle of the Seine."
+  //
+  // It is measured off the river now. The deck spans the water with eight
+  // metres to spare at each end, the abutments sit on the bank with their inner
+  // faces at the waterline, and the ramps carry the road down from there. Every
+  // other part follows the span, so the piers stay in the stream and the arches
+  // stay between the piers whatever the river turns out to be.
   const wb = new THREE.Group();
-  const roadway = new THREE.Mesh(new THREE.BoxGeometry(96, 2.2, 13), bridgeMat);
+  const HALF = RIVER_HALF + 8;                     // the deck reaches this far
+  const SPAN = HALF * 2;
+  const roadway = new THREE.Mesh(new THREE.BoxGeometry(SPAN, 2.2, 13), bridgeMat);
   roadway.position.y = 6.5;
   wb.add(roadway);
-  for (const px of [-30, 0, 30]) {                 // piers standing in the stream
+  const PIERS = 5;                                 // in the stream, evenly spaced
+  for (let i = 0; i < PIERS; i++) {
+    const px = -HALF * 0.72 + (i / (PIERS - 1)) * HALF * 1.44;
     const pier = new THREE.Mesh(new THREE.BoxGeometry(7, 6.5, 11), bridgeMat);
     pier.position.set(px, 3.25, 0);
     wb.add(pier);
   }
-  for (const px of [-15, 15]) {                    // and the vaults between them
+  for (let i = 0; i < PIERS - 1; i++) {            // and the vaults between them
+    const gap = (HALF * 1.44) / (PIERS - 1);
+    const px = -HALF * 0.72 + (i + 0.5) * gap;
     const arch = new THREE.Mesh(
-      new THREE.CylinderGeometry(8, 8, 12, 14, 1, false, 0, Math.PI), bridgeMat);
+      new THREE.CylinderGeometry(gap * 0.5, gap * 0.5, 12, 14, 1, false, 0, Math.PI), bridgeMat);
     arch.rotation.x = -Math.PI / 2;                // axis across the roadway, crown up
     arch.position.set(px, 5.4, 0);
     arch.scale.set(0.95, 1, 0.52);
     wb.add(arch);
   }
   for (const sz of [-1, 1]) {                      // parapets down both sides
-    const par = new THREE.Mesh(new THREE.BoxGeometry(96, 1.4, 1.1), bridgeMat);
+    const par = new THREE.Mesh(new THREE.BoxGeometry(SPAN, 1.4, 1.1), bridgeMat);
     par.position.set(0, 8.3, sz * 6);
     wb.add(par);
   }
-  // abutments at the ends, and ramps carrying the roadway down to the bank —
-  // without them the deck simply stopped five metres above the grass
-  const RAMP = 34, DECKY = 6.5;
+  // abutments ON THE BANK, and ramps carrying the roadway down from them —
+  // without those the deck simply stopped five metres above the grass
+  const RAMP = 34, DECKY = 6.5, ABUT = 14;
   for (const sx of [-1, 1]) {
-    const abut = new THREE.Mesh(new THREE.BoxGeometry(14, DECKY, 13), bridgeMat);
-    abut.position.set(sx * 41, DECKY / 2, 0);
+    const abut = new THREE.Mesh(new THREE.BoxGeometry(ABUT, DECKY, 13), bridgeMat);
+    // its INNER face on the waterline: the masonry stands on dry ground
+    abut.position.set(sx * (RIVER_HALF + ABUT / 2), DECKY / 2, 0);
     abut.castShadow = abut.receiveShadow = true;
     wb.add(abut);
     // The ramp must fall AWAY from the bridge. Rotating by +θ on the +x side
@@ -630,7 +651,7 @@ export function buildWorld(scene) {
     // into the air at both ends of the crossing.
     const slope = Math.atan2(DECKY - 0.6, RAMP);
     const midY = (DECKY + 0.6) / 2;
-    const midX = sx * (48 + RAMP / 2);
+    const midX = sx * (RIVER_HALF + ABUT + RAMP / 2);   // beyond the abutment
     const ramp = new THREE.Mesh(new THREE.BoxGeometry(RAMP, 2.4, 13),
       new THREE.MeshLambertMaterial({ color: 0x9a9285 }));
     ramp.position.set(midX, midY - 1.2, 0);
