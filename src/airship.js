@@ -466,6 +466,20 @@ export class Airship {
     const wicker = new THREE.MeshLambertMaterial({ color: 0x8a734d });
     const brass = new THREE.MeshPhongMaterial({ color: 0xa8853b, shininess: 90, specular: 0xffe9a0 });
     const bx = K.type === 'minimal' || K.type === 'basket-long' ? 0 : -1.2;
+    // THE FIRST THREE SHIPS HAVE NO KEEL AT ALL, and so nothing for the
+    // suspension to land on: brazil, the No. 1 and the No. 2 hang their basket
+    // straight off the balloon, and the No. 3 off a bamboo pole. With no apex
+    // set, every wire ran to the ship's own centreline at rim height — which is
+    // a metre above the deck and dead between the pilot's shoulders. Measured:
+    // 0.30 m INSIDE him on the No. 1.
+    //
+    // Nothing found it for months because the harness threw hand-built geometry
+    // away, and the wires are hand-built. They go to the rim's outer edge now,
+    // one to each side, which is where a basket's cords are made fast anyway.
+    if (this.keelApexY === undefined) {
+      this.keelApexY = -drop;
+      this.keelLandZ = 0.62 * (K.type === 'basket-long' ? 1.15 : 1);
+    }
     if (K.type === 'saddle') {
       // No. 4: no basket at all — a bicycle saddle amid the spider web
       const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.35), dark);

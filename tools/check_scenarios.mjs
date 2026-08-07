@@ -174,6 +174,49 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('EVERY GROUND TRIANGLE FACES THE SKY');
+  console.log('   The black triangles. Told four times now — #51 on the river bank,');
+  console.log('   #55 after I double-sided the wrong ribbon, and #57, #87 and #89 out');
+  console.log('   in the Bois and over the eastern reach. Nine places in world.js');
+  console.log('   decide by hand which order to push three indices in, each a coin');
+  console.log('   flip on which way the line happens to run, and a surface wound the');
+  console.log('   wrong way has its normal in the earth: back-face culled if it is');
+  console.log('   single-sided, BLACK if it is not, because it fails every lighting');
+  console.log('   and shadow test there is.');
+  console.log('');
+  {
+    let meshes = 0, tris = 0, down = 0, worst = null;
+    for (const o of scene.children) {
+      if (!o || o.isInstancedMesh) continue;
+      const g = o.geometry;
+      const p = g && g.attributes && g.attributes.position;
+      if (!p || !p.count || !g.index) continue;
+      const idx = g.index.array || g.index;
+      if (!idx || !idx.length) continue;
+      let mTris = 0, mDown = 0;
+      for (let i = 0; i + 2 < idx.length; i += 3) {
+        const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+        const ux = p.getX(b) - p.getX(a), uz = p.getZ(b) - p.getZ(a);
+        const vx = p.getX(c) - p.getX(a), vz = p.getZ(c) - p.getZ(a);
+        const ny = uz * vx - ux * vz;
+        if (Math.abs(ny) < 1e-6) continue;          // a wall, not a floor
+        mTris++;
+        if (ny < 0) {
+          mDown++;
+          if (!worst || mDown === 1) worst = { x: Math.round(p.getX(a)), z: Math.round(p.getZ(a)) };
+        }
+      }
+      if (!mTris) continue;
+      meshes++; tris += mTris; down += mDown;
+    }
+    const ok = down === 0 && tris > 10000;
+    if (!ok) fails++;
+    console.log('   %s  %d of %d ground triangles across %d meshes face DOWN%s',
+      ok ? 'ok  ' : 'FAIL', down, tris, meshes,
+      down && worst ? ` (first at ${worst.x}, ${worst.z})` : '');
+  }
+
+  console.log('');
   console.log('NO GROUND STANDS UP THROUGH THE SEINE');
   console.log('   The river is one flat sheet 140 m wide and the terrain carves a bed');
   console.log('   for it — but on a 50 m grid, with a distance test, the ground');
@@ -185,12 +228,12 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('');
   {
     const { SEINE_XZ, riverNear, RIVER_HALF } = await import('../src/paris_terrain.js');
-    // the terrain is the one huge vertex-lifted plane in the scene
-    let terr = null, best = 0;
-    for (const o of scene.children) {
-      const p = o && o.geometry && o.geometry.attributes && o.geometry.attributes.position;
-      if (p && p.count > best) { best = p.count; terr = o; }
-    }
+    // BY NAME. This used to take whichever mesh had the most vertices, which
+    // was the terrain right up until the harness learned to read hand-built
+    // geometry — and then it was a bank ribbon, which lies ON the bank ABOVE
+    // the water, so the check reported 692 vertices standing in the river and
+    // was measuring the wrong object entirely.
+    const terr = scene.children.find((o) => o && o.name === 'paris-terrain');
     if (!terr || !Number.isFinite(world.riverY)) {
       console.log('   ---  the world does not publish its river level; skipped');
     } else {

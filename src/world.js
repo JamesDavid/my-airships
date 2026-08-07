@@ -438,6 +438,7 @@ export function buildWorld(scene) {
     tex.repeat.set(gx * st / 256, gz * st / 256);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     const terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
+    terrain.name = 'paris-terrain';        // asked for by name, not by being biggest
     terrain.position.set(cx, 0, cz);
     terrain.receiveShadow = true;
     terrain.userData.noLift = true;
@@ -483,6 +484,7 @@ export function buildWorld(scene) {
       }
       const ag = new THREE.BufferGeometry();
       ag.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      faceUp(pos, idx);
       ag.setIndex(idx);
       ag.computeVertexNormals();
       const apron = new THREE.Mesh(ag, apronMat);
@@ -525,6 +527,7 @@ export function buildWorld(scene) {
     }
     const wg = new THREE.BufferGeometry();
     wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    faceUp(pos, idx);
     wg.setIndex(idx);
     // The OUTER FACE AND PARAPET IN MASONRY, the rest in earth. Built all in
     // one grass-green it read as a berm — "you said paris was a walled city yet
@@ -781,6 +784,7 @@ export function buildWorld(scene) {
     const g2 = new THREE.BufferGeometry();
     g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g2.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    faceUp(pos, idx);
     g2.setIndex(idx);
     g2.computeVertexNormals();
     // the street network is a decal like any other — laid 0.16 m over ground it
@@ -2424,6 +2428,47 @@ function seinePoints() {
 }
 
 /**
+ * TURN EVERY TRIANGLE THE RIGHT WAY UP.
+ *
+ * Nine separate places in this file decide, by hand, which order to push three
+ * indices in — and every one of them is a coin flip that depends on which way
+ * the polyline happens to be running, or which bank it is, or which side of a
+ * square. Getting one wrong makes a surface whose geometry faces the ground:
+ * back-face culled if it is single-sided, and BLACK if it is not, because
+ * computeVertexNormals reads the winding and a normal pointing into the earth
+ * fails every lighting and shadow test there is.
+ *
+ * That is the "black triangles" this game has now been told about four times —
+ * #51 on the river bank, #55 after I double-sided the wrong ribbon, and #57,
+ * #87 and #89 out in the Bois and over the eastern reach. Each time it was
+ * fixed by working out the right order for that one case by hand, which is how
+ * you get four reports of one bug.
+ *
+ * Measured, with the harness finally able to read a hand-built geometry: of the
+ * ten indexed ground meshes in Paris, six were face-down — the two bank ribbons
+ * at 392 triangles each, the aerodrome's apron, and 134,544 of the street
+ * network's 159,256.
+ *
+ * So no one decides it by hand any more. Every ground triangle is checked
+ * against the sky and turned over if it is facing away from it, whatever order
+ * it was pushed in. A flat quad cannot be wrong twice.
+ */
+function faceUp(pos, idx) {
+  let flipped = 0;
+  for (let i = 0; i + 2 < idx.length; i += 3) {
+    const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+    const ux = pos[b] - pos[a], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vz = pos[c + 2] - pos[a + 2];
+    // the +Y component of (b-a) x (c-a)
+    if (uz * vx - ux * vz < 0) {
+      const t = idx[i]; idx[i] = idx[i + 2]; idx[i + 2] = t;
+      flipped++;
+    }
+  }
+  return flipped;
+}
+
+/**
  * One bank of a river: a band from `inner` to `outer` metres out on `side`,
  * laid on the ground. Deliberately NOT a full-width ribbon — see the Seine's
  * quays, where a full-width one paved the river.
@@ -2459,6 +2504,7 @@ function makeBankRibbon(pts, inner, outer, side, color, lift) {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  faceUp(pos, idx);
   geo.setIndex(idx);
   geo.computeVertexNormals();
   const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
@@ -2494,6 +2540,7 @@ function makeRibbon(pts, width, color, y, dull) {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  faceUp(pos, idx);
   geo.setIndex(idx);
   geo.computeVertexNormals();
   // DOUBLE-SIDED, because this ribbon is wound face-DOWN — all hundred and
@@ -2537,6 +2584,7 @@ function ribbonGeoXY(pts, width) {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  faceUp(pos, idx);
   geo.setIndex(idx);
   geo.computeVertexNormals();
   return geo;
