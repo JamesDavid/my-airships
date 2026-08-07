@@ -103,7 +103,9 @@ export const TRACKS = [
         [P('etoile'), 62, 36], [M('madeleine'), 52, 34, 98, -69],
         [P('opera'), 58, 34], [P('montmartre'), 46, 40],
         [M('republique'), 46, 34], [M('bastille'), 58, 34, 48, -13],
-        [P('notredame'), 52, 36], [P('pantheon'), 58, 36],
+        // ...and off the cathedral herself, now that she is 69 m of west tower
+        // and solid with it rather than two boxes and a cone
+        [P('notredame'), 52, 36, -55, 25], [P('pantheon'), 58, 36],
         [M('gareorsay'), 46, 34, -122, -146], [P('invalides'), 62, 36],
       ];
       return STOPS.filter(([p]) => p).map(([p, h, r, dx = 0, dz = 0]) => {

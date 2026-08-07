@@ -1115,7 +1115,8 @@ export function buildWorld(scene) {
         clue: 'A gilded dome over the soldiers’ hospital.' },
       { id: 'montmartre', name: 'Montmartre', ...LM('montmartre'), y: 140, r: 60,
         clue: 'The white church on the highest hill in the city.' },
-      { id: 'notredame', name: 'Notre-Dame', ...LM('notredame'), y: 62, r: 45,
+      // over the west towers, which are 69 m now that she is built properly
+      { id: 'notredame', name: 'Notre-Dame', ...LM('notredame'), y: 90, r: 45,
         clue: 'Two square towers and a spire, on the island in the river.' },
       { id: 'pantheon', name: 'the Panthéon', ...LM('pantheon'), y: 62, r: 45,
         clue: 'A dome on the hill of the left bank.' },
@@ -1764,16 +1765,102 @@ function addLandmarks(scene) {
   scene.add(gp);
 
   // Notre-Dame, far down the river: twin towers and the nave
+  // NOTRE-DAME, at her real size and with the things you can only see from the
+  // air. She was two boxes, a smaller box and a 22 m cone — "more detail for
+  // note dame" — which from a basket over the Île de la Cité is a warehouse
+  // with a pencil on it.
+  //
+  // The measurements are hers: 128 m long, 48 m across the nave and aisles, 69
+  // to the top of the west towers, 43 to the ridge, 12 m rose window. The
+  // flèche is Viollet-le-Duc's, rebuilt in 1859 and 96 m to the tip, so it was
+  // standing over the crossing in 1901 exactly as drawn here. West front to the
+  // west, apse to the east, which is +x.
   const nd = new THREE.Group();
-  for (const s of [-1, 1]) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(11, 42, 11), cream);
-    t.position.set(0, 21, s * 8); nd.add(t);
+  {
+    const T_H = 69, NAVE_H = 43, EAVE = 33;
+    const NAVE_W = 24, AISLE_W = 48;            // vault span, and the whole width
+    const FRONT = 8;                            // the west front's own thickness
+    const NAVE_L = 74, CROSS_X = FRONT + NAVE_L;
+    // ---- the west front: two towers and the wall between them
+    for (const s of [-1, 1]) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(14, T_H, 14), cream);
+      t.position.set(FRONT / 2, T_H / 2, s * 14.5); nd.add(t);
+      // the open belfry stage, which is what makes them towers and not chimneys
+      const bel = new THREE.Mesh(new THREE.BoxGeometry(15, 3, 15), slate);
+      bel.position.set(FRONT / 2, T_H - 1.5, s * 14.5); nd.add(bel);
+    }
+    const front = new THREE.Mesh(new THREE.BoxGeometry(FRONT, 45, AISLE_W - 10), cream);
+    front.position.set(FRONT / 2, 22.5, 0); nd.add(front);
+    const rose = new THREE.Mesh(new THREE.CircleGeometry(6, 20),
+      new THREE.MeshLambertMaterial({ color: 0x6b7f8c, emissive: 0x1c2a33 }));
+    rose.rotation.y = -Math.PI / 2;
+    rose.position.set(-0.2, 31, 0); nd.add(rose);
+    // ---- the nave: aisles low on either side, the vault standing above them
+    const aisles = new THREE.Mesh(new THREE.BoxGeometry(NAVE_L, 20, AISLE_W), cream);
+    aisles.position.set(FRONT + NAVE_L / 2, 10, 0); nd.add(aisles);
+    const nave = new THREE.Mesh(new THREE.BoxGeometry(NAVE_L, EAVE, NAVE_W), cream);
+    nave.position.set(FRONT + NAVE_L / 2, EAVE / 2, 0); nd.add(nave);
+    // the lead roof: a three-sided prism laid along her length, ridge up
+    const ridge = (len, x, w, h, y) => {
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.72, w * 0.72, len, 3), slate);
+      r.rotation.z = Math.PI / 2;               // the prism's axis along x
+      r.rotation.x = Math.PI / 2;               // ...and one flat face down
+      r.position.set(x, y + h / 2, 0);
+      r.scale.set(1, 1, h / (w * 0.72));
+      nd.add(r);
+      return r;
+    };
+    ridge(NAVE_L, FRONT + NAVE_L / 2, NAVE_W / 2, NAVE_H - EAVE, EAVE);
+    // ---- the transept, crossing her a little east of the middle
+    const tr = new THREE.Mesh(new THREE.BoxGeometry(22, EAVE, 62), cream);
+    tr.position.set(CROSS_X, EAVE / 2, 0); nd.add(tr);
+    for (const s of [-1, 1]) {                  // its two gables
+      const gab = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 22, 3), slate);
+      gab.rotation.x = Math.PI / 2;
+      gab.position.set(CROSS_X, EAVE + 5, s * 26);
+      gab.scale.set(1, 1, 1.2);
+      nd.add(gab);
+    }
+    // ---- the choir and the apse: the round east end
+    const choir = new THREE.Mesh(new THREE.BoxGeometry(30, EAVE, NAVE_W), cream);
+    choir.position.set(CROSS_X + 26, EAVE / 2, 0); nd.add(choir);
+    const chAisle = new THREE.Mesh(new THREE.BoxGeometry(30, 20, AISLE_W), cream);
+    chAisle.position.set(CROSS_X + 26, 10, 0); nd.add(chAisle);
+    ridge(30, CROSS_X + 26, NAVE_W / 2, NAVE_H - EAVE, EAVE);
+    const apse = new THREE.Mesh(new THREE.CylinderGeometry(AISLE_W / 2, AISLE_W / 2, 20, 14), cream);
+    apse.position.set(CROSS_X + 41, 10, 0); nd.add(apse);
+    const apseRoof = new THREE.Mesh(new THREE.ConeGeometry(AISLE_W / 2, 12, 14), slate);
+    apseRoof.position.set(CROSS_X + 41, 26, 0); nd.add(apseRoof);
+    // ---- THE FLYING BUTTRESSES, which are the whole silhouette from above
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 9; i++) {
+        const bx2 = FRONT + 14 + i * 11;
+        if (bx2 > CROSS_X - 8 && bx2 < CROSS_X + 12) continue;   // not across the transept
+        const fly = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 15), cream);
+        fly.position.set(bx2, 27, s * 15);
+        fly.rotation.x = s * 0.42;              // springing down and out to the pier
+        nd.add(fly);
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(3, 24, 3.4), cream);
+        pier.position.set(bx2, 12, s * 22);
+        nd.add(pier);
+      }
+    }
+    // ---- the flèche over the crossing: 96 m to the tip
+    const spireBase = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 5.4, 8, 8), slate);
+    spireBase.position.set(CROSS_X, NAVE_H + 4, 0); nd.add(spireBase);
+    const fleche = new THREE.Mesh(new THREE.ConeGeometry(4.6, 45, 8), slate);
+    fleche.position.set(CROSS_X, NAVE_H + 8 + 22.5, 0); nd.add(fleche);
   }
-  const ndNave = new THREE.Mesh(new THREE.BoxGeometry(52, 20, 22), cream);
-  ndNave.position.set(30, 10, 0); nd.add(ndNave);
-  const fleche = new THREE.Mesh(new THREE.ConeGeometry(2, 22, 6), slate);
-  fleche.position.set(34, 30, 0); nd.add(fleche);
-  { const _p = placeLegacy('notredame'); nd.position.set(_p.x, 0, _p.z); farSeen(nd); }
+  nd.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  { const _p = placeLegacy('notredame'); nd.position.set(_p.x, 0, _p.z); farSeen(nd);
+    // ...and she is SOLID, which she never was: two boxes and a cone stood on
+    // the Île de la Cité with nothing to hit. Two colliders — the long mass at
+    // roof height, and the west towers, which are 69 m and the tallest thing on
+    // the island. The flèche is left out: it is four metres across and a ship
+    // that threads it has earned it.
+    lmColliders.push({ x: _p.x + 60, z: _p.z, w: 128, d: 48, h: 43, top: 45 });
+    lmColliders.push({ x: _p.x + 4, z: _p.z, w: 20, d: 43, h: 69, top: 69 });
+  }
   scene.add(nd);
 
   // Pantheon dome and the Opera
