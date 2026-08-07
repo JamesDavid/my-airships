@@ -302,7 +302,13 @@ check(chx < _st[0], 'the village church is on the WEST bank, where the town is',
 
 wjs = read('world.js')
 for _needle, _what in (
-        ('skel.position.set(PAD_POS.x', "Deutsch's shed stands beside the aerodrome"),
+        # Off the SHED's own numbers, not the pad's: "scarcely two air-ships'
+        # lengths in front of his doors" is a relationship to the doors, and
+        # writing it to the pad instead put it behind the shed and a dozen
+        # metres off the secretary's office, where the two read as one building
+        # stacked on another.
+        ('skelAt = { x: PAD_POS.x + SHED.dx + SHED.w / 2 + 2 * SHIP_LEN',
+         "Deutsch's shed is placed off the balloon shed's own doors"),
         ('wb.position.set(PONT.x', 'the road bridge is at the real Pont de Saint-Cloud'),
         ('AQ = { x: AVRE.x', "the aqueduct is at the real Passerelle de l'Avre"),
         ('scChurch.position.set(CHURCH.x', 'the church is at Saint-Clodoald'),

@@ -342,6 +342,15 @@ const _sc = placeLegacy('stcloud');
 export const PAD_POS = new THREE.Vector3(_sc.x - 300, 2.0, _sc.z - 800);
 export const START_RING = new THREE.Vector3(PAD_POS.x + 220, 55, PAD_POS.z - 40);
 /**
+ * The Aéro-Club's balloon shed — where it stands, and how big it is.
+ *
+ * In one place because Deutsch's air-ship house is positioned RELATIVE to its
+ * doors: "scarcely two air-ships' lengths in front of" them is the whole point
+ * of that building, and two things written as separate coordinates drift apart
+ * the moment either is touched. Doors face east, on to the field.
+ */
+export const SHED = { dx: -85, dz: 0, w: 52, d: 34, h: 15 };
+/**
  * The turn round the Eiffel Tower, cut to the tower.
  *
  * A 24 m hoop beside a 312 m tower reads as a bracelet on a lamp-post: it tells
@@ -938,12 +947,32 @@ export function buildWorld(scene) {
     const field = new THREE.Group();
     field.position.set(PAD_POS.x, 0, PAD_POS.z);
 
+    // THE WHOLE AERODROME WAS UNDERGROUND.
+    //
+    // liftToTerrain walks the scene's TOP-LEVEL children only, on purpose —
+    // lifting a group and its children both would raise the hangar's flagpole
+    // twice. So the field is raised by the ground under its own origin, the
+    // pad, and every building inside it went up by that same amount whatever
+    // was under it. The coteaux climb westward: the pad stands at 31 m and the
+    // shed 85 m west of it at 42.7, so the shed was set 11.7 m into the hill —
+    // twelve of its eighteen metres buried, which is "there was no hanger in
+    // the headset". The club house was 27 m under, the secretary's office 29,
+    // the gas plant 32 and the hydrogen cylinders 33: every one of them gone
+    // entirely, in the flat game as much as in the headset.
+    //
+    // So each of them is set down on the ground beneath ITSELF, expressed as a
+    // rise above the pad, which is exactly what the group's own lift will
+    // afterwards add back.
+    const gPad = parisGround(PAD_POS.x, PAD_POS.z);
+    const sitOn = (dx, dz) => parisGround(PAD_POS.x + dx, PAD_POS.z + dz) - gPad;
+
     hangar = makeHangar();
-    hangar.position.set(-85, 0, 0);        // the balloon shed, west of the field
+    hangar.position.set(SHED.dx, sitOn(SHED.dx, SHED.dz), SHED.dz);   // the shed, west of the field
     hangar.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     field.add(hangar);
     scene.add(field);
-    buildings.push({ x: PAD_POS.x - 85, z: PAD_POS.z, w: 52, d: 34, h: 15, top: 18 });
+    buildings.push({ x: PAD_POS.x + SHED.dx, z: PAD_POS.z + SHED.dz,
+      w: SHED.w, d: SHED.d, h: SHED.h, top: SHED.h + 3 });
 
     // the club house, the gas plant and the sheds along the north side: the
     // Aéro-Club's park had a good deal more standing in it than one tent
@@ -955,7 +984,7 @@ export function buildWorld(scene) {
       body.position.y = h / 2; b.add(body);
       const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 1.1, 2.4, d * 1.1), clubR);
       roof.position.y = h + 1.2; b.add(roof);
-      b.position.set(dx, 0, dz); b.rotation.y = ry || 0;
+      b.position.set(dx, sitOn(dx, dz), dz); b.rotation.y = ry || 0;
       b.traverse((o) => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
       field.add(b);
       buildings.push({ x: PAD_POS.x + dx, z: PAD_POS.z + dz, w, d, h, top: h + 2.4 });
@@ -969,7 +998,8 @@ export function buildWorld(scene) {
     const cyl = new THREE.MeshLambertMaterial({ color: 0x5c6b52 });
     for (let i = 0; i < 14; i++) {
       const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 5.5, 8), cyl);
-      c2.position.set(-205 + (i % 7) * 4.5, 2.75, 120 + Math.floor(i / 7) * 6);
+      const cx2 = -205 + (i % 7) * 4.5, cz2 = 120 + Math.floor(i / 7) * 6;
+      c2.position.set(cx2, 2.75 + sitOn(cx2, cz2), cz2);
       c2.castShadow = true; field.add(c2);
     }
     // the paling that shut the ground off from the park
@@ -977,7 +1007,8 @@ export function buildWorld(scene) {
     for (let i = 0; i < 44; i++) {
       const a = (i / 44) * Math.PI * 2;
       const pale = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.2, 0.5), paleM);
-      pale.position.set(Math.cos(a) * 235, 1.6, Math.sin(a) * 235);
+      const px2 = Math.cos(a) * 235, pz2 = Math.sin(a) * 235;
+      pale.position.set(px2, 1.6 + sitOn(px2, pz2), pz2);
       field.add(pale);
     }
   }
@@ -1878,11 +1909,22 @@ function addBookPlaces(scene, buildings) {
   // which is a RELATIONSHIP, not a coordinate, so it is written as one. The
   // half-frame coordinate that used to be here left it 3.9 km from the
   // aerodrome, which is the opposite of the hazard he complained of.
-  skel.position.set(PAD_POS.x - 96, 0, PAD_POS.z - 54);
+  //
+  // ...and then the relationship was written to the PAD rather than to the
+  // doors, which put it behind the shed and a dozen metres off the secretary's
+  // office, where the two read as one building stacked on another: "the hangar
+  // under construction was on top of another building". Measured off the shed
+  // now, as the sentence says: two lengths of the No. 6 out from the door face,
+  // and set to one side of the doorway rather than square across it — "deutsch
+  // air ship house should be off to the side and two airship lengths in front
+  // of the other hangar".
+  const SHIP_LEN = 33;                              // the No. 6, over all
+  const skelAt = { x: PAD_POS.x + SHED.dx + SHED.w / 2 + 2 * SHIP_LEN,
+    z: PAD_POS.z + SHED.dz + SHED.d / 2 + 41 };
+  skel.position.set(skelAt.x, 0, skelAt.z);
   skel.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(skel);
-  { const q = { x: PAD_POS.x - 96, z: PAD_POS.z - 54 };
-    buildings.push({ x: q.x, z: q.z, w: SK_L * 2, d: SK_W * 2, h: SK_H, top: SK_H + 4 }); }
+  buildings.push({ x: skelAt.x, z: skelAt.z, w: SK_L, d: SK_W, h: SK_H, top: SK_H + 4 });
 
   // ---- the foundation trenches that "began appearing here and there to the
   // right of my open doors": a metre deep, and his men forbidden to run across

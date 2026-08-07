@@ -174,6 +174,49 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE AERODROME STANDS ON THE GROUND');
+  console.log('   liftToTerrain walks the scene\'s TOP-LEVEL children only, so the');
+  console.log('   Aero-Club\'s field went up by the height under its own origin —');
+  console.log('   the pad — and every building in it went with it whatever was');
+  console.log('   underneath. The coteaux climb westward, so the shed sat 11.7 m');
+  console.log('   into the hill ("there was no hanger in the headset") and the club');
+  console.log('   house, the office, the gas plant and the cylinders were buried');
+  console.log('   whole. Each is measured here against the ground beneath ITSELF.');
+  console.log('');
+  {
+    // MEASURED OFF THE BUILT SCENE, not off the formula that built it. The
+    // first cut of this check recomputed sitOn() and compared it with itself,
+    // which is an identity: it could not fail, and this project has shipped
+    // three of those already. So: find the group the aerodrome was actually
+    // put in, and ask where its children ended up.
+    const { PAD_POS } = await import('../src/world.js');
+    const field = scene.children.find((o) => o && o.position
+      && Math.abs(o.position.x - PAD_POS.x) < 1 && Math.abs(o.position.z - PAD_POS.z) < 1
+      && Array.isArray(o.children) && o.children.length > 10);
+    if (!field) { console.log('   FAIL cannot find the aerodrome group to measure'); fails++; }
+    else {
+      let buried = 0, floating = 0, worst = 0, worstAt = '';
+      for (const c of field.children) {
+        if (!c || !c.position) continue;
+        const wx = field.position.x + c.position.x, wz = field.position.z + c.position.z;
+        const wy = field.position.y + c.position.y;
+        const under = world.groundAt(wx, wz);
+        // the cylinders and the palings are modelled about their middles, so a
+        // metre and a half of slack; anything past three is a fault
+        const off = under - wy;
+        if (Math.abs(off) > Math.abs(worst)) { worst = off; worstAt = `${wx.toFixed(0)}, ${wz.toFixed(0)}`; }
+        if (off > 3) buried++;
+        if (off < -3) floating++;
+      }
+      const ok = buried === 0 && floating === 0;
+      if (!ok) fails++;
+      console.log('   %s  %d of %d buildings buried, %d in the air; worst is %s m at (%s)',
+        ok ? 'ok  ' : 'FAIL', buried, field.children.length, floating,
+        worst.toFixed(1), worstAt);
+    }
+  }
+
+  console.log('');
   console.log('SOMEBODY IS FLYING THE OTHER SHIP');
   console.log('   A remote pilot\'s ship used to go past with nobody aboard, which');
   console.log('   reads as a runaway rather than as the pilot whose name is on the');
