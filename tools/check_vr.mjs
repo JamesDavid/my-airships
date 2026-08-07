@@ -129,6 +129,45 @@ if (renderer.shadowMap.enabled) {
   if (!hasSet) { console.log('   FAIL CARB. does not report a lever position'); fails++; }
   else console.log('   ok   CARB. reports a lever POSITION, not a nudge');
 
+  // THE RUDDER CORDS RUN OUTSIDE THE CABIN.
+  //
+  // MEASURED AGAINST THE PILOT, NOT THE WEAVE. The first cut of this check
+  // measured the cords against the basket box and passed on the old geometry
+  // too, by 0.137 m — because the tiller stands 0.21 m ABOVE the rim, so a cord
+  // leaving it runs over the basket rather than through it and the box was
+  // never the thing being fouled. What the cords went through was the PILOT:
+  // they left the bar at +-0.27, which is inside a man's shoulders, at
+  // 1.26 m above the deck, which is his chest. So the test is the volume he
+  // occupies -- a shoulder's radius about the deck point, from his boots to the
+  // top of his head.
+  {
+    const { SHIPS: ALL } = await import('../src/ships.js');
+    const SHOULDER = 0.32, HEAD = 1.80;
+    let worstShip = null, worstD = Infinity;
+    for (const id of Object.keys(ALL)) {
+      const s2 = makeShip(id);
+      s2.reset({ x: 0, y: 100, z: 0 }, 0);
+      s2.updateTransforms(0.016);
+      if (!s2.tillerCords || !s2.deckPoint) continue;   // no helm to foul him with
+      const d0 = s2.deckPoint.position;
+      const p = s2.tillerCords.geometry.attributes.position.array;
+      for (let c = 0; c < 2; c++) {
+        const ax = p[c * 6], ay = p[c * 6 + 1], az = p[c * 6 + 2];
+        const bx2 = p[c * 6 + 3], by = p[c * 6 + 4], bz = p[c * 6 + 5];
+        for (let t = 0; t <= 1; t += 0.004) {
+          const x = ax + (bx2 - ax) * t, y = ay + (by - ay) * t, z = az + (bz - az) * t;
+          if (y < d0.y || y > d0.y + HEAD) continue;    // above or below the man
+          const d = Math.hypot(x - d0.x, z - d0.z) - SHOULDER;
+          if (d < worstD) { worstD = d; worstShip = id; }
+        }
+      }
+    }
+    const ok = worstD > 0.05;
+    if (!ok) fails++;
+    console.log('   %s  the rudder cords pass %s m outside the pilot (worst: %s)',
+      ok ? 'ok  ' : 'FAIL', worstD.toFixed(3), worstShip);
+  }
+
   // THE SLATE GROWS DOWNWARD. It is hung with its top edge on the upper rim so
   // that it is there when the pilot looks down and nowhere when he looks out;
   // an ending grows it, and growing it about its centre put the extra height

@@ -487,6 +487,11 @@ export class Airship {
       this.deckPoint = new THREE.Object3D();
       this.deckPoint.position.set(bx, cy - H / 2 + T, 0);
       this.pitchGroup.add(this.deckPoint);
+      // ...and the box the weave encloses, published so a check can ask what
+      // has been run through the cabin rather than working the numbers out
+      // again for itself and testing its own copy of them.
+      this.basketBox = { x0: bx - W / 2, x1: bx + W / 2,
+        y0: cy - H / 2, y1: cy + H / 2, z0: -D / 2, z1: D / 2 };
     }
 
     // NO BOARD BEHIND THE INSTRUMENTS. They have their own cases and stand on
@@ -513,6 +518,22 @@ export class Airship {
       this.pitchGroup.add(post);
 
       const HALF = 0.27;                     // to each hand from the pivot
+      // ...AND THE CORDS TAKE HOLD FURTHER OUT THAN THAT.
+      //
+      // The rudder cords used to leave the bar at +-0.27, which is well inside
+      // a basket half a metre wide at the rim: both of them then ran aft
+      // straight through the cabin and out through the wickerwork, past the
+      // pilot's shoulders. "The tiller where the rudder cables are connected
+      // should extend out further to the sides so the cables are outside the
+      // cabin." So the bar carries a thinner arm out past the rim on each side
+      // and the cords are made fast at the ends of those, where they have clear
+      // air the whole way aft.
+      //
+      // The hands keep their old grips at +-0.22: the whole bar widened would
+      // have put them out of reach over the side, and in a headset the tiller
+      // is worked by its extension anyway.
+      const rimHalf = 0.57 * (K.type === 'basket-long' ? 1.15 : 1);
+      const CORD_HALF = rimHalf + 0.12;      // outboard of the weave, with room
       const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, HALF * 2, 6), wood);
       bar.rotation.x = Math.PI / 2;          // lying across the ship, along Z
       this.wheel.add(bar);
@@ -521,10 +542,20 @@ export class Airship {
         grip.rotation.x = Math.PI / 2;
         grip.position.z = sz * (HALF - 0.05);
         this.wheel.add(grip);
+        // the outrigger, and the eye at its end that the cord is bent on to
+        const arm = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.013, 0.016, CORD_HALF - HALF, 5), wood);
+        arm.rotation.x = Math.PI / 2;
+        arm.position.z = sz * (HALF + (CORD_HALF - HALF) / 2);
+        this.wheel.add(arm);
+        const eye = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 5, 10), dark);
+        eye.position.z = sz * CORD_HALF;
+        this.wheel.add(eye);
       }
       this.wheel.position.set(bx + 0.74, -drop + 0.26, 0);
       this.pitchGroup.add(this.wheel);
       this.tillerHalf = HALF;
+      this.tillerCordHalf = CORD_HALF;
       // AN EXTENSION, reaching back to the hand.
       //
       // The bar belongs at the front of the basket, where it is clear of
@@ -1734,7 +1765,9 @@ export class Airship {
    */
   updateTiller() {
     if (!this.tillerCords || !this.rudder) return;
-    const h = this.tillerHalf, a = this.wheel.rotation.y;
+    // the OUTBOARD half, not the hands' half: the cords are bent on to the eyes
+    // at the ends of the outriggers, clear of the basket
+    const h = this.tillerCordHalf || this.tillerHalf, a = this.wheel.rotation.y;
     const w = this.wheel.position;
     const rp = this.rudder.position, ra = this.rudder.rotation.y;
     const ARM = 0.34;                      // where the cords take hold, off the rudder post
