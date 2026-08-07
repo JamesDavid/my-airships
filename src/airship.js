@@ -120,13 +120,19 @@ function makePlacard(text) {
   return t;
 }
 
-/** Hang a placard beside a fitting, facing the pilot. */
-function placard(parent, text, x, y, z) {
+/**
+ * Hang a placard beside a fitting. `ry` is which way it faces: the default
+ * -PI/2 turns it aft toward the pilot, which is right for a plate beside a cord
+ * he is looking straight at — and wrong for one screwed to a side wall, where
+ * it stood out from the boards edge-on like a shelf: "rotate these placards to
+ * be on the port wall not extending out from them".
+ */
+function placard(parent, text, x, y, z, ry) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.0375),
     new THREE.MeshLambertMaterial({ map: makePlacard(text), emissive: 0x4a453c,
       side: THREE.DoubleSide }));
   m.position.set(x, y, z);
-  m.rotation.y = -Math.PI / 2;
+  m.rotation.y = ry === undefined ? -Math.PI / 2 : ry;
   parent.add(m);
   return m;
 }
@@ -725,7 +731,8 @@ export class Airship {
           btn.rotation.x = -0.5 + Math.PI / 2;
           btn.position.set(x, -drop + 0.035, -0.394);
           this.pitchGroup.add(btn);
-          placard(this.pitchGroup, text, x, -drop + 0.105, -0.425);
+          // flat on the port boards, facing inboard across the basket
+          placard(this.pitchGroup, text, x, -drop + 0.105, -0.425, 0);
           this.pullCords.push({ id: 'push_' + id, mesh: btn, lever: true,
             rest: btn.position.clone(), pulled: 0, push: true });
         });
