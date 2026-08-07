@@ -472,6 +472,21 @@ else:
         print('   FAIL the lens is down inside the ironwork')
         fails.append('tower vista obstructed')
 
+print()
+print("13. THE BAROGRAPH'S FLOOR IS UNDER THE GROUND")
+_ac = open(os.path.join(ROOT, 'src', 'anticheat.js'), encoding='utf-8').read()
+_min = float(re.search(r'minAltitude:\s*(-?[\d.]+)', _ac).group(1))
+# -10.0 m is the deepest point of the survey, measured over the whole frame;
+# the Seine's bed is -8.7, and so is the ground beside the Longchamps gates
+_low = -10.0
+print('   anticheat minAltitude %.1f m; the lowest ground in Paris is %.1f m'
+      % (_min, _low))
+if _min > _low - 5:
+    print('   FAIL a ship flying low over real ground would have its run refused')
+    fails.append('minAltitude above the terrain')
+else:
+    print('   ok   %.0f m of margin under the deepest ground' % (_low - _min))
+
 print('\n%s' % ('ALL CHECKS PASS' if not fails
                 else '%d FAILURES: %s' % (len(fails), '; '.join(fails))))
 raise SystemExit(1 if fails else 0)

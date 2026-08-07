@@ -22,7 +22,18 @@ export const LIMITS = {
   maxTime: 3600,
   maxSamples: 20000,       // ~40 minutes of trace, inside maxGhostBytes
   maxAltitude: 3000,       // the book's ceiling talk, with room to spare
-  minAltitude: -8,
+  // BELOW ANY GROUND IN ANY WORLD, with room to spare. This was -8, and it was
+  // written when Paris was flat. The survey put real relief under the city and
+  // its lowest ground is -10.0 m — the Seine's own bed is -8.7, and so is the
+  // ground within 200 m of the Longchamps gates. So a pilot flying the
+  // racecourse low, which is what a racecourse is for, had the run thrown out
+  // by the barograph: "I did a 20 minute 2 lap challenge and it says it refused
+  // the run because of my barograph I'm fucking pissed". Rightly.
+  //
+  // It is a guard against a trace that is nonsense, not a floor for flying, so
+  // it belongs well under the deepest ground rather than just below it.
+  // tools/check_paris.py section 13 holds it there.
+  minAltitude: -40,
   windAllowance: 12,       // m/s of tailwind the daily seed can hand you
   diveAllowance: 6,        // m/s bought by trading height for speed
   speedMargin: 1.2,        // slack on top of all of that
