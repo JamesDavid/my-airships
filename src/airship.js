@@ -327,6 +327,9 @@ export class Airship {
       addRail(-drop, -0.7, K.length, r);
       addRail(-drop, 0.7, K.length, r);
       addRail(-drop + 1.1, 0, K.length, r);
+      // the apex: the single top member, and where the balloon's whole lift
+      // comes into the keel. The suspension is landed on it below.
+      this.keelApexY = -drop + 1.1;
     } else if (K.type === 'minimal') {
       // the No. 9's little frame — "the keel barely longer than the basket" —
       // a light pair of rails with cross-pieces, carrying basket and motor.
@@ -334,6 +337,7 @@ export class Airship {
       addRail(-drop, -0.5, K.length, 0.05);
       addRail(-drop, 0.5, K.length, 0.05);
       addRail(-drop + 0.55, 0, K.length * 0.8, 0.04);
+      this.keelApexY = -drop + 0.55;
       for (const t of [-0.42, 0, 0.42]) {
         const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.05, 4), wood);
         cross.rotation.x = Math.PI / 2;
@@ -464,28 +468,36 @@ export class Airship {
       // everything and out of the eye-line; but that is 0.81 m from the pilot,
       // past the end of an arm. Bringing the bar itself back put it through the
       // middle of the ship. So it gets what a dinghy's tiller gets: a stick
-      // jointed at the middle of the bar and lying back toward the helmsman,
-      // which you hold and swing across to put the helm over.
-      const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.02, 0.34, 6), wood);
-      ext.geometry.translate(-0.17, 0, 0);        // jointed at the bar's centre
-      ext.rotation.z = 0.20;                      // lying back and a little up
-      this.wheel.add(ext);
+      // jointed at the middle of the bar and lying back toward the helmsman.
+      //
+      // IT IS DRAWN FROM THE SAME NUMBERS AS THE GRAB POINT. It was a child of
+      // the swinging bar while the grab point was a marker computed separately,
+      // and the two did not agree — the stick pointed one way and the ball you
+      // were supposed to take hold of sat somewhere else: "the tiller extension
+      // should be rotated to extend from the T of the tiller back to the grab
+      // ball in the cockpit". One pivot, one length, one angle, both of them.
+      const EXT = 0.34, RISE = 0.20;
+      this.tillerExtLen = EXT;
+      this.tillerRise = RISE;
+      this.tillerAt = { x: bx + 0.74, y: -drop + 0.26 };
+      const extPivot = new THREE.Group();
+      extPivot.position.set(this.tillerAt.x, this.tillerAt.y, 0);
+      this.pitchGroup.add(extPivot);
+      const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.02, EXT, 6), wood);
+      ext.geometry.rotateZ(Math.PI / 2);          // lying along the ship's x
+      ext.geometry.translate(-EXT / 2, 0, 0);     // jointed at the bar's centre
+      ext.rotation.z = RISE;                      // and rising a little to the hand
+      extPivot.add(ext);
       const eknob = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6),
         new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
-      eknob.position.set(-0.34, 0, 0);
-      ext.add(eknob);
-      this.tillerExt = ext;
-      this.tillerExtLen = 0.34;
-      // The grab point is carried by a marker hung DIRECTLY under pitchGroup
-      // and moved each frame, rather than by the stick itself. Two reasons: the
-      // stick is two levels deep and swings with the helm, and a fitting whose
-      // world position can only be had by walking a matrix chain is a fitting
-      // nothing here can check — tools/sim.mjs measured this one at 7.99 m from
-      // the eye and was believed for about a minute.
+      eknob.position.set(-EXT * Math.cos(RISE), EXT * Math.sin(RISE), 0);
+      extPivot.add(eknob);
+      this.tillerExt = extPivot;
+
+      // the grab point: the ball's own place, from the same three numbers, hung
+      // where tools/sim.mjs can measure it without walking a matrix chain
       this.tillerGrip = new THREE.Object3D();
-      this.tillerGrip.position.set(bx + 0.74 - 0.34, -drop + 0.26, 0);
       this.pitchGroup.add(this.tillerGrip);
-      this.tillerAt = { x: bx + 0.74, y: -drop + 0.26 };
       this.pullCords.push({ id: 'tiller', mesh: this.tillerGrip, lever: true,
         rest: null, pulled: 0 });
 
@@ -952,7 +964,15 @@ export class Airship {
         rod.rotation.z = Math.PI / 2;
         rod.position.set(ex, h.y, sz * h.z);
         this.pitchGroup.add(rod);
-        wirePts.push(ex, h.y, sz * h.z, fx, -drop, 0);
+        // ...ON THE APEX, not through it. These ran to the keel's bottom
+        // centreline, where there is nothing at all — between the two lower
+        // rails — so on the way they went straight through the single top
+        // member, which is the one thing in the ship the suspension is
+        // actually FOR: "V wires should be attached to the top wood bar".
+        // Ch. VI has the cords taken off the hems and into the keel, and the
+        // apex is where a triangular girder takes them.
+        wirePts.push(ex, h.y, sz * h.z, fx, this.keelApexY !== undefined
+          ? this.keelApexY : -drop, 0);
       }
     }
     const wireGeo = new THREE.BufferGeometry();
@@ -1544,12 +1564,13 @@ export class Airship {
     // POIDS reads the ship's own trim, so it moves whether the setting came
     // from the keyboard, the touch slider or a hand in a headset — one state,
     // one lever, and no way for the indicator to disagree with the ship
-    // the tiller stick swings with the helm, and its grab point with it
+    // the stick swings with the helm, and the ball with the stick — one angle
     if (this.tillerGrip && this.tillerAt) {
       const a = this.wheel ? this.wheel.rotation.y : 0;
-      const L = this.tillerExtLen * Math.cos(0.20);
+      if (this.tillerExt) this.tillerExt.rotation.y = a;
+      const L = this.tillerExtLen * Math.cos(this.tillerRise);
       this.tillerGrip.position.set(this.tillerAt.x - L * Math.cos(a),
-        this.tillerAt.y + this.tillerExtLen * Math.sin(0.20),
+        this.tillerAt.y + this.tillerExtLen * Math.sin(this.tillerRise),
         L * Math.sin(a));
     }
     if (this.trimLever) {
