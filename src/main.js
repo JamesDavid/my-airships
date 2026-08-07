@@ -1950,7 +1950,9 @@ async function createOrJoinRoom(trackId, code, hosting, listed = true) {
       ? `Your room is on the list for anyone to join — the code is ${code}. `
       : `Your room is off the list: give out the code ${code} and nobody else can find it. `)
       + 'Press Enter — or GO — when the room is ready to fly.'
-    : 'Press Enter — or GO — when the room is ready to fly.');
+    : 'Press Enter — or GO — when the room is ready to fly.',
+  // it is an instruction, not a verdict: read it, then have the sky back
+  30000);
   drawRoom();
   buildMenuButtons();
 }
@@ -2007,6 +2009,63 @@ function viewPicture(maxW = 1280) {
     c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', 0.62);
   } catch { return null; }
+}
+
+/**
+ * A picture from INSIDE A HEADSET.
+ *
+ * viewPicture() cannot be used here. It reads back the drawing buffer, and
+ * during an immersive session that buffer belongs to WebXR: on a Quest,
+ * touching it ends the browser — "bug report causes oculus browser to crash".
+ * So the fault book filed from the basket with no picture at all, and nine of
+ * the eleven open reports are blind, saying only "looks wrong here".
+ *
+ * This never goes near the XR framebuffer. It renders ONE MONO FRAME into an
+ * off-screen target of our own and reads that instead, which is an ordinary
+ * WebGL operation the session knows nothing about. `xr.enabled` comes off for
+ * the duration so three renders through the camera we hand it rather than
+ * through the session's stereo pair, and goes straight back.
+ *
+ * The camera is put at the headset's own pose, so the picture is what the
+ * pilot was looking at — basket, hands, slate and all.
+ */
+function vrPicture(w = 720, h = 480) {
+  let rt = null, hadXR = null, prevTarget = null;
+  try {
+    rt = new THREE.WebGLRenderTarget(w, h);
+    const cam = new THREE.PerspectiveCamera(75, w / h, 0.12, 26000);
+    // the XR system writes the head pose into the camera's world matrix
+    camera.updateMatrixWorld(true);
+    cam.position.setFromMatrixPosition(camera.matrixWorld);
+    cam.quaternion.setFromRotationMatrix(camera.matrixWorld);
+    cam.updateMatrixWorld(true);
+
+    hadXR = renderer.xr.enabled;
+    prevTarget = renderer.getRenderTarget();
+    renderer.xr.enabled = false;
+    renderer.setRenderTarget(rt);
+    renderer.render(scene, cam);
+
+    const buf = new Uint8Array(w * h * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, w, h, buf);
+
+    // GL hands back rows bottom-up; a canvas wants them the other way
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g2 = c.getContext('2d');
+    const img = g2.createImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w * 4, dst = y * w * 4;
+      for (let i = 0; i < w * 4; i++) img.data[dst + i] = buf[src + i];
+    }
+    g2.putImageData(img, 0, 0);
+    return c.toDataURL('image/jpeg', 0.6);
+  } catch { return null; } finally {
+    // put the session back whatever happened above, or the next frame is blind
+    try { if (prevTarget !== null) renderer.setRenderTarget(prevTarget); } catch { /* gone */ }
+    try { if (hadXR !== null) renderer.xr.enabled = hadXR; } catch { /* gone */ }
+    try { if (rt) rt.dispose(); } catch { /* gone */ }
+  }
 }
 
 /**
@@ -2172,16 +2231,32 @@ function wireBugBook() {
 // an immersive session owns it. On a Quest that ends the browser: "bug report
 // causes oculus browser to crash".
 //
-// So from a headset the FAUTE button files straight away: no panel, no
-// textarea, and NO PICTURE. The state that rides with every report — ship,
-// place, position, gas, throttle — is the useful half of a fault report
-// anyway, and it is exactly the half a pilot in a headset cannot type.
-async function fileFaultFromVR() {
+// So from a headset the FAUTE button files straight away: no panel and no
+// textarea. It used to file with no picture either, and nine of the eleven
+// reports then open were blind — "looks wrong here" and a position, with no
+// way to see what was wrong. vrPicture() takes one now WITHOUT going near the
+// XR framebuffer; see it for how.
+//
+// The picture is taken in the frame loop rather than here, because a live GL
+// context and a settled scene are wanted and a button handler is neither.
+let bugWanted = false;
+function fileFaultFromVR() {
+  if (bugWanted) return;                  // one at a time; the frame will take it
+  bugWanted = true;
   addMsg('bug', 'Filing a fault from the basket…', 0);
+}
+
+/** Called from the frame, after the scene has been drawn. */
+async function takeVRFault() {
+  bugWanted = false;
+  const shot = vr.inVR() ? vrPicture() : viewPicture();
   const r = await net.submitBug({
-    body: 'Looks wrong here. (Filed from the headset — no picture, and no '
-      + 'words: see the state for where and what.)',
-    state: faultState(), shot: null,
+    body: shot
+      ? 'Looks wrong here. (Filed from the headset: the picture is what the '
+        + 'pilot was looking at, and the state says where.)'
+      : 'Looks wrong here. (Filed from the headset — the picture could not be '
+        + 'taken. See the state for where and what.)',
+    state: faultState(), shot,
   });
   addMsg('bug', r.ok ? 'Your report is filed. Thank you.'
     : 'The telegraph office would not take it: ' + net.phrase(r.reason), 0);
@@ -2944,13 +3019,27 @@ function addMsg(key, text, cooldown = 10) {
 }
 
 let centerSetAt = 0;
-function setCenter(big, sub) {
+let centerHold = 0;
+/**
+ * The notice in the middle of the view.
+ *
+ * `holdFor` is milliseconds, and it is for INSTRUCTIONS. A wreck, an ending, a
+ * result stays until something replaces it — that is the point of it. But "the
+ * room is open, press Enter when it is ready to fly" is a thing you read once
+ * and then act on, and it was set when the room opened and never taken down
+ * again: on the screen it parked at the top and sat there for the whole
+ * flight, and in a headset the slate carries centerSub, so it rode along at
+ * the bottom of the tablet for ever — "persistent roommmessage in the way"
+ * (#72). Anything with a hold on it stands down by itself.
+ */
+function setCenter(big, sub, holdFor = 0) {
   document.getElementById('centerBig').textContent = big;
   document.getElementById('centerSub').textContent = sub;
   const c = document.getElementById('center');
   c.classList.remove('parked');
   c.style.top = '';               // hand the position back to the stylesheet
   centerSetAt = performance.now();
+  centerHold = holdFor;
 }
 
 const seen = new Set();
@@ -3256,6 +3345,8 @@ function updateHUD() {
     document.getElementById('center').classList.add('parked');
     layoutHud();
   }
+  // ...and an instruction with a hold on it takes itself down. See setCenter.
+  if (centerHold && performance.now() - centerSetAt > centerHold) setCenter('', '');
   const s = race.state;
   el('timer').textContent = (s === 'run' || s === 'done') ? fmt(race.t) : '';
   el('lapline').textContent = (s === 'run' && track && track.laps > 1)
@@ -3397,7 +3488,9 @@ function frame(now) {
     // dead and the board could not be worked. The controllers are read here
     // whatever else is stopped.
     if (vr.inVR()) vr.pollVR(ship);
-    updateCamera(dt); draw(); return;
+    updateCamera(dt); draw();
+    if (bugWanted) takeVRFault();   // or a fault filed over an open board never goes
+    return;
   }
 
   // the sky runs on its own clock, not on how long this page has been open:
@@ -3550,6 +3643,11 @@ function frame(now) {
   drawThrottleLever();
   updateAudio();
   draw();
+  // ...and only now, with the scene settled and the context live, take the
+  // picture the FAUTE button asked for. Not in the button handler: that fires
+  // out of a controller poll, where a render target of our own would be bound
+  // in the middle of somebody else's work.
+  if (bugWanted) takeVRFault();
 }
 
 // THE WATER STOPS REFLECTING IN A HEADSET, and this is the important half of

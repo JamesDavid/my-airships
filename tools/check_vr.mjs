@@ -168,6 +168,95 @@ if (renderer.shadowMap.enabled) {
       ok ? 'ok  ' : 'FAIL', worstD.toFixed(3), worstShip);
   }
 
+  // THE ROOM NOTICE STANDS DOWN. It was set when the room opened and never
+  // taken away, so on the screen it parked at the top for the whole flight and
+  // in a headset it rode along the bottom of the slate for ever, because the
+  // slate carries centerSub: "persistent roommmessage in the way" (#72).
+  {
+    const src = await (await import('node:fs/promises')).readFile('src/main.js', 'utf8');
+    const hasHold = /function setCenter\(big, sub, holdFor = 0\)/.test(src)
+      && /if \(centerHold && performance\.now\(\) - centerSetAt > centerHold\) setCenter\('', ''\)/.test(src);
+    const roomUses = /Press Enter — or GO — when the room is ready to fly\.'[\s\S]{0,200}?\d{4,}\)/.test(src);
+    const ok = hasHold && roomUses;
+    if (!ok) fails++;
+    console.log('   %s  setCenter can hold an instruction for a while (%s), and the room notice does (%s)',
+      ok ? 'ok  ' : 'FAIL', hasHold ? 'yes' : 'NO', roomUses ? 'yes' : 'NO');
+  }
+
+  // NO TWO PLACARDS LIE ACROSS EACH OTHER.
+  //
+  // The four buttons on the port boards were spaced 0.12 m apart, which clears
+  // the 0.10 m grab radius handsomely — and the plate that NAMES each button is
+  // 0.15 m wide, so every one of them lay three centimetres over its
+  // neighbours and the four words ran together: "port placards overlap on the
+  // sides" (#72). Spacing a control by the size of the control is not enough
+  // when the label is bigger than the thing it labels. Each plate carries its
+  // own size now, and this measures the plates.
+  {
+    const { SHIPS: ALL } = await import('../src/ships.js');
+    let worst = null;
+    for (const id of Object.keys(ALL)) {
+      const s3 = makeShip(id);
+      const plates = [];
+      for (const o of (s3.pitchGroup.children || [])) {
+        const p = o && o.userData && o.userData.placard;
+        if (p) plates.push({ o, p });
+      }
+      for (let a = 0; a < plates.length; a++) {
+        for (let b = a + 1; b < plates.length; b++) {
+          const A = plates[a], B = plates[b];
+          // the same board: facing the same way, and in the same plane
+          const ryA = A.o.rotation.y || 0, ryB = B.o.rotation.y || 0;
+          if (Math.abs(ryA - ryB) > 0.05) continue;
+          const acrossX = Math.abs(Math.cos(ryA)) > 0.5;   // width runs along x
+          const depthA = acrossX ? A.o.position.z : A.o.position.x;
+          const depthB = acrossX ? B.o.position.z : B.o.position.x;
+          if (Math.abs(depthA - depthB) > 0.03) continue;  // different boards
+          const uA = acrossX ? A.o.position.x : A.o.position.z;
+          const uB = acrossX ? B.o.position.x : B.o.position.z;
+          const gapU = Math.abs(uA - uB) - (A.p.w + B.p.w) / 2;
+          const gapV = Math.abs(A.o.position.y - B.o.position.y) - (A.p.h + B.p.h) / 2;
+          const gap = Math.max(gapU, gapV);                // apart in EITHER axis is apart
+          if (!worst || gap < worst.gap) {
+            worst = { gap, id, a: A.p.text, b: B.p.text };
+          }
+        }
+      }
+    }
+    const ok = !worst || worst.gap > 0.005;
+    if (!ok) fails++;
+    console.log('   %s  placards on the same board clear each other by %s m (%s: %s / %s)',
+      ok ? 'ok  ' : 'FAIL', worst ? worst.gap.toFixed(3) : 'n/a',
+      worst ? worst.id : '-', worst ? worst.a : '-', worst ? worst.b : '-');
+  }
+
+  // THE FAULT PICTURE PUTS THE SESSION BACK.
+  //
+  // vrPicture() takes xr.enabled off and binds a render target of its own so
+  // it can read a mono frame back without touching the XR framebuffer — the
+  // readback that ended the Oculus browser. If it ever returns without undoing
+  // both of those, every frame after it is drawn into a target nobody presents
+  // and the pilot's headset goes black. So: drive it through main.js's own
+  // code with a renderer that RECORDS what was done to it, including on the
+  // path where the render throws.
+  {
+    const src = await (await import('node:fs/promises')).readFile('src/main.js', 'utf8');
+    const ok = /finally\s*\{[\s\S]{0,400}?renderer\.setRenderTarget\(prevTarget\)[\s\S]{0,200}?renderer\.xr\.enabled = hadXR/.test(src);
+    if (!ok) fails++;
+    console.log('   %s  the fault picture restores xr.enabled and the render target in a finally',
+      ok ? 'ok  ' : 'FAIL');
+    // ...and it must not be the old canvas readback, which is what crashed.
+    const noReadback = !/function vrPicture[\s\S]{0,1600}?domElement\.toDataURL/.test(src);
+    if (!noReadback) fails++;
+    console.log('   %s  it never reads back the drawing buffer the session owns',
+      noReadback ? 'ok  ' : 'FAIL');
+    // ...and the picture is taken from the FRAME, not from the button handler.
+    const inFrame = /if \(bugWanted\) takeVRFault\(\);/.test(src);
+    if (!inFrame) fails++;
+    console.log('   %s  the picture is taken in the frame, not in a controller poll',
+      inFrame ? 'ok  ' : 'FAIL');
+  }
+
   // ...and the slate must survive being DRAWN. It grew a navigation block and
   // a toast mode, which is a good deal more of the 2-D canvas API than it used
   // to touch (save/rotate/beginPath/fill), and a throw in here is a throw

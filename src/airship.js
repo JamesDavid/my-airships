@@ -127,12 +127,16 @@ function makePlacard(text) {
  * it stood out from the boards edge-on like a shelf: "rotate these placards to
  * be on the port wall not extending out from them".
  */
-function placard(parent, text, x, y, z, ry) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.0375),
+function placard(parent, text, x, y, z, ry, w = 0.15) {
+  const h = w * 0.25;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
     new THREE.MeshLambertMaterial({ map: makePlacard(text), emissive: 0x4a453c,
       side: THREE.DoubleSide }));
   m.position.set(x, y, z);
   m.rotation.y = ry === undefined ? -Math.PI / 2 : ry;
+  // how big it is, on the plate itself, so a check can ask whether two of them
+  // are on top of each other — "port placards overlap on the sides" (#72)
+  m.userData.placard = { w, h, text };
   parent.add(m);
   return m;
 }
@@ -812,19 +816,26 @@ export class Airship {
         // upright, so the board cut straight through them. The buttons sit on
         // the port boards themselves, which is backing enough.
         //
-        // 0.12 m apart, wider than the 0.10 m grab radius: at 0.08 they were
-        // inside one another and a hand could not pick one out.
+        // SPACED BY THE PLACARDS, not by the buttons. 0.12 m apart cleared the
+        // 0.10 m grab radius nicely and was still wrong, because the plate that
+        // names each button is 0.15 m wide: every one of them lay three
+        // centimetres across its neighbours and the four words ran together.
+        // "Port placards overlap on the sides" (#72). The plates are cut to
+        // 0.115 for these six-letter words and set 0.145 apart, which leaves
+        // three centimetres of bare board between them, and the row is centred
+        // on the basket instead of running aft from a fixed corner.
         const PUSH = [['bug', 'FAUTE', 0xb5442f], ['menu', 'CARNET', 0xb08a3c],
                       ['go', 'PARTIR', 0x5f8a74], ['exitvr', 'SORTIE', 0x8a8a8a]];
+        const STEP = 0.145, PLATE = 0.115;
         PUSH.forEach(([id, text, colour], i) => {
-          const x = bx - 0.20 + i * 0.12;
+          const x = bx + (i - (PUSH.length - 1) / 2) * STEP;
           const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.022, 10),
             new THREE.MeshPhongMaterial({ color: colour, shininess: 70 }));
           btn.rotation.x = -0.5 + Math.PI / 2;
           btn.position.set(x, -drop + 0.035, -0.394);
           this.pitchGroup.add(btn);
           // flat on the port boards, facing inboard across the basket
-          placard(this.pitchGroup, text, x, -drop + 0.105, -0.425, 0);
+          placard(this.pitchGroup, text, x, -drop + 0.105, -0.425, 0, PLATE);
           this.pullCords.push({ id: 'push_' + id, mesh: btn, lever: true,
             rest: btn.position.clone(), pulled: 0, push: true });
         });
