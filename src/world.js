@@ -723,7 +723,7 @@ export function buildWorld(scene) {
   }
   addOval(scene, arcPos.x, arcPos.z, 128, 128, 0x9a9285, 0.08);   // the Étoile
   { const c = placeLegacy('concorde'); addOval(scene, c.x, c.z, 170, 170, 0x9a9285, 0.08); }
-  scene.add(makeArc(arcPos));
+  scene.add(farSeen(makeArc(arcPos)));
   scene.add(makeConcorde());
   scene.add(makeMadeleine());
 
@@ -835,7 +835,7 @@ export function buildWorld(scene) {
     tower.rotation.y = -Math.atan2(e.z - t.z, e.x - t.x);
   }
   tower.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  scene.add(tower);
+  scene.add(farSeen(tower));
 
   // ---------- landmarks ----------
   const lm = addLandmarks(scene);
@@ -1132,6 +1132,11 @@ export function buildWorld(scene) {
  * Only the scene's top-level children are walked. Lifting a group AND its
  * children would raise the hangar's flagpole twice.
  */
+// Seen from across Paris, and so never culled in a headset: the things a pilot
+// takes his bearings from. src/vr.js hides the rest of the near-field scenery
+// beyond 900 m, which is what makes the city affordable at ninety hertz.
+function farSeen(o) { if (o) { o.userData = o.userData || {}; o.userData.vrFar = true; } return o; }
+
 function liftToTerrain(scene) {
   const m = new THREE.Matrix4();
   const pos = new THREE.Vector3(), qt = new THREE.Quaternion(), scl = new THREE.Vector3();
@@ -1334,7 +1339,7 @@ function addLandmarks(scene) {
   const invDrum = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 10, 12), cream); invDrum.position.y = 25; inv.add(invDrum);
   const invDome = new THREE.Mesh(new THREE.SphereGeometry(11, 14, 10), gold); invDome.position.y = 32; invDome.scale.y = 1.15; inv.add(invDome);
   const invSpike = new THREE.Mesh(new THREE.ConeGeometry(1.2, 12, 6), gold); invSpike.position.y = 48; inv.add(invSpike);
-  { const _p = placeLegacy('invalides'); inv.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('invalides'); inv.position.set(_p.x, 0, _p.z); farSeen(inv); }
   scene.add(inv);
 
   // Sacre-Coeur on the Montmartre mound (it was rising over Paris in 1901)
@@ -1354,7 +1359,7 @@ function addLandmarks(scene) {
     const d = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8), white);
     d.position.set(s * 14, 17, 0); d.scale.y = 1.4; mont.add(d);
   }
-  { const _p = placeLegacy('montmartre'); mont.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('montmartre'); mont.position.set(_p.x, 0, _p.z); farSeen(mont); }
   scene.add(mont);
 
   // Old Palais du Trocadero (1878): rotunda, two slim ~80 m towers, curved wings —
@@ -1411,6 +1416,7 @@ function addLandmarks(scene) {
     }
   }
   troc.position.set(_tp.x, 0, _tp.z);   // liftToTerrain puts it on the hill
+  farSeen(troc);
 
   // The great cascade, which is what the gardens were FOR: water off the
   // terrace under the rotunda, down the Chaillot slope in steps, into a basin
@@ -1484,7 +1490,7 @@ function addLandmarks(scene) {
     leg.rotation.z = sx * 0.5;
     roue.add(leg);
   }
-  { const _p = placeLegacy('roue'); roue.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('roue'); roue.position.set(_p.x, 0, _p.z); farSeen(roue); }
   roue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roue);
   // Collide with the LEGS only — daring pilots may thread the wheel. Taken from
@@ -1613,7 +1619,7 @@ function addLandmarks(scene) {
     g.position.set(L.x, 0, L.z);
     g.rotation.y = L.ry;
     g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
-    scene.add(g);
+    scene.add(farSeen(g));      // the eleven are landmarks: seen from anywhere
     const ca = Math.abs(Math.cos(L.ry)), sa = Math.abs(Math.sin(L.ry));
     lmColliders.push({ x: L.x, z: L.z,
       w: L.l * ca + L.w * sa, d: L.l * sa + L.w * ca,
@@ -1633,7 +1639,7 @@ function addLandmarks(scene) {
   // ACROSS the building, overhanging the ends by 15 m and covering half its length.
   glass.rotation.z = Math.PI / 2;
   glass.position.y = 18; glass.scale.y = 0.94; gp.add(glass);
-  { const _p = placeLegacy('grandpalais'); gp.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('grandpalais'); gp.position.set(_p.x, 0, _p.z); farSeen(gp); }
   gp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(gp);
 
@@ -1647,7 +1653,7 @@ function addLandmarks(scene) {
   ndNave.position.set(30, 10, 0); nd.add(ndNave);
   const fleche = new THREE.Mesh(new THREE.ConeGeometry(2, 22, 6), slate);
   fleche.position.set(34, 30, 0); nd.add(fleche);
-  { const _p = placeLegacy('notredame'); nd.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('notredame'); nd.position.set(_p.x, 0, _p.z); farSeen(nd); }
   scene.add(nd);
 
   // Pantheon dome and the Opera
@@ -1655,13 +1661,13 @@ function addLandmarks(scene) {
   const panBase = new THREE.Mesh(new THREE.BoxGeometry(34, 20, 34), cream); panBase.position.y = 10; pan.add(panBase);
   const panDrum = new THREE.Mesh(new THREE.CylinderGeometry(10, 10, 12, 12), cream); panDrum.position.y = 26; pan.add(panDrum);
   const panDome = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 8), slate); panDome.position.y = 33; panDome.scale.y = 1.05; pan.add(panDome);
-  { const _p = placeLegacy('pantheon'); pan.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('pantheon'); pan.position.set(_p.x, 0, _p.z); farSeen(pan); }
   scene.add(pan);
   const opera = new THREE.Group();
   const opBase = new THREE.Mesh(new THREE.BoxGeometry(40, 22, 30), cream); opBase.position.y = 11; opera.add(opBase);
   const opDome = new THREE.Mesh(new THREE.SphereGeometry(11, 12, 8),
     new THREE.MeshPhongMaterial({ color: 0x5f7a64, shininess: 40 })); opDome.position.y = 26; opDome.scale.y = 0.7; opera.add(opDome);
-  { const _p = placeLegacy('opera'); opera.position.set(_p.x, 0, _p.z); }
+  { const _p = placeLegacy('opera'); opera.position.set(_p.x, 0, _p.z); farSeen(opera); }
   scene.add(opera);
 
   // scattered church spires

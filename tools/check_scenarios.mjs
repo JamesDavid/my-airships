@@ -13,6 +13,7 @@ import { makeShip } from './sim.mjs';
 import { SHIPS } from '../src/ships.js';
 import { TRACKS } from '../src/tracks.js';
 import { inRiver } from '../src/paris_terrain.js';
+import { placeLegacy } from '../src/paris_geo.js';
 import { flyTrack } from './fly_track.mjs';
 
 const scene = { children: [], add(...o) { this.children.push(...o); },
@@ -330,6 +331,44 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
     else if (nearest < 0.32) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
     else console.log('   ok   ballast, valve, ALLUM. and the bell-pull in reach and distinct');
+  }
+
+  console.log('');
+  console.log('PARIS IS AFFORDABLE IN A HEADSET');
+  console.log('   1,714 leaf meshes is 1,714 draw calls an eye and near 3,400 a');
+  console.log('   frame; a Quest wants under two hundred. But the Deutsch prize is');
+  console.log('   flying to a Tower you can see from St-Cloud, so the monuments are');
+  console.log('   marked vrFar and never culled however far off they are.');
+  console.log('');
+  {
+    const leaves = (o) => {
+      const k = Array.isArray(o.children) ? o.children : [];
+      return k.length ? k.reduce((a, c) => a + leaves(c), 0) : 1;
+    };
+    const exempt = (o) => { const u = o.userData || {}; return u.noLift || u.vrFar; };
+    let total = 0;
+    for (const c of scene.children) total += leaves(c);
+    const KEEP = 900;
+    let drawn = 0;
+    for (const c of scene.children) {
+      if (exempt(c)) { drawn += leaves(c); continue; }
+      if (Math.hypot(c.position.x - world.padPos.x, c.position.z - world.padPos.z) < KEEP) {
+        drawn += leaves(c);
+      }
+    }
+    console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
+    if (drawn > total * 0.55) { console.log('   FAIL the cull is not buying enough'); fails++; }
+    else console.log('   ok   the cull takes it down to ' + Math.round(drawn / total * 100) + '%');
+    let missing = [];
+    for (const [nm, id] of [['eiffel', 'eiffel'], ['trocadero', 'trocadero'],
+      ['arc', 'etoile'], ['montmartre', 'montmartre'], ['notredame', 'notredame']]) {
+      const p2 = placeLegacy(id);
+      const near = scene.children.filter((o) => o.position
+        && Math.hypot(o.position.x - p2.x, o.position.z - p2.z) < 60);
+      if (!near.some((o) => (o.userData || {}).vrFar)) missing.push(nm);
+    }
+    if (missing.length) { console.log('   FAIL not seen from afar: ' + missing.join(', ')); fails++; }
+    else console.log('   ok   every monument is drawn from anywhere in the frame');
   }
 
   console.log('');

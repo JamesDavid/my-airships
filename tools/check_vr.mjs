@@ -14,7 +14,9 @@ const vr = await import('../src/vr.js');
 // a fake renderer.xr and session, so the board can be driven without a headset
 const listeners = {};
 const fakeSession = { inputSources: [], end(){} };
-const renderer = { xr: { enabled:false, getController: () => new THREE.Group(),
+const renderer = { shadowMap: { enabled: true },
+  xr: { enabled:false, setReferenceSpaceType(){}, setFramebufferScaleFactor(){}, setFoveation(){},
+  getController: () => new THREE.Group(),
   addEventListener: (k,f) => { listeners[k]=f; }, getSession: () => fakeSession } };
 const camera = new THREE.Group(); camera.updateProjectionMatrix = () => {};
 const scene = new THREE.Group();
@@ -26,8 +28,13 @@ vr.attachTo(scene);
 listeners.sessionstart();
 console.log('session started; inVR =', vr.inVR());
 
-const items = ['The No. 6','The No. 9','Paris','Monaco','St. Louis','A postcard hunt']
-  .map((l,i) => ({ label: l, sub: 'row ' + i, onClick: () => fired.push('pressed:' + l) }));
+// a board shaped like the real one: headings between the groups
+const items = [
+  { head: 'THE SHIPS' },
+  ...['The No. 6','The No. 9'].map((l) => ({ label: l, onClick: () => fired.push('pressed:' + l) })),
+  { head: 'WHERE TO FLY' },
+  ...['Paris','Monaco','St. Louis'].map((l) => ({ label: l, onClick: () => fired.push('pressed:' + l) })),
+];
 vr.showMenu(true, items, 'SOLO');
 console.log('board showing =', vr.menuShowing());
 
@@ -36,16 +43,19 @@ const gp = { axes:[0,0,0,0], buttons: Array.from({length:6},()=>({pressed:false}
 fakeSession.inputSources = [{ handedness:'right', gamepad: gp }];
 const step = () => vr.pollVR(null);
 const push = (v) => { gp.axes[3] = v; step(); gp.axes[3] = 0; step(); };
-push(1); push(1);                       // down two rows
+// three pushes from the first ship: No. 9, then OVER the heading to Paris,
+// then Monaco. A heading is a signpost and must never be selectable.
+push(1); push(1); push(1);
 gp.buttons[0].pressed = true; step();   // trigger
 gp.buttons[0].pressed = false; step();
 console.log('fired:', fired.join(', '));
 let fails = 0;
-if (!fired.some((f) => f === 'pressed:Paris')) {
-  console.log('   FAIL the stick and trigger did not work the board');
+if (!fired.some((f) => f === 'pressed:Monaco')) {
+  console.log('   FAIL the stick did not step over the headings to a real entry');
+  console.log('        (fired: ' + fired.join(', ') + ')');
   fails++;
 } else {
-  console.log('   ok   two pushes moved the selection two rows and the trigger pressed it');
+  console.log('   ok   the stick steps over headings and the trigger presses an entry');
 }
 
 // ...and with the board DOWN the sticks must fly the ship again
@@ -60,8 +70,22 @@ if (!pad || pad.rudder === 0 || pad.pitch === 0) {
     + pad.rudder.toFixed(2) + ', trim ' + pad.pitch.toFixed(2) + ')');
 }
 
+// shadows must go off in a session and come back after it
+if (renderer.shadowMap.enabled) {
+  console.log('   FAIL shadows are still on in a session — that is a whole extra pass');
+  fails++;
+} else {
+  console.log('   ok   the shadow pass is off while the headset is on');
+}
+
 // a session that ends must put everything back
 listeners.sessionend();
+if (!renderer.shadowMap.enabled) {
+  console.log('   FAIL shadows were not handed back to the flat game');
+  fails++;
+} else {
+  console.log('   ok   shadows restored when the headset comes off');
+}
 if (vr.inVR() || vr.menuShowing()) { console.log('   FAIL the session did not end cleanly'); fails++; }
 else console.log('   ok   the session ends and hands the flat game back');
 

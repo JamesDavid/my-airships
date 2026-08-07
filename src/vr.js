@@ -26,6 +26,27 @@ let rig = null, camera = null, renderer = null;
 let enabled = false;            // the browser has a headset and said yes
 let session = null;
 const hand = { left: null, right: null };
+const hands = [];
+
+// a wicker-brown glove: fist, cuff, and a pale fingertip AT THE GRAB POINT, so
+// what the game measures and what the pilot sees are the same spot
+function makeHand() {
+  const g = new THREE.Group();
+  const glove = new THREE.MeshLambertMaterial({ color: 0x8a6a44 });
+  const fist = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), glove);
+  fist.scale.set(1, 0.85, 1.25);
+  fist.position.set(0, 0, -0.02);
+  g.add(fist);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.044, 0.07, 10),
+    new THREE.MeshLambertMaterial({ color: 0x5c4630 }));
+  cuff.rotation.x = Math.PI / 2;
+  cuff.position.set(0, 0, 0.055);
+  g.add(cuff);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6),
+    new THREE.MeshLambertMaterial({ color: 0xe8dcc0, emissive: 0x2a2418 }));
+  g.add(tip);                                   // at the controller's origin
+  return g;
+}
 
 // the controls, latched between frames like the ship's own levers
 const pad = { throttle: 0, rudder: 0, pitch: 0, vent: false, coax: false };
@@ -46,6 +67,11 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
   renderer = rendererIn;
   camera = cameraIn;
   renderer.xr.enabled = true;
+  // stand on the floor of the basket, not float at an arbitrary origin
+  try { renderer.xr.setReferenceSpaceType('local-floor'); } catch { /* older runtime */ }
+  // a hair under native, which buys a lot of fill on a mobile chip for very
+  // little that the eye can find
+  try { renderer.xr.setFramebufferScaleFactor(0.9); } catch { /* older runtime */ }
   rig = new THREE.Group();
   rig.name = 'xrRig';
 
@@ -55,18 +81,50 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
   VR_ACTIONS.start = opts.onStart || (() => {});
   VR_ACTIONS.end = opts.onEnd || (() => {});
 
+  // ---- and something to see them with ----
+  // The controllers were added to the rig and given nothing to draw, so a
+  // pilot had two invisible hands: "i cant see my hands". You cannot reach for
+  // a cord you cannot see yourself reaching with.
+  //
+  // A gloved fist with a short cuff, and a stub of a pointing finger so it is
+  // obvious WHERE the hand grabs from — the grab test measures from the
+  // controller's own origin, and the fingertip is drawn at that point.
   for (const i of [0, 1]) {
-    const c = renderer.xr.getController(i);
-    if (c) rig.add(c);
+    // guarded: a runtime that hands back something other than an Object3D must
+    // not take the whole game down at boot, which is the one thing this file is
+    // not allowed to do
+    let c = null;
+    try { c = renderer.xr.getController(i); } catch { c = null; }
+    if (!c || typeof c.add !== 'function') continue;
+    c.add(makeHand());
+    rig.add(c);
+    hands.push(c);
   }
 
   renderer.xr.addEventListener('sessionstart', () => {
     session = renderer.xr.getSession();
     enabled = true;
+    floorFix = null; headMax = 0; seatFrames = 0;   // re-measure for this session
     // the eye is IN the basket, so the near plane has to let the instruments in
     camera.near = 0.05;
     camera.updateProjectionMatrix();
     if (camera.parent !== rig) rig.add(camera);
+
+    // ---- WHAT A HEADSET CANNOT AFFORD ----
+    // A flat frame here draws the scene twice: once for the shadow map, once
+    // for the eye. An XR frame drew it FOUR times — shadow map, the Water
+    // addon's reflection, and then both eyes — at ninety hertz on a mobile
+    // chip, which is where "the framerate seems low and tracking seems to lag"
+    // comes from.
+    //
+    // The shadow map is the easy half: the sun follows the ship, so it is
+    // regenerated in full every single frame.
+    if (renderer.shadowMap) {
+      shadowWas = renderer.shadowMap.enabled;
+      renderer.shadowMap.enabled = false;
+    }
+    // and let the runtime blur the edges of vision, which is free quality
+    try { renderer.xr.setFoveation(1); } catch { /* older runtime */ }
     VR_ACTIONS.start();
   });
   renderer.xr.addEventListener('sessionend', () => {
@@ -75,6 +133,8 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
     camera.near = 0.5;
     camera.updateProjectionMatrix();
     if (camera.parent === rig) rig.remove(camera);
+    if (shadowWas !== null && renderer.shadowMap) { renderer.shadowMap.enabled = shadowWas; }
+    shadowWas = null;
     VR_ACTIONS.end();
   });
   return true;
@@ -140,10 +200,109 @@ export async function offerVR(mount, onEnter) {
  * The headset's own translation rides on top, which is what makes leaning
  * toward the barometer work.
  */
+// How high the modelled eye is above the basket floor: the basket box is 1.1 m
+// tall centred 0.5 below the keel drop, so its deck is 1.6 m under eyePoint —
+// a man standing in it. That is the number this whole thing turns on.
+const EYE_OVER_DECK = 1.6;
+let floorFix = null;          // measured once a session: does the space have a floor?
+let headMax = 0, seatFrames = 0;
+let shadowWas = null;
+
 export function seatIn(eye, yaw) {
-  if (!rig) return;
+  if (!rig || !camera) return;
+  // SEAT THE DECK, NOT THE EYE.
+  //
+  // With a local-floor reference space WebXR reports the head at the user's own
+  // standing height above the physical floor. Putting the rig at the modelled
+  // eye therefore stacked one on the other and left the pilot hanging a metre
+  // and a half over the basket looking down into it — "I am like sitting 3-5
+  // feet above the basket, not in the basket", and 1.6 m is 5 feet 3.
+  //
+  // So the rig goes on the DECK and the headset supplies the man. A tall pilot
+  // sees further over the rim than a short one, which is right.
+  //
+  // Not every runtime grants local-floor. If the space turns out to have its
+  // origin at the head instead, the camera sits at about zero in rig space and
+  // the pilot would be standing on the floor of the basket with his eyes at his
+  // boots; measure it once and put the height back by hand.
+  // Decided over a second, not on the first frame — on frame one the pose may
+  // not have been written yet, and latching a correction off that zero would
+  // put the pilot right back up in the air where he started. Until it settles
+  // we assume the local-floor we asked for, which is the safe way to be wrong:
+  // too low for a moment rather than floating over the ship.
+  if (floorFix === null && enabled) {
+    headMax = Math.max(headMax, camera.position.y || 0);
+    if (++seatFrames > 60) floorFix = headMax > 0.8 ? 0 : EYE_OVER_DECK;
+  }
   rig.position.copy(eye);
+  rig.position.y -= EYE_OVER_DECK - (floorFix || 0);
   rig.rotation.y = yaw;
+}
+
+// ---------------------------------------------------------------- the view
+// PARIS IS TOO MANY THINGS TO DRAW TWICE.
+//
+// Counted: 777 top-level objects and about 1,714 leaf meshes, which is 1,714
+// draw calls per eye and near 3,400 a frame. A Quest wants under two hundred.
+// It is worst looking east from St-Cloud because that is where all of them are
+// — "the framerate problems occur when i look toward paris... must be all the
+// buildings etc over that way", which is exactly right.
+//
+// So: cull by distance, but SCALED BY SIZE, because the whole game is being
+// able to see the Eiffel Tower from the aerodrome five kilometres off. A thing
+// stays drawn while it is big enough in the view to be worth a draw call —
+// which keeps the Tower, the Trocadéro and the two Palais, and drops the
+// window-boxes of Passy from four kilometres away.
+//
+// The ground itself, the river, the roads and the sky are exempt: they are
+// already single meshes covering everything, and they carry `noLift` for the
+// same reason (see liftToTerrain).
+// Seen from anywhere: `userData.vrFar`, set by the world on the things a pilot
+// navigates by. NOT a size heuristic — I wrote one of those first, measuring
+// each object's bounding box, and could not test it at all: the headless three
+// stub returns the same box for everything, so the numbers it produced were
+// fiction and the real rule culled the Eiffel Tower from the aerodrome. The
+// world knows which of its objects are monuments. Let it say so.
+const KEEP_NEAR = 900;
+
+let cullScene = null, cullList = null;
+
+/** Forget the list — the world has been rebuilt. */
+export function resetCull() { cullScene = null; cullList = null; }
+
+/**
+ * Hide the near-field scenery you have flown past. One squared distance per
+ * top-level object; the ground, the river, the roads and the sky are exempt
+ * (they are single meshes covering everything and carry `noLift`), and so is
+ * anything the world marked `vrFar`.
+ */
+export function cullForVR(from, scene) {
+  if (!enabled || !scene) return 0;
+  if (cullScene !== scene) {
+    cullScene = scene;
+    cullList = [];
+    for (const o of scene.children) {
+      if (!o || !o.position || o === rig) continue;
+      const u = o.userData || {};
+      if (u.noLift || u.vrFar) continue;
+      if (o.isLight || o.isCamera) continue;
+      cullList.push(o);
+    }
+  }
+  let hidden = 0;
+  for (const o of cullList) {
+    const dx = o.position.x - from.x, dz = o.position.z - from.z;
+    const on = dx * dx + dz * dz < KEEP_NEAR * KEEP_NEAR;
+    if (o.visible !== on) o.visible = on;
+    if (!on) hidden++;
+  }
+  return hidden;
+}
+
+/** Put everything back when the headset comes off. */
+export function uncull() {
+  if (!cullList) return;
+  for (const o of cullList) o.visible = true;
 }
 
 // ---------------------------------------------------------------- the menu
@@ -182,6 +341,7 @@ function ensureMenuBoard() {
 /** Hand the flat menu's own buttons over. `items` is [{label, sub, onClick}]. */
 export function setMenu(items, title) {
   menuItems = items || [];
+  while (menuItems[menuIndex] && menuItems[menuIndex].head) menuIndex++;
   if (menuIndex >= menuItems.length) menuIndex = Math.max(0, menuItems.length - 1);
   drawMenu(title);
 }
@@ -199,7 +359,7 @@ export function menuShowing() { return menuOn; }
 function drawMenu(title) {
   if (!menuCanvas) return;
   const key = menuIndex + '|' + menuItems.length + '|'
-    + menuItems.map((i) => i.label).join('~') + '|' + (title || '');
+    + menuItems.map((i) => i.label || i.head).join('~') + '|' + (title || '');
   if (key === menuKey) return;                 // no upload unless something moved
   menuKey = key;
   const g = menuCanvas.getContext('2d');
@@ -224,6 +384,14 @@ function drawMenu(title) {
     if (i >= menuItems.length) break;
     const it = menuItems[i];
     const y = 140 + k * rowH;
+    if (it.head) {
+      g.fillStyle = '#e8c477';
+      g.font = 'bold 23px Georgia, serif';
+      g.fillText(it.head, 34, y - 4);
+      g.strokeStyle = 'rgba(232,196,119,0.35)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(34, y + 16); g.lineTo(W - 34, y + 16); g.stroke();
+      continue;
+    }
     if (i === menuIndex) {
       g.fillStyle = 'rgba(232,196,119,0.20)';
       g.fillRect(24, y - 30, W - 48, rowH - 8);
@@ -253,8 +421,11 @@ function menuNav(sy, press) {
   if (Math.abs(sy) < 0.55) stickLatch = 0;
   else if (!stickLatch) {
     stickLatch = 1;
-    menuIndex = Math.max(0, Math.min(menuItems.length - 1,
-      menuIndex + (sy > 0 ? 1 : -1)));
+    // step OVER the headings — they are signposts, not choices
+    const dir = sy > 0 ? 1 : -1;
+    let n = menuIndex;
+    do { n += dir; } while (menuItems[n] && menuItems[n].head);
+    if (n >= 0 && n < menuItems.length) menuIndex = n;
     drawMenu();
     rumble(0.25, 20);
   }

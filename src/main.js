@@ -78,6 +78,7 @@ vr.initVR(renderer, camera, {
   onCamera: () => cycleCamera(),
   onMenu: () => toggleMenu(),
   onStart: () => {
+    stillWater(true);
     // stand in the basket, whatever view you were in, and put the slate up
     if (camMode !== 1) cycleCameraTo(1);
     if (ship) ship.showPanel(true);
@@ -87,6 +88,8 @@ vr.initVR(renderer, camera, {
     if (menuOpen) buildMenuButtons();
   },
   onEnd: () => {
+    vr.uncull();
+    stillWater(false);
     vr.showMenu(false);
     if (ship) ship.showPanel(false);
     document.body.classList.remove('in-vr');
@@ -553,9 +556,11 @@ function loadWorld(loc) {
   scenario = null;
   scene = new THREE.Scene();
   vr.attachTo(scene);
+  vr.resetCull();          // sizes are measured per world
   world = loc === 'paris' ? buildWorld(scene)
     : loc === 'monaco' ? buildWorldMonaco(scene)
     : buildWorldStLouis(scene);
+  if (vr.inVR()) stillWater(true);        // the new world's water must not reflect either
   startRing = makeRing(0xd9b24a); startRing.position.copy(world.startRing);
   track = null;
   buildRings(historicTrack().gates, world.startRing);
@@ -1011,7 +1016,17 @@ function toggleMenu(force) {
 // headset's board gets its list — one funnel, and a button added to the flat
 // menu appears in VR without anybody remembering to add it twice.
 let vrMenuItems = [];
+// The flat menu groups its buttons by putting them in different columns of the
+// page — ships here, places there, courses in a third. A board that flattens
+// all of that into one list of forty rows is exactly as confusing as it sounds,
+// which is what a pilot found. So carry the grouping across.
+const VR_SECTIONS = {
+  menuShips: 'THE SHIPS', menuPlaces: 'WHERE TO FLY', menuOpts: 'THE SHIP AND THE SKY',
+  menuTracks: 'COURSES, TRIALS AND GAMES', menuRooms: 'FLYING TOGETHER',
+};
 function menuButton(parent, label, sub, onClick, current) {
+  const sect = VR_SECTIONS[parent && parent.id] || '';
+  if (sect && sect !== vrMenuSection) { vrMenuSection = sect; vrMenuItems.push({ head: sect }); }
   vrMenuItems.push({ label, sub, onClick, current });
   const b = document.createElement('button');
   b.innerHTML = label + (sub ? ` <small>— ${sub}</small>` : '');
@@ -1019,8 +1034,9 @@ function menuButton(parent, label, sub, onClick, current) {
   b.onclick = onClick;
   parent.appendChild(b);
 }
+let vrMenuSection = '';
 function buildMenuButtons() {
-  vrMenuItems = [];
+  vrMenuItems = []; vrMenuSection = '';
   const shipsDiv = document.getElementById('menuShips');
   const optsDiv = document.getElementById('menuOpts');
   const placeDiv = document.getElementById('menuPlaces');
@@ -3485,7 +3501,7 @@ function frame(now) {
   tickGames(dt);
   updateCamera(dt);
   updateHUD();
-  if (vr.inVR()) vrPanel();
+  if (vr.inVR()) { vrPanel(); vr.cullForVR(ship.pos, scene); }
   // the blocks above change size as the wind, the trial and the roster change:
   // re-stack a few times a second rather than every frame
   hudTick += dt;
@@ -3493,6 +3509,33 @@ function frame(now) {
   drawThrottleLever();
   updateAudio();
   draw();
+}
+
+// THE WATER STOPS REFLECTING IN A HEADSET, and this is the important half of
+// the frame budget.
+//
+// three's Water is a Reflector: every frame it renders the WHOLE SCENE again,
+// from a mirrored camera, into its own target — and to do that it calls
+// renderer.setRenderTarget() and then puts it back. Inside an XR frame that is
+// two things at once. It is a third full pass of a world with fifteen thousand
+// buildings on it, and it rebinds the framebuffer the session is drawing into,
+// which is exactly how you get a picture that is right in one eye and wrong in
+// the other: "flickering that seems to be in one eye".
+//
+// onBeforeRender is what Water does its reflection in, so taking it away stops
+// the extra pass and the rebinding both. The waves, the sun glitter and the
+// colour are all still there — the mirror simply stops being repainted.
+let waterHooks = null;
+function stillWater(on) {
+  if (!world || !world.waters) return;
+  if (on) {
+    if (waterHooks) return;
+    waterHooks = world.waters.map((w) => w.onBeforeRender);
+    for (const w of world.waters) w.onBeforeRender = () => {};
+  } else if (waterHooks) {
+    world.waters.forEach((w, i) => { w.onBeforeRender = waterHooks[i]; });
+    waterHooks = null;
+  }
 }
 
 // ---------------------------------------------------------------- drawing
