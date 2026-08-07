@@ -330,16 +330,46 @@ export class Airship {
       post.position.set(bx, -drop + 0.28, 0);
       this.pitchGroup.add(post);
       this.basketMesh = saddle;
+      // The No. 4 has no basket at all — a bicycle saddle amid the spider web.
+      // A pilot in a headset is standing in his own room whatever the ship is
+      // doing, so the floor is set a CROTCH below the saddle: he finds it at
+      // hip height, where a man sitting a bicycle finds it, and his head comes
+      // a torso above it rather than a whole standing height.
+      this.deckPoint = new THREE.Object3D();
+      this.deckPoint.position.set(bx, -drop + 0.55 - 0.80, 0);
+      this.pitchGroup.add(this.deckPoint);
     } else {
+      // A BASKET YOU CAN STAND IN. This was one solid BoxGeometry, which is
+      // fine from outside and absurd from within: in a headset the pilot stood
+      // on the underside of a block with his legs buried in it. Wicker is a
+      // floor and four walls, so it is built as a floor and four walls, and the
+      // deck he stands on is the top face of that floor.
       const big = K.type === 'basket-long' ? 1.15 : 1;
-      const basket = new THREE.Mesh(new THREE.BoxGeometry(1.2 * big, 1.1 * big, 1.0 * big), wicker);
-      basket.position.set(bx, -drop - 0.5, 0);
+      const W = 1.2 * big, H = 1.1 * big, D = 1.0 * big;
+      const T = 0.055 * big;                      // the thickness of the weave
+      const cy = -drop - 0.5;                     // the box's own centre
+      const basket = new THREE.Group();
+      basket.position.set(bx, cy, 0);
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(W, T, D), wicker);
+      floor.position.y = -H / 2 + T / 2;
+      basket.add(floor);
+      for (const [w, d, x, z] of [[T, D, (W - T) / 2, 0], [T, D, -(W - T) / 2, 0],
+                                  [W, T, 0, (D - T) / 2], [W, T, 0, -(D - T) / 2]]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w, H - T, d), wicker);
+        wall.position.set(x, T / 2, z);
+        basket.add(wall);
+      }
+      basket.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       this.pitchGroup.add(basket);
       this.basketMesh = basket;
       const rim = new THREE.Mesh(new THREE.BoxGeometry(1.34 * big, 0.1, 1.14 * big),
         new THREE.MeshLambertMaterial({ color: 0x6f5a3a }));
       rim.position.set(bx, -drop + 0.05 * big, 0);
       this.pitchGroup.add(rim);
+      // where his boots actually are: the top of the floor he is standing on
+      this.deckPoint = new THREE.Object3D();
+      this.deckPoint.position.set(bx, cy - H / 2 + T, 0);
+      this.pitchGroup.add(this.deckPoint);
     }
 
     // ---- the operating position (B7: wheel, carburating lever, spark lever;

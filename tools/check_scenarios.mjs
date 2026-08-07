@@ -357,6 +357,23 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       }
     }
     console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
+    // ...and the city itself stands down for a block-sized stand-in
+    const { OSM_BUILDINGS } = await import('../src/paris_buildings.js');
+    const { PARIS_BLOCKS } = await import('../src/paris_blocks.js');
+    const ratio = PARIS_BLOCKS.length / OSM_BUILDINGS.length;
+    console.log('   ' + OSM_BUILDINGS.length + ' footprints stand in as '
+      + PARIS_BLOCKS.length + ' blocks in a headset ('
+      + (1 / ratio).toFixed(1) + 'x less geometry)');
+    if (ratio > 0.35) { console.log('   FAIL the blocks are barely a saving'); fails++; }
+    else if (PARIS_BLOCKS.length < 600) {
+      console.log('   FAIL too few blocks — connectivity has leaked across the streets');
+      fails++;
+    } else {
+      const longest = PARIS_BLOCKS.map((b) => Math.max(b[2], b[3])).sort((a, b) => a - b);
+      const med = longest[Math.floor(longest.length / 2)];
+      console.log('   ok   median block ' + med.toFixed(0)
+        + ' m on its longest side (a Haussmann block runs 60-120)');
+    }
     if (drawn > total * 0.55) { console.log('   FAIL the cull is not buying enough'); fails++; }
     else console.log('   ok   the cull takes it down to ' + Math.round(drawn / total * 100) + '%');
     let missing = [];

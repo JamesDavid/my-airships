@@ -79,6 +79,7 @@ vr.initVR(renderer, camera, {
   onMenu: () => toggleMenu(),
   onStart: () => {
     stillWater(true);
+    swapCityForVR(true);
     // stand in the basket, whatever view you were in, and put the slate up
     if (camMode !== 1) cycleCameraTo(1);
     if (ship) ship.showPanel(true);
@@ -89,6 +90,7 @@ vr.initVR(renderer, camera, {
   },
   onEnd: () => {
     vr.uncull();
+    swapCityForVR(false);
     stillWater(false);
     vr.showMenu(false);
     if (ship) ship.showPanel(false);
@@ -560,7 +562,7 @@ function loadWorld(loc) {
   world = loc === 'paris' ? buildWorld(scene)
     : loc === 'monaco' ? buildWorldMonaco(scene)
     : buildWorldStLouis(scene);
-  if (vr.inVR()) stillWater(true);        // the new world's water must not reflect either
+  if (vr.inVR()) { stillWater(true); swapCityForVR(true); }   // and for a world arrived at IN a headset
   startRing = makeRing(0xd9b24a); startRing.position.copy(world.startRing);
   track = null;
   buildRings(historicTrack().gates, world.startRing);
@@ -3128,9 +3130,10 @@ function updateCamera(dt) {
   // the pilot's own leaning and looking ride on top of that. Anything else here
   // would fight the headset and make people ill.
   if (vr.inVR()) {
-    const eye = new THREE.Vector3();
+    const eye = new THREE.Vector3(), deck = new THREE.Vector3();
     (view.eyePoint || view.basketMesh).getWorldPosition(eye);
-    vr.seatIn(eye, view.yaw);
+    (view.deckPoint || view.eyePoint || view.basketMesh).getWorldPosition(deck);
+    vr.seatIn(deck, view.yaw, eye);
     return;
   }
   const fwd = new THREE.Vector3(Math.cos(view.yaw), 0, -Math.sin(view.yaw));
@@ -3525,6 +3528,18 @@ function frame(now) {
 // onBeforeRender is what Water does its reflection in, so taking it away stops
 // the extra pass and the rebinding both. The waves, the sun glitter and the
 // colour are all still there — the mirror simply stops being repainted.
+// The detailed city stands down in a headset and its block stand-in takes over
+// — a sixth of the geometry for the same skyline. Marked at build time
+// (userData.flatOnly / vrOnly) so nothing here has to know what a city is.
+function swapCityForVR(on) {
+  if (!scene) return;
+  for (const o of scene.children) {
+    const u = o.userData || {};
+    if (u.flatOnly) o.visible = !on;
+    else if (u.vrOnly) o.visible = on;
+  }
+}
+
 let waterHooks = null;
 function stillWater(on) {
   if (!world || !world.waters) return;

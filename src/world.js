@@ -39,6 +39,7 @@ import { WALL_RUNS, WALL } from './paris_wall.js';
 import { PONT, AVRE, CHURCH, PARK, LONGCHAMP as LC_REAL, AUTEUIL as AU_REAL } from './paris_stcloud.js';
 import { LANDMARKS } from './paris_landmarks.js';
 import { OSM_BUILDINGS } from './paris_buildings.js';
+import { PARIS_BLOCKS } from './paris_blocks.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
 // Many randomized-phase wave trains at mixed scales — no visible sine tiling.
@@ -2496,13 +2497,34 @@ function buildCity(scene, riverPts) {
     }
   }
 
-  addBuildingMeshes(scene, list);
+  const cityMeshes = addBuildingMeshes(scene, list);
+
+  // ---- and the same city as one box per block, for the headset ----
+  // Twelve thousand instanced boxes is only a few draw calls, so it is not the
+  // draw calls that hurt: it is ~600k vertices an eye, 108 million a second at
+  // ninety hertz, which is about all a mobile chip has — and the overdraw of a
+  // thousand little boxes standing behind one another is worse. These 1,907
+  // blocks carry the same silhouette for a sixth of the geometry. Built once,
+  // hidden, and swapped in when a headset starts (src/vr.js).
+  const blockList = PARIS_BLOCKS.map(([bx, bz, bw, bl, bry, bh]) => ({
+    x: bx, z: bz, w: bl, d: bw, h: bh,
+    rw: bl, rd: bw, ry: bry, r: ((bx * 7 + bz * 13) % 1000) / 1000, nChim: 0,
+  }));
+  const blockMeshes = addBuildingMeshes(scene, blockList) || [];
+  for (const m of blockMeshes) {
+    if (!m) continue;
+    m.visible = false;
+    m.userData.vrOnly = true;
+    m.userData.vrFar = true;                 // a city seen from across the city
+  }
+  for (const m of (cityMeshes || [])) if (m) m.userData.flatOnly = true;
 
   // the Exposition pavilions of 1900 line both quays near the Tower
   addExpoPavilions(scene, riverPts, list, rand);
   return list;
 }
 
+/** Builds the instanced city and RETURNS its meshes, so a caller can swap them. */
 export function addBuildingMeshes(scene, list, colorOf) {
   const n = list.length;
   const bodyGeo = new THREE.BoxGeometry(1, 1, 1); bodyGeo.translate(0, 0.5, 0);
@@ -2550,6 +2572,7 @@ export function addBuildingMeshes(scene, list, colorOf) {
   roof.castShadow = roof.receiveShadow = true;
   chim.castShadow = true;
   scene.add(body, roof, chim);
+  return [body, roof, chim];
 }
 
 // the white pavilions of the 1900 Exposition, domed, along the riverfront

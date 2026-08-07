@@ -200,42 +200,34 @@ export async function offerVR(mount, onEnter) {
  * The headset's own translation rides on top, which is what makes leaning
  * toward the barometer work.
  */
-// How high the modelled eye is above the basket floor: the basket box is 1.1 m
-// tall centred 0.5 below the keel drop, so its deck is 1.6 m under eyePoint —
-// a man standing in it. That is the number this whole thing turns on.
-const EYE_OVER_DECK = 1.6;
 let floorFix = null;          // measured once a session: does the space have a floor?
 let headMax = 0, seatFrames = 0;
 let shadowWas = null;
 
-export function seatIn(eye, yaw) {
+/**
+ * Put the pilot in the basket. `deck` is the top of the floor he stands on —
+ * the ship's own deckPoint — and `eye` is where a standing man's eyes would be,
+ * used only where the runtime gives no floor. `yaw` is her heading, so forward
+ * is over the bow and turning the ship turns the world about you.
+ *
+ * SEAT THE DECK, NOT THE EYE. With a local-floor reference space WebXR reports
+ * the head at the pilot's own standing height above the physical floor. Putting
+ * the rig at the modelled eye stacked one on the other and left him hanging a
+ * metre and a half over the ship looking down into it — "I am like sitting 3-5
+ * feet above the basket, not in the basket". The headset supplies the man; a
+ * tall pilot sees further over the rim than a short one, which is right.
+ */
+export function seatIn(deck, yaw, eye) {
   if (!rig || !camera) return;
-  // SEAT THE DECK, NOT THE EYE.
-  //
-  // With a local-floor reference space WebXR reports the head at the user's own
-  // standing height above the physical floor. Putting the rig at the modelled
-  // eye therefore stacked one on the other and left the pilot hanging a metre
-  // and a half over the basket looking down into it — "I am like sitting 3-5
-  // feet above the basket, not in the basket", and 1.6 m is 5 feet 3.
-  //
-  // So the rig goes on the DECK and the headset supplies the man. A tall pilot
-  // sees further over the rim than a short one, which is right.
-  //
-  // Not every runtime grants local-floor. If the space turns out to have its
-  // origin at the head instead, the camera sits at about zero in rig space and
-  // the pilot would be standing on the floor of the basket with his eyes at his
-  // boots; measure it once and put the height back by hand.
   // Decided over a second, not on the first frame — on frame one the pose may
   // not have been written yet, and latching a correction off that zero would
-  // put the pilot right back up in the air where he started. Until it settles
-  // we assume the local-floor we asked for, which is the safe way to be wrong:
-  // too low for a moment rather than floating over the ship.
+  // put the pilot right back up in the air. Until it settles we assume the
+  // local-floor we asked for: too low for a moment rather than floating.
   if (floorFix === null && enabled) {
     headMax = Math.max(headMax, camera.position.y || 0);
-    if (++seatFrames > 60) floorFix = headMax > 0.8 ? 0 : EYE_OVER_DECK;
+    if (++seatFrames > 60) floorFix = headMax > 0.8;
   }
-  rig.position.copy(eye);
-  rig.position.y -= EYE_OVER_DECK - (floorFix || 0);
+  rig.position.copy(floorFix === false && eye ? eye : deck);
   rig.rotation.y = yaw;
 }
 
