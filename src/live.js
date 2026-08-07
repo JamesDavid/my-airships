@@ -601,6 +601,11 @@ function buildMesh(r) {
       if (o.material.color) o.material.color.lerp(new THREE.Color(0x6fa8c4), 0.35);
     }
   });
+  // AND SOMEBODY IS FLYING HER. After the tint, deliberately: a rival's ship
+  // is washed toward blue so the two never read as the same machine in a close
+  // finish, and a blue man does not. An empty basket going past reads as a
+  // runaway rather than as the pilot whose name is on the label above it.
+  r.mesh.addCrew();
   if (r.mesh.ropeLine) r.mesh.ropeLine.visible = false;   // no rope physics for a remote
   r.label = makeLabel(r.pilot);
   scene.add(r.label);

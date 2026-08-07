@@ -174,6 +174,43 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('SOMEBODY IS FLYING THE OTHER SHIP');
+  console.log('   A remote pilot\'s ship used to go past with nobody aboard, which');
+  console.log('   reads as a runaway rather than as the pilot whose name is on the');
+  console.log('   label over it. He stands on the deck point, so he has to clear the');
+  console.log('   balloon over his head on every hull in the fleet — the No. 9 is a');
+  console.log('   runabout with the envelope close down on the basket.');
+  console.log('');
+  for (const [id, spec] of Object.entries(SHIPS)) {
+    const sh = makeShip(id);
+    const fig = sh.addCrew();
+    const HEAD = 1.80;                       // the top of his hat, above his boots
+    const deck = sh.deckPoint.position.y;
+    const head = deck + HEAD;
+    const roof = -spec.envelope.diameter / 2;             // the balloon over him
+    const feetOk = fig && Math.abs(fig.position.y - deck) < 1e-9;
+    const clear = roof - head;
+    // ...and he may be put aboard once. A second call on the same ship would
+    // stack a man inside a man.
+    const onceOnly = sh.addCrew() === null;
+    const ok = !!fig && feetOk && clear > 0.1 && onceOnly;
+    if (!ok) fails++;
+    console.log('   %s  %s  head %s m, balloon %s m — %s m of daylight%s%s',
+      ok ? 'ok  ' : 'FAIL', id.padEnd(13),
+      head.toFixed(2).padStart(6), roof.toFixed(2).padStart(6), clear.toFixed(2).padStart(5),
+      feetOk ? '' : '   FEET NOT ON THE DECK', onceOnly ? '' : '   CREWED TWICE');
+  }
+  // and never in your OWN basket: in a headset that is a man you are standing
+  // inside of. The only caller is the one that builds somebody else's ship.
+  {
+    const src = await (await import('node:fs/promises')).readFile('src/main.js', 'utf8');
+    const ok = !/\.addCrew\s*\(/.test(src);
+    if (!ok) fails++;
+    console.log('   %s  main.js never crews the ship you are flying yourself',
+      ok ? 'ok  ' : 'FAIL');
+  }
+
+  console.log('');
   console.log('SHIP SPEEDS AGAINST THE ONES HE WROTE DOWN');
   console.log('   Ch. XIII, the No. 5 round Longchamps with Maurice Farman keeping');
   console.log('   pace in his motor-car: "between 26 and 30 kilometres per hour with');

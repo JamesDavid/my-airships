@@ -137,6 +137,59 @@ function placard(parent, text, x, y, z, ry) {
   return m;
 }
 
+/**
+ * A MAN IN THE BASKET.
+ *
+ * Only ever for a ship somebody ELSE is flying — your own basket has you in
+ * it, and in a headset a figure at your own deck point is a figure you are
+ * standing inside of. A remote pilot's ship used to fly past with nobody
+ * aboard, which reads as a runaway rather than as a person you are racing.
+ *
+ * Built facing forward (+X, the way the ship goes) with his origin at his
+ * boots, so it drops straight onto deckPoint. He is deliberately plain: this
+ * is seen from tens of metres across the sky, and a rough silhouette in the
+ * right clothes carries further than detail nobody can resolve. The hat is a
+ * panama, which is what Santos-Dumont wore aloft and what he beat the No. 9's
+ * petrol fire out with (Ch. XXII).
+ *
+ * No arms reaching for the controls: a remote ship's tiller is interpolated
+ * from an 8 Hz packet and hands that miss it by a hand's breadth look worse
+ * than hands at rest.
+ */
+function makeAeronaut() {
+  const g = new THREE.Group();
+  const cloth = new THREE.MeshLambertMaterial({ color: 0x3a3832 });   // dark jacket
+  const trous = new THREE.MeshLambertMaterial({ color: 0x4b4740 });
+  const linen = new THREE.MeshLambertMaterial({ color: 0xe6dfcd });   // collar
+  const skin  = new THREE.MeshLambertMaterial({ color: 0xc79a74 });
+  const straw = new THREE.MeshLambertMaterial({ color: 0xe0cd9e });   // the panama
+  const add = (mesh, x, y, z) => { mesh.position.set(x, y, z); g.add(mesh); return mesh; };
+
+  // He stands 1.72 m in his boots. The basket floor is a metre below its rim,
+  // so that puts his head and shoulders over the weave and his legs inside it,
+  // which is how every photograph of him aloft looks.
+  for (const s of [-1, 1]) {
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.86, 6), trous),
+      0, 0.43, s * 0.10);
+  }
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.17, 0.62, 8), cloth), 0, 1.16, 0);
+  // arms down at his sides, close in to the coat
+  for (const s of [-1, 1]) {
+    const arm = add(new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.58, 6), cloth),
+      0, 1.13, s * 0.21);
+    arm.rotation.x = s * 0.10;
+  }
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.05, 8), linen), 0, 1.49, 0);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.09, 6), skin), 0, 1.55, 0);
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.098, 8, 7), skin), 0, 1.66, 0);
+  // the panama: a low crown and a brim
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.09, 10), straw), 0, 1.74, 0);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.185, 0.012, 12), straw), 0, 1.70, 0);
+
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
 // the engraved placard under the two levers, read from the pilot's seat
 function makeLeverPlate() {
   const c = document.createElement('canvas');
@@ -1740,6 +1793,24 @@ export class Airship {
     this.wrecked = true;
     this.throttle = 0;
     this.events.push('wreck:' + reason);
+  }
+
+  /**
+   * Put a man at the helm. FOR SOMEBODY ELSE'S SHIP ONLY — see makeAeronaut.
+   *
+   * He rides on pitchGroup at the deck point, so he leans with her and stands
+   * where her floor is, whatever keel she has. On the No. 4 there is no floor:
+   * the deck point there is set a crotch below the saddle, which is exactly
+   * where a man astride a bicycle frame has his feet, so standing is the right
+   * pose and no special case is needed.
+   */
+  addCrew() {
+    if (this.crew || !this.deckPoint || !this.pitchGroup) return null;
+    const fig = makeAeronaut();
+    fig.position.copy(this.deckPoint.position);
+    this.pitchGroup.add(fig);
+    this.crew = fig;
+    return fig;
   }
 
   dispose() {
