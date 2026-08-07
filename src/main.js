@@ -888,7 +888,10 @@ function pollInput() {
   // is driven toward them exactly as the touch UI's lever is.
   const g = vr.pollVR(ship);
   if (g) {
-    if (g.throttle !== 0) {
+    // a hand ON the carburating lever sets it outright — that is what a lever
+    // is — while the stick only nudges it, the way the touch slider does
+    if (g.throttleSet !== null) { touchThrottle = g.throttleSet; throttleLever = true; }
+    else if (g.throttle !== 0) {
       touchThrottle = Math.max(0, Math.min(1, touchThrottle + g.throttle * 0.9 * (1 / 60)));
       throttleLever = true;
     }
@@ -1000,7 +1003,6 @@ function layoutHud() {
 }
 addEventListener('resize', layoutHud);
 
-const MENU_TITLES = { solo: 'SOLO', together: 'TOGETHER', opts: 'THE SHIP AND THE SKY' };
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
   if (vr.inVR() && !menuOpen) vr.showMenu(false);
@@ -1025,23 +1027,27 @@ let vrMenuItems = [];
 // page — ships here, places there, courses in a third. A board that flattens
 // all of that into one list of forty rows is exactly as confusing as it sounds,
 // which is what a pilot found. So carry the grouping across.
-const VR_SECTIONS = {
-  menuShips: 'THE SHIPS', menuPlaces: 'WHERE TO FLY', menuOpts: 'THE SHIP AND THE SKY',
-  menuTracks: 'COURSES, TRIALS AND GAMES', menuRooms: 'FLYING TOGETHER',
+// ...and WHICH TAB it belongs to. The flat menu builds every pane and shows one
+// by CSS, so collecting them all gave the headset a single list of everything
+// the game can do — "having one big list in vr was too cluttered". These are
+// the same five tabs the page has.
+const VR_PANE = {
+  menuTracks: 'solo', menuRooms: 'together', menuShips: 'ship',
+  menuPlaces: 'place', menuOpts: 'options',
 };
+export const VR_TABS = [['solo', 'SOLO'], ['together', 'TOGETHER'],
+  ['ship', 'SHIP'], ['place', 'PLACE'], ['options', 'OPTIONS']];
 function menuButton(parent, label, sub, onClick, current) {
-  const sect = VR_SECTIONS[parent && parent.id] || '';
-  if (sect && sect !== vrMenuSection) { vrMenuSection = sect; vrMenuItems.push({ head: sect }); }
-  vrMenuItems.push({ label, sub, onClick, current });
+  vrMenuItems.push({ label, sub, onClick, current,
+    tab: VR_PANE[parent && parent.id] || 'solo' });
   const b = document.createElement('button');
   b.innerHTML = label + (sub ? ` <small>— ${sub}</small>` : '');
   if (current) b.classList.add('current');
   b.onclick = onClick;
   parent.appendChild(b);
 }
-let vrMenuSection = '';
 function buildMenuButtons() {
-  vrMenuItems = []; vrMenuSection = '';
+  vrMenuItems = [];
   const shipsDiv = document.getElementById('menuShips');
   const optsDiv = document.getElementById('menuOpts');
   const placeDiv = document.getElementById('menuPlaces');
@@ -1268,7 +1274,7 @@ function buildMenuButtons() {
   buildTogether();
   buildTabs();
   // ...and the same list to the headset's board
-  if (vr.inVR()) vr.showMenu(menuOpen, vrMenuItems, MENU_TITLES[menuTab] || 'MY AIRSHIPS');
+  if (vr.inVR()) vr.showMenu(menuOpen, vrMenuItems, menuTab);
 }
 
 // ---- the Together pane: the lobby before you are in a room, the room after

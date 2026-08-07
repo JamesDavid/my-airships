@@ -284,6 +284,16 @@ export class Airship {
 
   // ------------------------------------------------------------ mesh
   buildMesh() {
+    // EVERY FITTING A HAND CAN TAKE HOLD OF IN A HEADSET — the tiller, the two
+    // engine levers, the weights, the ballast and valve cords, the bell-ring.
+    //
+    // Declared FIRST, before a line of geometry exists. This array has been
+    // pushed to before it was created three separate times now, each time
+    // because a new fitting went in above wherever the declaration happened to
+    // sit — and each time it was not a subtle failure but every ship in the
+    // game failing to construct. There is nowhere above here left to go.
+    this.pullCords = [];
+
     const { envelope: E, keel: K, prop, rudderScale } = this.spec;
     this.group = new THREE.Group();
     this.pitchGroup = new THREE.Group();
@@ -448,6 +458,15 @@ export class Airship {
       this.wheel.position.set(bx + 0.74, -drop + 0.26, 0);
       this.pitchGroup.add(this.wheel);
       this.tillerHalf = HALF;
+      // BOTH GRIPS ARE FITTINGS, so you steer by taking hold of the tiller and
+      // moving it, which is how a tiller is steered: "push one end away and
+      // pull the other back and the rudder swings". Registered at the grips
+      // rather than the pivot, because that is where a hand goes.
+      for (const [id2, sz] of [['tillerP', 1], ['tillerS', -1]]) {
+        this.pullCords.push({ id: id2, mesh: this.wheel, lever: true,
+          offset: new THREE.Vector3(0, 0, sz * (HALF - 0.05)),
+          side: sz, rest: null, pulled: 0 });
+      }
 
       // the two cords, laid out afresh each frame: both ends move, and so does
       // the rudder they pull on
@@ -515,12 +534,6 @@ export class Airship {
     compass.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(compass);
 
-    // Everything in the basket a hand can take hold of in a headset: the two
-    // cords below, and ALLUM. The array is declared HERE because the levers are
-    // built before the cords are, and a push onto an undefined array is not a
-    // subtle failure — it is every ship in the game failing to construct.
-    this.pullCords = [];
-
     // carburating + spark levers on a brass quadrant beside the compass —
     // the carburating lever IS the throttle indicator, leaning forward as you open it
     this.carbLever = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.3, 5), brass);
@@ -532,18 +545,24 @@ export class Airship {
     this.sparkLever = this.carbLever.clone();
     if (prop !== 'none') {
       const quadrant = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.2), wood);
-      quadrant.position.set(bx + 0.48, -drop + 0.18, 0.38);
+      quadrant.position.set(bx + 0.48, -drop + 0.18, 0.37);
       this.pitchGroup.add(quadrant);
       // the engraved plate naming the two levers, facing the operator
       if (!LEVER_PLATE) LEVER_PLATE = makeLeverPlate();
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.04),
         new THREE.MeshLambertMaterial({ map: LEVER_PLATE, emissive: 0x4a453c }));
       plate.rotation.y = -Math.PI / 2;
-      plate.position.set(bx + 0.398, -drop + 0.18, 0.38);
+      plate.position.set(bx + 0.398, -drop + 0.18, 0.37);
       this.pitchGroup.add(plate);
-      this.carbLever.position.set(bx + 0.48, -drop + 0.2, 0.33);
+      // 0.22 m apart, not 0.10. They sat inside one another's grab radius, so
+      // a hand laid exactly on CARB. still found ALLUM. as the nearer FITTING —
+      // because CARB. was not a fitting at all, and the nearest thing that was
+      // sat four inches away: "i cant grip the carb handle, it always jiggles
+      // the alum handle only when i reach over there and grab even if my hand
+      // is dead bang on the carb lever".
+      this.carbLever.position.set(bx + 0.48, -drop + 0.2, 0.26);
       this.pitchGroup.add(this.carbLever);
-      this.sparkLever.position.set(bx + 0.48, -drop + 0.2, 0.43);
+      this.sparkLever.position.set(bx + 0.48, -drop + 0.2, 0.48);
       this.pitchGroup.add(this.sparkLever);
       // THE SHIFTING WEIGHTS, on their own quadrant to port.
       //
@@ -579,6 +598,11 @@ export class Airship {
         this.pullCords.push({ id: 'trim', mesh: trim, lever: true,
           offset: new THREE.Vector3(0, 0.3, 0), rest: null, pulled: 0 });
       }
+
+      // CARB. is a fitting too, and a HELD one: it is the throttle, and the
+      // whole point of a carburating lever is that you set it and it stays.
+      this.pullCords.push({ id: 'carb', mesh: this.carbLever, lever: true,
+        offset: new THREE.Vector3(0, 0.3, 0), rest: null, pulled: 0 });
 
       // ALLUM. is grabbable too. It is the lever you work when she sputters —
       // "cords... for striking the motor's electric spark" (Ch. XI) — and in a
@@ -634,7 +658,11 @@ export class Airship {
         ring.rotation.x = Math.PI / 2;
         ring.position.copy(bot).y += 0.075;
         this.pitchGroup.add(ring);
-        placard(this.pitchGroup, id === 'ballast' ? 'LEST' : 'SOUPAPE',
+        // A SINGLE LETTER. LEST and SOUPAPE are the right words and the wrong
+        // size: at arm's length on a plate the width of a hand they are a
+        // smudge. B for ballast, V for the valve, big enough to read at a
+        // glance while you are busy flying.
+        placard(this.pitchGroup, id === 'ballast' ? 'B' : 'V',
           bot.x + 0.10, bot.y + 0.20, bot.z);
         this.pullCords.push({ id, mesh: tog, rest: bot.clone(), pulled: 0 });
       }

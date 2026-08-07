@@ -302,7 +302,7 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
       // ALLUM. is only fitted where there is a motor to light
       const want = sh.spec.prop === 'none' ? ['ballast', 'vent', 'menu']
-        : ['ballast', 'vent', 'spark', 'menu', 'trim'];
+        : ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb'];
       const got = {};
       for (const c of want) {
         const p2 = sh.cordAt(c);
@@ -323,14 +323,45 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       if (pm.x - eye.x < 0.05) behind++;
     }
     console.log('   furthest fitting ' + worstCord.toFixed(2) + ' m from the eye; '
-      + 'closest two ' + nearest.toFixed(2) + ' m apart (grab radius 0.16); '
+      + 'closest two ' + nearest.toFixed(2) + ' m apart (grab radius 0.10); '
       + 'slate at ' + worstSlate.toFixed(2) + ' m');
     if (missing) { console.log('   FAIL ' + missing + ' ships have no cords or no slate'); fails++; }
     else if (worstCord > 0.9) { console.log('   FAIL a cord is out of reach'); fails++; }
     else if (worstSlate < 0.35) { console.log('   FAIL the slate is too close to focus on'); fails++; }
     else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
-    else if (nearest < 0.32) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
-    else console.log('   ok   LEST, SOUPAPE, ALLUM., POIDS and CARNET all in reach and distinct');
+    // twice the grab radius in vr.js (0.10), so the nearer of any two fittings
+    // is always the one a hand is actually on. CARB. and ALLUM. are neighbours
+    // on one quadrant and were 0.10 m apart, which made CARB. unreachable.
+    else if (nearest < 0.20) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
+    else console.log('   ok   LEST, SOUPAPE, CARB., ALLUM., POIDS and CARNET in reach and distinct');
+
+    // ...and the test that matters: a hand laid ON a fitting must find THAT
+    // fitting. CARB. failed this without being close to anything — it was not
+    // registered at all, so a hand on it found ALLUM. four inches away.
+    let confused = [];
+    for (const id of Object.keys(SHIPS)) {
+      const sh = makeShip(id);
+      sh.reset({ x: 0, y: 100, z: 0 }, 0);
+      sh.updateTransforms(0);
+      for (const want2 of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb']) {
+        const at = sh.cordAt(want2);
+        if (!at) continue;
+        let best = null, bestD = Infinity;
+        for (const other of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb']) {
+          const p3 = sh.cordAt(other);
+          if (!p3) continue;
+          const d = at.distanceTo(p3);
+          if (d < bestD) { bestD = d; best = other; }
+        }
+        if (best !== want2) confused.push(id + ': ' + want2 + ' -> ' + best);
+      }
+    }
+    if (confused.length) {
+      console.log('   FAIL a hand on one control finds another: ' + confused[0]);
+      fails++;
+    } else {
+      console.log('   ok   a hand on any control finds that control, on every ship');
+    }
   }
 
   console.log('');

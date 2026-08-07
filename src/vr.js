@@ -49,10 +49,13 @@ function makeHand() {
 }
 
 // the controls, latched between frames like the ship's own levers
-const pad = { throttle: 0, rudder: 0, pitch: 0, vent: false, coax: false };
+const pad = { throttle: 0, rudder: 0, pitch: 0, vent: false, coax: false,
+  throttleSet: null };   // throttleSet: an absolute lever position, 0..1
 let ballastEdge = false, ventEdge = false, camEdge = false, menuEdge = false;
 let sparkEdge = false, sparkHeld = 0, menuPressEdge = false;
 let trimHand = -1, trimFrom = 0, trimBase = 0, trimHeldValue = 0;
+let carbHand = -1, carbFrom = 0, carbBase = 0, carbValue = 0;
+let helmHand = -1, helmFrom = 0, helmBase = 0, helmValue = 0;
 const pressed = new Set();
 
 /**
@@ -346,7 +349,10 @@ export function uncull() {
 // here without anyone remembering to add it twice.
 let menuMesh = null, menuTex = null, menuCanvas = null;
 let menuItems = [], menuIndex = 0, menuOn = false, menuKey = '';
-let stickLatch = 0;
+let stickLatch = 0, tabLatch = 0, menuTab = 'solo';
+const TABS = [['solo', 'SOLO'], ['together', 'TOGETHER'], ['ship', 'SHIP'],
+  ['place', 'PLACE'], ['options', 'OPTIONS']];
+const shown = () => menuItems.filter((i) => (i.tab || 'solo') === menuTab);
 
 function ensureMenuBoard() {
   if (menuMesh || !rig) return;
@@ -373,20 +379,20 @@ export function setMenu(items, title) {
   drawMenu(title);
 }
 
-export function showMenu(on, items, title) {
+export function showMenu(on, items, tab) {
   ensureMenuBoard();
   menuOn = !!on && enabled;
-  if (items) setMenu(items, title);
+  if (items) setMenu(items, tab);
   if (menuMesh) menuMesh.visible = menuOn;
-  if (menuOn) drawMenu(title);
+  if (menuOn) drawMenu();
 }
 
 export function menuShowing() { return menuOn; }
 
-function drawMenu(title) {
+function drawMenu() {
   if (!menuCanvas) return;
-  const key = menuIndex + '|' + menuItems.length + '|'
-    + menuItems.map((i) => i.label || i.head).join('~') + '|' + (title || '');
+  const rows = shown();
+  const key = menuTab + '|' + menuIndex + '|' + rows.map((i) => i.label).join('~');
   if (key === menuKey) return;                 // no upload unless something moved
   menuKey = key;
   const g = menuCanvas.getContext('2d');
@@ -396,68 +402,90 @@ function drawMenu(title) {
   g.fillRect(0, 0, W, H);
   g.strokeStyle = '#6b5a3e'; g.lineWidth = 5; g.strokeRect(8, 8, W - 16, H - 16);
   g.textBaseline = 'middle';
-  g.fillStyle = '#e8c477';
-  g.font = 'bold 34px Georgia, serif';
-  g.fillText(title || 'MY AIRSHIPS', 34, 52);
-  g.fillStyle = '#7a6b4e';
-  g.font = 'italic 20px Georgia, serif';
-  g.fillText('stick to choose · trigger to press · B to close', 34, 88);
 
-  // a window of eleven, so a long list scrolls instead of overflowing
-  const PER = 11, rowH = 74;
-  const first = Math.max(0, Math.min(menuIndex - 5, menuItems.length - PER));
+  // ---- the tab strip: the same five the page has ----
+  const tw = (W - 48) / TABS.length;
+  TABS.forEach(([id, name], i) => {
+    const x = 24 + i * tw, on = id === menuTab;
+    if (on) {
+      g.fillStyle = 'rgba(232,196,119,0.22)';
+      g.fillRect(x, 26, tw - 4, 46);
+    }
+    g.fillStyle = on ? '#f6e8c8' : '#7a6b4e';
+    g.font = (on ? 'bold ' : '') + '21px Georgia, serif';
+    g.textAlign = 'center';
+    g.fillText(name, x + tw / 2 - 2, 49);
+  });
+  g.textAlign = 'left';
+  g.strokeStyle = 'rgba(232,196,119,0.35)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(24, 78); g.lineTo(W - 24, 78); g.stroke();
+  g.fillStyle = '#7a6b4e';
+  g.font = 'italic 19px Georgia, serif';
+  g.fillText('stick left/right for the tabs · up/down to choose · grip to press', 26, 100);
+
+  if (!rows.length) {
+    g.fillStyle = '#8b7a5c';
+    g.font = 'italic 26px Georgia, serif';
+    g.fillText('nothing here just now', 34, 170);
+    menuTex.needsUpdate = true;
+    return;
+  }
+
+  // a window of ten, so a long tab scrolls instead of overflowing
+  const PER = 10, rowH = 76;
+  const first = Math.max(0, Math.min(menuIndex - 5, rows.length - PER));
   for (let k = 0; k < PER; k++) {
     const i = first + k;
-    if (i >= menuItems.length) break;
-    const it = menuItems[i];
-    const y = 140 + k * rowH;
-    if (it.head) {
-      g.fillStyle = '#e8c477';
-      g.font = 'bold 23px Georgia, serif';
-      g.fillText(it.head, 34, y - 4);
-      g.strokeStyle = 'rgba(232,196,119,0.35)'; g.lineWidth = 2;
-      g.beginPath(); g.moveTo(34, y + 16); g.lineTo(W - 34, y + 16); g.stroke();
-      continue;
-    }
+    if (i >= rows.length) break;
+    const it = rows[i];
+    const y = 156 + k * rowH;
     if (i === menuIndex) {
       g.fillStyle = 'rgba(232,196,119,0.20)';
       g.fillRect(24, y - 30, W - 48, rowH - 8);
       g.fillStyle = '#e8c477';
       g.fillText('▸', 34, y);
     }
-    g.fillStyle = i === menuIndex ? '#f6e8c8' : '#c3b391';
-    g.font = (i === menuIndex ? 'bold ' : '') + '30px Georgia, serif';
+    g.fillStyle = i === menuIndex ? '#f6e8c8' : (it.current ? '#c8b98a' : '#c3b391');
+    g.font = (i === menuIndex ? 'bold ' : '') + '29px Georgia, serif';
     g.fillText(String(it.label).slice(0, 34), 66, y - 8);
     if (it.sub) {
       g.fillStyle = '#8b7a5c';
-      g.font = 'italic 21px Georgia, serif';
-      g.fillText(String(it.sub).slice(0, 44), 66, y + 20);
+      g.font = 'italic 20px Georgia, serif';
+      g.fillText(String(it.sub).slice(0, 46), 66, y + 20);
     }
   }
-  if (menuItems.length > PER) {
+  if (rows.length > PER) {
     g.fillStyle = '#7a6b4e';
     g.font = '20px Georgia, serif';
-    g.fillText((menuIndex + 1) + ' of ' + menuItems.length, 34, H - 34);
+    g.fillText((menuIndex + 1) + ' of ' + rows.length, 34, H - 30);
   }
   menuTex.needsUpdate = true;
 }
 
 // stick navigation, latched so one push moves one row
-function menuNav(sy, press) {
+function menuNav(sy, press, sx) {
   if (!menuOn) return false;
+  // left and right walk the tabs, exactly as clicking them does on the page
+  if (Math.abs(sx) < 0.55) tabLatch = 0;
+  else if (!tabLatch) {
+    tabLatch = 1;
+    let t = TABS.findIndex(([id]) => id === menuTab);
+    t = Math.max(0, Math.min(TABS.length - 1, t + (sx > 0 ? 1 : -1)));
+    menuTab = TABS[t][0];
+    menuIndex = 0;
+    drawMenu();
+    rumble(0.3, 22);
+  }
+  const rows = shown();
   if (Math.abs(sy) < 0.55) stickLatch = 0;
   else if (!stickLatch) {
     stickLatch = 1;
-    // step OVER the headings — they are signposts, not choices
-    const dir = sy > 0 ? 1 : -1;
-    let n = menuIndex;
-    do { n += dir; } while (menuItems[n] && menuItems[n].head);
-    if (n >= 0 && n < menuItems.length) menuIndex = n;
+    menuIndex = Math.max(0, Math.min(rows.length - 1, menuIndex + (sy > 0 ? 1 : -1)));
     drawMenu();
     rumble(0.25, 20);
   }
   if (press) {
-    const it = menuItems[menuIndex];
+    const it = rows[menuIndex];
     if (it && it.onClick) { rumble(0.6, 45); it.onClick(); }
     return true;
   }
@@ -493,7 +521,10 @@ function menuNav(sy, press) {
 // grip awkward, and the sticks still fly her when no hand is holding anything.
 const DEAD = 0.12;
 const dz = (v) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
-const GRAB = 0.16;                 // how near the toggle a hand must be, in metres
+// How near a fitting a hand must be, in metres. Tighter than it was: the two
+// levers on the engine quadrant are neighbours by nature, and a radius wide
+// enough to cover both makes the nearer one unreachable.
+const GRAB = 0.10;
 
 const _hp = new THREE.Vector3(), _cp = new THREE.Vector3();
 
@@ -508,7 +539,8 @@ export function pollVR(ship) {
   pad.vent = false; pad.coax = false;
   let sawBallast = false, sawCam = false, sawMenu = false, sawSpark = false;
   reach.ballast = false; reach.vent = false; reach.spark = false;
-  reach.menu = false; reach.trim = false;
+  reach.menu = false; reach.trim = false; reach.carb = false; reach.tiller = false;
+  pad.throttleSet = null;
   let anyHeld = false;
 
   let i = -1;
@@ -528,7 +560,7 @@ export function pollVR(ship) {
 
     if (menuOn) {
       if (src.handedness === 'right' || session.inputSources.length === 1) {
-        menuNav(sy, hold && !menuPressEdge);
+        menuNav(sy, hold && !menuPressEdge, sx);
       }
       menuPressEdge = hold;
       if (bB) sawMenu = true;
@@ -541,7 +573,8 @@ export function pollVR(ship) {
     if (ctrl && ship && ship.cordAt && typeof ctrl.getWorldPosition === 'function') {
       ctrl.getWorldPosition(_hp);
       let best = GRAB;
-      for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim']) {
+      for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb',
+        'tillerP', 'tillerS']) {
         const cp = ship.cordAt(id, _cp);
         if (!cp) continue;
         const d = _hp.distanceTo(cp);
@@ -558,14 +591,42 @@ export function pollVR(ship) {
       const yaw = rig.rotation.y;
       const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
       if (trimHand !== i) { trimHand = i; trimFrom = along; trimBase = trimHeldValue; }
-      trimHeldValue = Math.max(-1, Math.min(1, trimBase + (along - trimFrom) / 0.16));
+      // BACK FOR UP, FORWARD FOR DOWN — which is also what the weights do:
+      // "pulling in the fore weight would cause the stem of the balloon to
+      // point diagonally upward" (Ch. VI), and you pull it in toward yourself.
+      trimHeldValue = Math.max(-1, Math.min(1, trimBase - (along - trimFrom) / 0.16));
       // the lever itself is driven from the ship's own `pitch` in
       // updateTransforms, so there is nothing to tell it here — one state, one
       // lever, and no second way to move it that could disagree
       anyHeld = true;
     } else if (trimHand === i && !hold) { trimHand = -1; }
 
-    if (hold && on && on !== 'trim') {
+    // THE TILLER. Take either grip and move it fore and aft: pushing the port
+    // grip forward is pulling the starboard one back, so the two sides read
+    // opposite and the helm goes over the same way whichever hand you use.
+    if ((on === 'tillerP' || on === 'tillerS') && hold) {
+      const yaw = rig.rotation.y;
+      const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
+      const side = on === 'tillerP' ? 1 : -1;
+      if (helmHand !== i) { helmHand = i; helmFrom = along; helmBase = helmValue; }
+      helmValue = Math.max(-1, Math.min(1, helmBase + side * (along - helmFrom) / 0.22));
+      anyHeld = true;
+    } else if (helmHand === i && !hold) {
+      helmHand = -1;
+      helmValue *= 0.0;          // let go and she steadies, like a lashed helm let slip
+    }
+
+    if (on === 'carb' && hold) {
+      const yaw = rig.rotation.y;
+      const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
+      if (carbHand !== i) { carbHand = i; carbFrom = along; carbBase = carbValue; }
+      carbValue = Math.max(0, Math.min(1, carbBase + (along - carbFrom) / 0.20));
+      pad.throttleSet = carbValue;
+      anyHeld = true;
+    } else if (carbHand === i && !hold) { carbHand = -1; }
+
+    if (hold && on && on !== 'trim' && on !== 'carb'
+        && on !== 'tillerP' && on !== 'tillerS') {
       anyHeld = true;
       if (on === 'ballast') sawBallast = true;
       else if (on === 'vent') pad.vent = true;
@@ -582,9 +643,10 @@ export function pollVR(ship) {
     if (bB) sawMenu = true;
   }
 
-  // the lever HOLDS ITS SETTING, like the helm and the carburating lever: the
-  // shifting weights stay where you put them until you move them again
+  // the lever HOLDS ITS SETTING, like the carburating lever: the shifting
+  // weights stay where you put them until you move them again
   if (trimHeldValue !== 0) pad.pitch = trimHeldValue;
+  if (helmHand >= 0) pad.rudder = helmValue;
 
   if (sawBallast && !ballastEdge) { VR_ACTIONS.ballast(); if (ship) ship.pullCord('ballast'); rumble(0.5, 45); }
   if (pad.vent && !ventEdge && ship) ship.pullCord('vent');
@@ -612,7 +674,8 @@ function handIndex(src, fallback) {
 }
 
 /** Is a hand on a cord or lever right now? Used to light the fitting up. */
-export const reach = { ballast: false, vent: false, spark: false, menu: false };
+export const reach = { ballast: false, vent: false, spark: false, menu: false,
+  trim: false, carb: false };
 
 /** A short buzz in both hands — a cord pulled, a gate passed, a wall touched. */
 export function rumble(strength = 0.4, ms = 60) {
