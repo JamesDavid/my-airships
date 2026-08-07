@@ -1033,9 +1033,13 @@ let vrMenuItems = [];
 // by CSS, so collecting them all gave the headset a single list of everything
 // the game can do — "having one big list in vr was too cluttered". These are
 // the same five tabs the page has.
+// THE REAL PANE IDS. I invented `menuRooms`, which does not exist, so every
+// button in the Together pane fell through the default and landed in Solo —
+// and Together showed "nothing here just now" while holding the whole roster.
 const VR_PANE = {
-  menuTracks: 'solo', menuRooms: 'together', menuShips: 'ship',
-  menuPlaces: 'place', menuOpts: 'options',
+  menuTracks: 'solo', menuScens: 'solo', menuGo: 'solo',
+  menuTogether: 'together', menuWho: 'together',
+  menuShips: 'ship', menuPlaces: 'place', menuOpts: 'options',
 };
 export const VR_TABS = [['solo', 'SOLO'], ['together', 'TOGETHER'],
   ['ship', 'SHIP'], ['place', 'PLACE'], ['options', 'OPTIONS']];

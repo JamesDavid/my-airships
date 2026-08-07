@@ -436,16 +436,9 @@ export class Airship {
       this.pitchGroup.add(this.deckPoint);
     }
 
-    // the panel itself: a board across the front of the basket carrying the
-    // compass, the barometer and (in a headset) the slate
-    {
-      const board = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.30, 0.70),
-        new THREE.MeshLambertMaterial({ color: 0x5d4a33 }));
-      board.position.set(bx + 0.665, -drop + 0.44, 0);
-      board.rotation.z = 0.18;                 // canted back toward the eye
-      board.castShadow = board.receiveShadow = true;
-      this.pitchGroup.add(board);
-    }
+    // NO BOARD BEHIND THE INSTRUMENTS. They have their own cases and stand on
+    // their own; a slab behind them was one more thing in a basket that is
+    // mostly things already.
 
     // ---- the operating position (B7: wheel, carburating lever, spark lever;
     //      plus barometer, compass, and the ballast sacks on the rim) ----
@@ -550,7 +543,12 @@ export class Airship {
     this.baroNeedle.geometry.translate(0, 0.036, 0);
     this.baroNeedle.position.x = -0.04;
     baro.add(this.baroNeedle);
-    baro.position.set(bx + 0.64, -drop + 0.44, -0.24);
+    // FORWARD OF THE CARBURATING LEVER'S THROW. It stands at bx +0.48 and its
+    // knob sweeps from x +0.32 to +0.58 as the throttle opens, and the gauges
+    // sat at +0.64 — six centimetres, with the compass at z +0.24 against the
+    // lever's own +0.26. They are at +0.74 now, level with the tiller's pivot
+    // and 0.16 m clear of the lever at full throttle.
+    baro.position.set(bx + 0.74, -drop + 0.44, -0.24);
     baro.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(baro);
 
@@ -580,7 +578,7 @@ export class Airship {
     this.compassNeedle.geometry.translate(0, 0.064, 0);
     this.compassNeedle.position.x = -0.04;
     compass.add(this.compassNeedle);
-    compass.position.set(bx + 0.64, -drop + 0.44, 0.24);
+    compass.position.set(bx + 0.74, -drop + 0.44, 0.24);
     compass.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(compass);
 
@@ -726,13 +724,12 @@ export class Airship {
       // for a trial, and the way out of the headset. Everything else in this
       // basket is a thing you take hold of; these are things you push.
       {
-        const plateW = new THREE.MeshLambertMaterial({ color: 0x5d4a33 });
-        // 0.12 m apart, which is wider than the 0.10 m grab radius: at 0.08
-        // they were inside one another and a hand could not pick one out.
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.13), plateW);
-        back.position.set(bx - 0.02, -drop + 0.02, -0.40);
-        back.rotation.x = -0.5;
-        this.pitchGroup.add(back);
+        // No backing plate: it was canted 0.5 rad while the buttons stood
+        // upright, so the board cut straight through them. The buttons sit on
+        // the port boards themselves, which is backing enough.
+        //
+        // 0.12 m apart, wider than the 0.10 m grab radius: at 0.08 they were
+        // inside one another and a hand could not pick one out.
         const PUSH = [['bug', 'FAUTE', 0xb5442f], ['menu', 'CARNET', 0xb08a3c],
                       ['go', 'PARTIR', 0x5f8a74], ['exitvr', 'SORTIE', 0x8a8a8a]];
         PUSH.forEach(([id, text, colour], i) => {
@@ -813,7 +810,7 @@ export class Airship {
       // x +0.41 and +0.74; this is at +0.44, eleven centimetres over it. And
       // clear of the fore shifting weight, which hauls in only to x 1.62 and is
       // 2.18 m ahead of here at its nearest.
-      slate.position.set(bx + 0.64, -drop + 0.44, 0);
+      slate.position.set(bx + 0.70, -drop + 0.44, 0);
       slate.rotation.y = -Math.PI / 2;
       this.pitchGroup.add(slate);
       const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.19),

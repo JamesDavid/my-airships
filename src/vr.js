@@ -233,7 +233,7 @@ export async function offerVR(mount, onEnter) {
  */
 let floorFix = null;          // measured once a session: does the space have a floor?
 let headMax = 0, seatFrames = 0;
-let shadowWas = null, farWas = 0;
+let shadowWas = null, farWas = 0, seatYaw = 0;
 
 /**
  * Put the pilot in the basket. `deck` is the top of the floor he stands on —
@@ -259,7 +259,13 @@ export function seatIn(deck, yaw, eye) {
     if (++seatFrames > 60) floorFix = headMax > 0.8;
   }
   rig.position.copy(floorFix === false && eye ? eye : deck);
-  rig.rotation.y = yaw;
+  // A HEADSET LOOKS DOWN LOCAL -Z. The ship's bow is (cos yaw, 0, -sin yaw),
+  // and setting rig.rotation.y = yaw points local -Z at (-sin yaw, 0, -cos yaw)
+  // — ninety degrees off, which is why centring the view left the pilot facing
+  // out over the port rail: "when i center my view i am looking out of port
+  // side of ship afterward".
+  rig.rotation.y = yaw - Math.PI / 2;
+  seatYaw = yaw;
 }
 
 // ---------------------------------------------------------------- the view
@@ -539,7 +545,16 @@ const dz = (v) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEA
 // enough to cover both makes the nearer one unreachable.
 const GRAB = 0.10;
 
-const _hp = new THREE.Vector3(), _cp = new THREE.Vector3();
+const _hp = new THREE.Vector3(), _cp = new THREE.Vector3(), _lp = new THREE.Vector3();
+
+// where a hand is IN THE BASKET. The controller hangs off the rig, so its own
+// position already is that; this only guards the case where it does not.
+function ctrlLocal(ctrl) {
+  if (!ctrl) return _lp.set(0, 0, 0);
+  if (ctrl.parent === rig) return _lp.copy(ctrl.position);
+  ctrl.getWorldPosition(_lp);
+  return rig ? rig.worldToLocal(_lp) : _lp;
+}
 
 /**
  * Read the controllers. `ship` is passed so a hand can be tested against the
@@ -606,10 +621,7 @@ export function pollVR(ship) {
     // THE SHIFTING WEIGHTS ARE HELD, not pulled: while a hand has the lever,
     // where the hand is IS the trim, and it stays where you let go of it.
     if (on === 'trim' && hold) {
-      // fore-and-aft along the SHIP, not along the world: her bow is
-      // (cos yaw, 0, -sin yaw), and the rig carries her yaw.
-      const yaw = rig.rotation.y;
-      const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
+      const along = -ctrlLocal(ctrl).z;         // fore-and-aft in the basket
       if (trimHand !== i) { trimHand = i; trimFrom = along; trimBase = trimHeldValue; }
       // BACK FOR UP, FORWARD FOR DOWN — which is also what the weights do:
       // "pulling in the fore weight would cause the stem of the balloon to
@@ -629,8 +641,16 @@ export function pollVR(ship) {
     // that is 0.81 m away. Bringing the bar back to the hand put it through the
     // middle of the ship instead: "now it collides with a ton of things".
     if (on === 'tiller' && hold) {
-      const yaw = rig.rotation.y;
-      const across = _hp.x * Math.sin(yaw) + _hp.z * Math.cos(yaw);
+      // ACROSS THE BASKET, in the basket's own frame. Measuring the hand in
+      // world space and projecting it through the ship's heading fed the ship's
+      // own rotation back into the control: put the helm over, the ship turns,
+      // the frame turns under a hand that has not moved, and the reading runs
+      // away — "sends it shooting off randomly left or right", and "it pulled
+      // away from me because the ship rotated while i did not".
+      //
+      // The controller is a child of the rig, so its own position is already
+      // relative to the basket. Nothing to project, and nothing to chase.
+      const across = ctrlLocal(ctrl).x;
       if (helmHand !== i) { helmHand = i; helmFrom = across; helmBase = helmValue; }
       helmValue = Math.max(-1, Math.min(1, helmBase + (across - helmFrom) / 0.26));
       anyHeld = true;
@@ -640,8 +660,7 @@ export function pollVR(ship) {
     }
 
     if (on === 'carb' && hold) {
-      const yaw = rig.rotation.y;
-      const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
+      const along = -ctrlLocal(ctrl).z;         // forward is local -Z
       if (carbHand !== i) { carbHand = i; carbFrom = along; carbBase = carbValue; }
       carbValue = Math.max(0, Math.min(1, carbBase + (along - carbFrom) / 0.20));
       pad.throttleSet = carbValue;
