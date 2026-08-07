@@ -122,6 +122,42 @@ console.log('');
   }
 }
 
+// ---------------------------------------------------------------------------
+console.log('');
+console.log('NO RING IS HUNG OVER THE ROCK');
+console.log('   Monaco\'s gates are measured from what is under them, because the');
+console.log('   Rock is fifty metres up and the water is not — but only from what is');
+console.log('   under their CENTRE. The bay gate stood where the ground rises to 12 m');
+console.log('   with its lower rim at 0: "a ring in the bay that is too close to a');
+console.log('   mountain". Sampled all round the hoop now, not at one point.');
+console.log('');
+{
+  const { TRACKS } = await import('../src/tracks.js');
+  const { groundAt: mcGround } = await import('../src/monaco_geo.js');
+  const rings = [];
+  for (const t of TRACKS.filter((x) => x.location === 'monaco')) {
+    t.gates.forEach((g, i) => rings.push([`${t.id} gate ${i + 1}`, g]));
+  }
+  if (world.turnRing) rings.push(['the turn', { ...world.turnRing, r: 24 }]);
+  if (world.startRing) rings.push(['the start', { ...world.startRing, r: 24 }]);
+  for (const [name, g] of rings) {
+    const r = g.r || 24;
+    let worst = -1e9;
+    for (let a = 0; a < 24; a++) {
+      for (let d = 0; d <= r; d += r / 4) {
+        const h = mcGround(g.x + Math.cos(a / 24 * Math.PI * 2) * d,
+          g.z + Math.sin(a / 24 * Math.PI * 2) * d);
+        if (h > worst) worst = h;
+      }
+    }
+    const rim = g.y - r;
+    const ok = worst <= rim;
+    if (!ok) fails++;
+    console.log('   %s  %s  rim %s m, highest rock in the hoop %s m',
+      ok ? 'ok  ' : 'FAIL', name.padEnd(18), rim.toFixed(0).padStart(4), worst.toFixed(0).padStart(4));
+  }
+}
+
 console.log('');
 console.log(fails ? `${fails} FAILURE(S)` : 'Monaco: all clear.');
 process.exit(fails ? 1 : 0);

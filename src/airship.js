@@ -112,7 +112,11 @@ function makePlacard(text) {
   x.strokeStyle = '#8a7350'; x.lineWidth = 4; x.strokeRect(3, 3, 250, 58);
   x.fillStyle = '#22180f';
   x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.font = 'bold 30px Georgia, serif';
+  // FIT THE WORD TO THE PLATE. A single letter and SOUPAPE cannot share one
+  // font size on a 256-pixel canvas: at 30px the long word runs off both ends.
+  let px = 30;
+  do { x.font = `bold ${px}px Georgia, serif`; px -= 2; }
+  while (px > 12 && x.measureText(text).width > 226);
   x.fillText(text, 128, 34);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -845,12 +849,31 @@ export class Airship {
         ring.rotation.x = Math.PI / 2;
         ring.position.copy(bot).y += 0.075;
         this.pitchGroup.add(ring);
-        // A SINGLE LETTER. LEST and SOUPAPE are the right words and the wrong
-        // size: at arm's length on a plate the width of a hand they are a
-        // smudge. B for ballast, V for the valve, big enough to read at a
-        // glance while you are busy flying.
-        placard(this.pitchGroup, id === 'ballast' ? 'B' : 'V',
-          bot.x + 0.10, bot.y + 0.20, bot.z);
+        // THE WHOLE WORD, AND MADE FAST TO THE CORD.
+        //
+        // It was a single letter — B and V — because LEST and SOUPAPE on a
+        // plate the width of a hand were a smudge at arm's length. The plate is
+        // wider now and makePlacard fits the word to it, so they can have their
+        // proper names, which are the ones painted in the basket: LEST for the
+        // ballast and SOUPAPE for the valve.
+        //
+        // And it HANGS ON THE CORD instead of beside it. The plate sat ten
+        // centimetres forward of the line with nothing between them, so in a
+        // headset it was a signboard floating in mid-air next to a rope. It is
+        // set on the cord itself now, a hair aft so the two do not fight, with
+        // a clip across it — which is how you would actually tie a label to a
+        // rope.
+        {
+          const LABEL_Y = bot.y + 0.20;
+          const f = (LABEL_Y - bot.y) / (top.y - bot.y);     // where up the cord
+          const cx2 = bot.x + (top.x - bot.x) * f;
+          placard(this.pitchGroup, id === 'ballast' ? 'LEST' : 'SOUPAPE',
+            cx2 - 0.014, LABEL_Y, bot.z, undefined, 0.20);
+          const clip = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.05, 6), togMat);
+          clip.rotation.z = Math.PI / 2;                     // across the cord
+          clip.position.set(cx2, LABEL_Y + 0.022, bot.z);
+          this.pitchGroup.add(clip);
+        }
         this.pullCords.push({ id, mesh: tog, rest: bot.clone(), pulled: 0 });
       }
 

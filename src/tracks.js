@@ -116,7 +116,8 @@ export const TRACKS = [
     })(),
   },
   {
-    id: 'harbor', location: 'monaco', laps: 2, v: 3,
+    // v4: the bay gate moved off the rock it was hung over
+    id: 'harbor', location: 'monaco', laps: 2, v: 4,
     name: 'The Harbor Circuit',
     sub: 'the Casino terrace, over the Prince’s Palace — 2 laps',
     // Hung off the places, like the gymkhana, and for the same reason: Monaco
@@ -129,7 +130,13 @@ export const TRACKS = [
       const st = P('stage'), pt = P('port'), cs = P('casino'), rk = P('rock'), oc = P('oceano');
       return [
         { x: st.x, y: 20, z: st.z, r: 18 },                           // off the landing-stage
-        { x: pt.x + 120, y: 18, z: pt.z + 90, r: 18 },                // wave-top across the bay
+        // OUT OVER THE WATER. At port + [120, 90] this one stood where the
+        // ground rises to 12 m, and its lower rim is at 0 — so twelve metres of
+        // rock came up through a ring you are meant to fly at wave-top height:
+        // "a ring in the bay that is too close to a mountain". Ninety metres
+        // further into the bay it has nothing but sea under it, measured all
+        // round the hoop rather than at its centre.
+        { x: pt.x + 68, y: 18, z: pt.z + 16, r: 18 },                 // wave-top across the bay
         { x: cs.x + 40, y: cs.g + 34, z: cs.z + 30, r: 20 },          // the Casino terrace
         { x: oc.x + 150, y: 22, z: oc.z + 120, r: 20 },               // out round the Rock's foot
         { x: rk.x, y: rk.g + 40, z: rk.z, r: 18 },                    // clear OVER the palace

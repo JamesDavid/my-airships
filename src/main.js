@@ -3703,16 +3703,63 @@ function swapCityForVR(on) {
   vr.cityFog(on, scene);
 }
 
-let waterHooks = null;
+let waterHooks = null, mirrorWas = null, flatMirror = null;
+
+/**
+ * THE 300 KM/H SAILBOAT.
+ *
+ * Reported four times, and the boats were never the problem: check_monaco
+ * clocks every craft in the scene across a frame, at noon and at four minutes
+ * to midnight, and the three escort launches make 10 to 11 km/h with nothing
+ * else on the water moving at all.
+ *
+ * It is the REFLECTION. Taking onBeforeRender away stops three's Water
+ * repainting its mirror — which is the whole point, since that pass redraws the
+ * entire world a third time and rebinds the framebuffer the headset is drawing
+ * into. But it does not stop the shader SAMPLING that mirror, and the mirror is
+ * sampled in the projected space of the camera that made it. So the last
+ * picture taken stays nailed to a camera that has since flown away, and
+ * everything in it slides across the bay as the pilot moves: a reflected boat
+ * running along the coast at the speed of the airship rather than its own.
+ *
+ * So the mirror is not merely frozen, it is blanked — one pixel of the water's
+ * own colour, which cannot slide because there is nothing in it to move. The
+ * waves, the sun glitter and the colour are all in the rest of the shader and
+ * are untouched.
+ */
 function stillWater(on) {
   if (!world || !world.waters) return;
   if (on) {
     if (waterHooks) return;
     waterHooks = world.waters.map((w) => w.onBeforeRender);
     for (const w of world.waters) w.onBeforeRender = () => {};
+    mirrorWas = world.waters.map((w) => {
+      const u = w.material && w.material.uniforms && w.material.uniforms.mirrorSampler;
+      if (!u) return null;
+      const was = u.value;
+      try {
+        const c = w.material.uniforms.waterColor && w.material.uniforms.waterColor.value;
+        // a shade lighter than the body colour: a mirror still carries some sky
+        const r = Math.min(255, Math.round(((c && c.r) || 0.15) * 255) + 46);
+        const g2 = Math.min(255, Math.round(((c && c.g) || 0.25) * 255) + 52);
+        const b = Math.min(255, Math.round(((c && c.b) || 0.35) * 255) + 58);
+        flatMirror = new THREE.DataTexture(new Uint8Array([r, g2, b, 255]), 1, 1);
+        flatMirror.colorSpace = THREE.SRGBColorSpace;
+        flatMirror.needsUpdate = true;
+        u.value = flatMirror;
+      } catch { /* an older Water: leave it frozen rather than break the frame */ }
+      return was;
+    });
   } else if (waterHooks) {
-    world.waters.forEach((w, i) => { w.onBeforeRender = waterHooks[i]; });
-    waterHooks = null;
+    world.waters.forEach((w, i) => {
+      w.onBeforeRender = waterHooks[i];
+      const u = w.material && w.material.uniforms && w.material.uniforms.mirrorSampler;
+      if (u && mirrorWas && mirrorWas[i] !== null && mirrorWas[i] !== undefined) {
+        u.value = mirrorWas[i];
+      }
+    });
+    waterHooks = null; mirrorWas = null;
+    if (flatMirror) { flatMirror.dispose?.(); flatMirror = null; }
   }
 }
 
