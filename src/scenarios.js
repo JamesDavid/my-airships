@@ -263,11 +263,17 @@ export const SCENARIOS = [
         if (r.won) ctx.complete('The crowd cries back: “YES!” — 125,000 francs, most of it to the poor of Paris.');
         else ctx.fail('“Errors do not count.” Convoke the Commission again.');
       }
-      // and if she is simply DOWN, say so. Only the timekeepers could end this
-      // flight before; land short of them and nothing answered, ever.
+      // and if she is simply DOWN, say so — but ONLY ONCE SHE HAS FLOWN.
+      //
+      // This scenario begins with the ship at rest at the aerodrome, which is
+      // to say `landed`, so judging a landing from the first tick refused the
+      // race before the pilot had touched anything: "Starting the deutsch prize
+      // it said not this time I'm already on the ground" (bug #54). Mine, from
+      // giving the scenario an ending last week without asking where it starts.
+      if (!ctx.ship.landed) this.aloft = true;
       if (ctx.ship.wrecked) {
         ctx.fail('Down, and the Commission is still standing at St. Cloud with its watches out.');
-      } else if (ctx.ship.landed) {
+      } else if (this.aloft && ctx.ship.landed) {
         ctx.fail('You are on the ground and the half-hour is running. “Errors do not count” — but neither do landings.');
       }
     },
@@ -323,9 +329,10 @@ export const SCENARIOS = [
       if (ctx.ship.wrecked) return ctx.fail('The chimney-pots claimed her. The avenue next time.');
       if (ctx.ship.landed && d < ctx.zoneR()) {
         ctx.complete('Two servants catch and steady the ship while you go up for coffee. “From my round bay window I looked down upon the air-ship.”');
-      } else if (ctx.ship.landed) {
+      } else if (this.aloft && ctx.ship.landed) {
         ctx.fail('Down in the street, but not at your own door — which was the whole point of a runabout.');
       }
+      if (!ctx.ship.landed) this.aloft = true;
     },
   },
   {
@@ -480,9 +487,10 @@ export const SCENARIOS = [
         this.done = true;
         ctx.clearZone();
         ctx.complete('"It is practical, and will have to be taken account of in war," say the officers. You steer for the polo grounds, where your friends are waiting.');
-      } else if (ctx.ship.landed) {
+      } else if (this.aloft && ctx.ship.landed) {
         ctx.fail('Down before the review was flown. The troops are still drawn up at Longchamps.');
       }
+      if (!ctx.ship.landed) this.aloft = true;
     },
   },
 ];

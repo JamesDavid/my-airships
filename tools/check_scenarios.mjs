@@ -90,9 +90,13 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('   when you are on the ground has no way to end, which is what II had.');
   console.log('');
   for (const def of SCENARIOS.filter((d) => d.location === 'paris')) {
-    // vent all the way down: whatever else happens, she lands
-    const r = play(def, { pilot: () => ({ throttle: 0, rudder: 0, pitch: -1,
-      vent: 1, coax: 0 }) });
+    // UP FIRST, then down. A pilot that vents from the first tick never leaves
+    // the ground, and a scenario is entitled not to judge a landing by someone
+    // who has not yet flown — which is the whole of bug #54. So: climb for half
+    // a minute, then valve her down and see whether the scenario answers.
+    const r = play(def, { pilot: (sh, t) => (t < 30
+      ? { throttle: 1, rudder: 0, pitch: 1, vent: 0, coax: 0 }
+      : { throttle: 0, rudder: 0, pitch: -1, vent: 1, coax: 0 }) });
     const ok = !!r.verdict;
     if (!ok) fails++;
     console.log('   %s  %s  %s', ok ? 'ok  ' : 'FAIL', def.id.padEnd(14),
@@ -296,8 +300,8 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       const eye = new V3();
       (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
       // ALLUM. is only fitted where there is a motor to light
-      const want = sh.spec.prop === 'none' ? ['ballast', 'vent']
-        : ['ballast', 'vent', 'spark'];
+      const want = sh.spec.prop === 'none' ? ['ballast', 'vent', 'menu']
+        : ['ballast', 'vent', 'spark', 'menu'];
       const got = {};
       for (const c of want) {
         const p2 = sh.cordAt(c);
@@ -325,7 +329,7 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     else if (worstSlate < 0.35) { console.log('   FAIL the slate is too close to focus on'); fails++; }
     else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
     else if (nearest < 0.32) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
-    else console.log('   ok   ballast, valve and ALLUM. all in reach and distinct');
+    else console.log('   ok   ballast, valve, ALLUM. and the bell-pull in reach and distinct');
   }
 
   console.log('');

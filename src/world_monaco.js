@@ -349,6 +349,17 @@ export function buildWorldMonaco(scene) {
   put(stg, 'stage');
   // the deck is dry footing amid the surf — see isWater below
   const STAGE = { x: stagePos.x, z: stagePos.z, w: 46, d: 26 };
+  // AND IT IS SOMETHING TO STAND ON. isWater knew the deck was dry and nothing
+  // else did: there was no collider within forty metres of it, so a ship that
+  // came down on the landing-stage went straight through the planks and rested
+  // on the sea below — "Completed the scenario but fell thru the landing
+  // platform" (bug #53). Which is a poor reward for the one piece of ground in
+  // this world built for the purpose: "It will be enough to build a
+  // landing-stage on the sea side of the wall at the level of the boulevard."
+  //
+  // The deck is a box 1.6 m thick centred at 4.2, so its planking is at 5.0.
+  buildings.push({ x: stagePos.x, z: stagePos.z, w: STAGE.w, d: STAGE.d,
+    y: 3.4, h: 5.0, top: 5.0 });
 
   // the sea wall it was built over, and the electric tramcar tracks behind it —
   // "From the side walk it was only waist high, but on the other side of it the

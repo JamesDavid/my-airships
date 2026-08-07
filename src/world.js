@@ -2208,7 +2208,20 @@ function makeBankRibbon(pts, inner, outer, side, color, lift) {
     }
     if (i > 0 && p.distanceTo(pts[i - 1]) <= RIVER_GAP) {   // not across a gap
       const a = (i - 1) * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      // WOUND THE RIGHT WAY UP, and that depends on the side. The offset normal
+      // is `up x t` TIMES SIDE, so on one bank the quad comes out mirrored and
+      // every triangle of it faces the riverbed: measured, 392 of 392 on the
+      // south bank and none on the north.
+      //
+      // side: DoubleSide is not a cure for that, which is what this had. It
+      // fixes the culling and leaves the LIGHTING wrong — the ribbon also
+      // receives shadow, and a surface whose geometry faces away from the sun
+      // fails the shadow test along its whole length and comes out black.
+      // Reported twice: "What are these black triangles on the bank of the
+      // river" (#51) and, after I double-sided the wrong ribbon, "Black
+      // triangles on the bank what are they they look bad" (#55).
+      if (side > 0) idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      else idx.push(a + 2, a + 1, a, a + 2, a + 3, a + 1);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -2241,7 +2254,9 @@ function makeRibbon(pts, width, color, y, dull) {
     // in makeBankRibbon. The city reach has one such gap today.
     if (i > 0 && p.distanceTo(pts[i - 1]) <= RIVER_GAP) {
       const a = (i - 1) * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      // face UP: this ribbon is swept about `up x t` with no side flip, and in
+      // that order every triangle came out facing the ground — all 150 of them
+      idx.push(a + 2, a + 1, a, a + 2, a + 3, a + 1);
     }
   }
   const geo = new THREE.BufferGeometry();

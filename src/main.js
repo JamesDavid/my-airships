@@ -82,8 +82,12 @@ vr.initVR(renderer, camera, {
     if (camMode !== 1) cycleCameraTo(1);
     if (ship) ship.showPanel(true);
     document.body.classList.add('in-vr');
+    // the game opens ON the menu, so a pilot who puts the headset on at the
+    // start screen must find the board already up rather than a frozen world
+    if (menuOpen) buildMenuButtons();
   },
   onEnd: () => {
+    vr.showMenu(false);
     if (ship) ship.showPanel(false);
     document.body.classList.remove('in-vr');
     fitToWindow.w = -1; fitToWindow();      // take the flat screen back
@@ -661,6 +665,12 @@ function clearAfterWreck() {
   wind.copy(dailyWind);
   if (scenRing) scenRing.visible = false;
   if (scenBeacon) scenBeacon.visible = false;
+  // ...and take the wreck notice down with it. resetShip() cleared the centre
+  // and this did not, so a pilot who wrecked and then changed ship or travelled
+  // carried "Dashed against the Tower!" into the next flight and the next
+  // world: "message persisted after I reset the ship to a new location" (#56).
+  setCenter('', '');
+  seen.clear();
 }
 function tryChangeShip(id) {
   if (!canChangeShip()) {
@@ -980,8 +990,10 @@ function layoutHud() {
 }
 addEventListener('resize', layoutHud);
 
+const MENU_TITLES = { solo: 'SOLO', together: 'TOGETHER', opts: 'THE SHIP AND THE SKY' };
 function toggleMenu(force) {
   menuOpen = force !== undefined ? force : !menuOpen;
+  if (vr.inVR() && !menuOpen) vr.showMenu(false);
   menuEl.classList.toggle('hidden', !menuOpen);
   if (!menuOpen && !live.inRoom()) live.stopLobby();
   if (menuOpen) {
@@ -995,7 +1007,12 @@ function toggleMenu(force) {
     document.getElementById('board').classList.add('hidden');
   }
 }
+// Everything the menu offers goes through here, so this is also where the
+// headset's board gets its list — one funnel, and a button added to the flat
+// menu appears in VR without anybody remembering to add it twice.
+let vrMenuItems = [];
 function menuButton(parent, label, sub, onClick, current) {
+  vrMenuItems.push({ label, sub, onClick, current });
   const b = document.createElement('button');
   b.innerHTML = label + (sub ? ` <small>— ${sub}</small>` : '');
   if (current) b.classList.add('current');
@@ -1003,6 +1020,7 @@ function menuButton(parent, label, sub, onClick, current) {
   parent.appendChild(b);
 }
 function buildMenuButtons() {
+  vrMenuItems = [];
   const shipsDiv = document.getElementById('menuShips');
   const optsDiv = document.getElementById('menuOpts');
   const placeDiv = document.getElementById('menuPlaces');
@@ -1228,6 +1246,8 @@ function buildMenuButtons() {
 
   buildTogether();
   buildTabs();
+  // ...and the same list to the headset's board
+  if (vr.inVR()) vr.showMenu(menuOpen, vrMenuItems, MENU_TITLES[menuTab] || 'MY AIRSHIPS');
 }
 
 // ---- the Together pane: the lobby before you are in a room, the room after
@@ -3314,7 +3334,14 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  if (menuOpen || boardOpen() || bugBookOpen() || albumOpen()) { updateCamera(dt); draw(); return; }  // paused while a panel is up
+  if (menuOpen || boardOpen() || bugBookOpen() || albumOpen()) {
+    // A PANEL PAUSES THE SIMULATION, and in a headset that used to pause the
+    // only way out of it as well: pollInput() never ran, so the sticks were
+    // dead and the board could not be worked. The controllers are read here
+    // whatever else is stopped.
+    if (vr.inVR()) vr.pollVR(ship);
+    updateCamera(dt); draw(); return;
+  }
 
   // the sky runs on its own clock, not on how long this page has been open:
   // otherwise two pilots at the same instant get different gusts and different

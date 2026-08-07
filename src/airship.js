@@ -527,6 +527,28 @@ export class Airship {
         this.pitchGroup.add(ring);
         this.pullCords.push({ id, mesh: tog, rest: bot.clone(), pulled: 0 });
       }
+
+      // THE BELL-PULL. A third cord, aft of the other two and plainly a
+      // different thing — a brass ring rather than a wooden toggle — that opens
+      // the ship's book: the menu, the courses, the scenarios. In a headset the
+      // B button does it too, but a button you cannot see is a button nobody
+      // finds, and everything else in this basket is a thing you take hold of.
+      {
+        const ey = -drop + 0.55;
+        // well aft of the working cords: the check measures every pair of
+        // fittings against the 0.16 m grab radius, and at its first position
+        // this ring sat 0.31 m from the ballast cord — near enough that a hand
+        // reaching to open the book might have thrown ballast instead
+        const top = new THREE.Vector3(bx - 0.34, ey + 0.92, 0.10);
+        const bot = new THREE.Vector3(bx - 0.34, ey + 0.28, 0.10);
+        const g = new THREE.BufferGeometry().setFromPoints([top, bot]);
+        this.pitchGroup.add(new THREE.Line(g, cordMat));
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.010, 6, 14),
+          new THREE.MeshLambertMaterial({ color: 0xb08a3c }));
+        ring.position.copy(bot);
+        this.pitchGroup.add(ring);
+        this.pullCords.push({ id: 'menu', mesh: ring, rest: bot.clone(), pulled: 0 });
+      }
     }
 
     // The panel. Frankly anachronistic — there was no such thing in 1901, and
