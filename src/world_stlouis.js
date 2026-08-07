@@ -606,7 +606,10 @@ export function buildWorldStLouis(scene) {
     buildings, clouds, trees,
     groundAt,
     landmarks: [
-      { id: 'festival', name: 'Festival Hall', x: fh.x, z: fh.z, y: fhY + 70, r: 70,
+      // +70 put the gem exactly on the crown of the dome, inside its own
+      // collider — the hunt hangs a gem at a landmark's y, and a gem you cannot
+      // reach without flying into the building is no use
+      { id: 'festival', name: 'Festival Hall', x: fh.x, z: fh.z, y: fhY + 95, r: 70,
         clue: 'The domed hall at the head of the cascades, gold Victory on top.' },
       { id: 'basin', name: 'the Grand Basin', x: head.x - BASIN.r / 2, z: 0, y: 46, r: 95,
         clue: 'Six hundred feet of half-round water, with the lagoons running off it.' },

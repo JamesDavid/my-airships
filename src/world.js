@@ -1094,13 +1094,20 @@ export function buildWorld(scene) {
         clue: 'A dome on the hill of the left bank.' },
       { id: 'opera', name: 'the Opéra', ...LM('opera'), y: 58, r: 45,
         clue: 'A green dome over the grandest staircase in Paris.' },
-      { id: 'roue', name: 'the Grande Roue', ...LM('roue'), y: 64, r: 45,
+      // OVER the wheel, not inside it. The rim is 46 m about a hub at 52, so it
+      // stands from 6 m to 98 — and a gem at 64 turned in the open air between
+      // the spokes with the wheel all round it: "gem is inside the Ferris wheel
+      // on scavenger hunt". Nothing catches this by collision, because the
+      // wheel deliberately has no collider: her own clue says the course
+      // threads her. So the height is written clear of the rim by hand.
+      { id: 'roue', name: 'the Grande Roue', ...LM('roue'), y: 116, r: 45,
         clue: 'A hundred metres of wheel, left over from the Exposition — the gymkhana threads it.' },
       { id: 'bagatelle', name: 'Bagatelle', ...LM('bagatelle'), y: 44, r: 55,
         clue: '“I had the No. 9 towed to the railing of Bagatelle.” A little château at the edge of the Bois.' },
       { id: 'longchamps', name: 'Longchamps', ...LM('longchamp'), y: 48, r: 90,
         clue: '“Ten times in succession I made the circuit of Longchamps.” The racecourse in the Bois.' },
-      { id: 'moulin', name: 'the Moulin de Longchamp', x: -1010, z: 118, y: 42, r: 45,
+      // ...and clear of the mill's own sails, which reach 47 m
+      { id: 'moulin', name: 'the Moulin de Longchamp', x: -1010, z: 118, y: 66, r: 45,
         clue: 'The abbey’s old mill, standing alone on the pelouse.' },
       { id: 'puteaux', name: 'the Île de Puteaux', ...LM('puteaux'), y: 46, r: 100,
         clue: '“Beaten out with my Panama hat.” The island in the reach below the bridge.' },

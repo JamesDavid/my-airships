@@ -174,6 +174,49 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('NO GEM IS INSIDE THE THING IT MARKS');
+  console.log('   The postcard hunt hangs a gem at each landmark\'s own height, which');
+  console.log('   is chosen to read well as a label and was never asked whether there');
+  console.log('   is anything there. Three of them were inside the building: the mill');
+  console.log('   at Longchamp, Festival Hall at St. Louis, and the Grande Roue —');
+  console.log('   "gem is inside the Ferris wheel on scavenger hunt".');
+  console.log('');
+  {
+    const { buildWorldMonaco } = await import('../src/world_monaco.js');
+    const { buildWorldStLouis } = await import('../src/world_stlouis.js');
+    const mkScene = () => ({ children: [], add(...o) { this.children.push(...o); },
+      remove() {}, traverse(f) { f(this); } });
+    const GEM = 7, HALO = 15;
+    const worlds = [['paris', world],
+      ['monaco', buildWorldMonaco(mkScene())],
+      ['stlouis', buildWorldStLouis(mkScene())]];
+    let bad = [];
+    for (const [place, w2] of worlds) {
+      for (const lm of (w2.landmarks || [])) {
+        for (const b of (w2.buildings || [])) {
+          const hw = (b.rw !== undefined ? b.rw : b.w) / 2;
+          const hd = (b.rd !== undefined ? b.rd : b.d) / 2;
+          if (Math.abs(b.x - lm.x) > hw + HALO || Math.abs(b.z - lm.z) > hd + HALO) continue;
+          const top = b.top !== undefined ? b.top : b.h;
+          if (lm.y - GEM < top && lm.y + GEM > (b.y || 0)) {
+            bad.push(`${place}/${lm.id} at ${lm.y} m, inside something reaching ${top.toFixed(0)} m`);
+            break;
+          }
+        }
+      }
+    }
+    // ...AND THE WHEEL, which has no collider on purpose — her own clue says
+    // the course threads her — so nothing above would ever have found her.
+    // The rim is 46 m about a hub at 52; see La Grande Roue in world.js.
+    const roue = (world.landmarks || []).find((l) => l.id === 'roue');
+    if (roue && roue.y - GEM < 52 + 46) bad.push(`paris/roue at ${roue.y} m, inside a rim reaching 98 m`);
+    const ok = bad.length === 0;
+    if (!ok) fails++;
+    console.log('   %s  %d gems inside what they mark%s', ok ? 'ok  ' : 'FAIL',
+      bad.length, bad.length ? ':\n        ' + bad.join('\n        ') : '');
+  }
+
+  console.log('');
   console.log('THE BRIDGE REACHES THE OTHER BANK');
   console.log('   The Pont de Saint-Cloud was written as a 96 m deck with its');
   console.log('   abutments at +-41, which crosses a river 82 m wide. The Seine here');
