@@ -1038,7 +1038,13 @@ export class Airship {
       holder.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       this.pitchGroup.add(holder);
       this.props.push(holder);
-      mkEngine(x + facing * 1.35, facing);      // her motor, right behind the screw
+      // CLEAR OF THE BASKET. On the Nos. 1 and 2 the screw is right at the
+      // basket's tail and the motor stood 1.35 m in front of it — which on
+      // those two ships is x -0.60, and their basket runs to -0.69. The engine
+      // was standing in the basket with the pilot, which you notice at once
+      // when you are in there with it.
+      const engOff = K.type === 'basket-long' ? 0.62 : 1.35;
+      mkEngine(x + facing * engOff, facing);    // her motor, right behind the screw
     };
     const sternX = K.type === 'basket-long' ? -1.95 : -K.length / 2 - 0.8; // Nos. 1-2: prop right at the basket
     if (prop === 'stern' || prop === 'both') mkProp(sternX, 1);
