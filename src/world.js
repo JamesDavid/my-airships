@@ -727,7 +727,10 @@ export function buildWorld(scene) {
     g2.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     g2.setIndex(idx);
     g2.computeVertexNormals();
-    const roads = new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    // the street network is a decal like any other — laid 0.16 m over ground it
+    // is coplanar with, and fighting the parks it runs through
+    const roads = new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true,
+      polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
     roads.userData.noLift = true;                 // every vertex is already on the ground
     roads.receiveShadow = true;
     scene.add(roads);
@@ -1208,7 +1211,7 @@ function makeSunSprite() {
 }
 
 function addFlat(scene, x, z, w, d, color, y) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), decalMat(color));
   m.rotation.x = -Math.PI / 2; m.position.set(x, y, z);
   scene.add(m);
 }
