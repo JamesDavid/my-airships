@@ -174,6 +174,46 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('NO GROUND STANDS UP THROUGH THE SEINE');
+  console.log('   The river is one flat sheet 140 m wide and the terrain carves a bed');
+  console.log('   for it — but on a 50 m grid, with a distance test, the ground');
+  console.log('   interpolates back up between a carved station and an uncarved one.');
+  console.log('   3.8% of it stood at or above the water, worst by 2.92 m: the bright');
+  console.log('   rippling patches lying on the bank and flickering as the eye moves.');
+  console.log('   MEASURED ON THE BUILT MESH, which is the thing that was fixed —');
+  console.log('   parisGround still answers what the survey says.');
+  console.log('');
+  {
+    const { SEINE_XZ, riverNear, RIVER_HALF } = await import('../src/paris_terrain.js');
+    // the terrain is the one huge vertex-lifted plane in the scene
+    let terr = null, best = 0;
+    for (const o of scene.children) {
+      const p = o && o.geometry && o.geometry.attributes && o.geometry.attributes.position;
+      if (p && p.count > best) { best = p.count; terr = o; }
+    }
+    if (!terr || !Number.isFinite(world.riverY)) {
+      console.log('   ---  the world does not publish its river level; skipped');
+    } else {
+      const p = terr.geometry.attributes.position;
+      const ox = terr.position.x || 0, oz = terr.position.z || 0;
+      let up = 0, wet = 0, worst = -1e9;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i) + ox, z = p.getZ(i) + oz, y = p.getY(i);
+        const near = riverNear(x, z);
+        if (!near || near.dist >= RIVER_HALF) continue;
+        wet++;
+        const over = y - world.riverY;
+        if (over > -0.25) { up++; if (over > worst) worst = over; }
+      }
+      const ok = up === 0 && wet > 1000;
+      if (!ok) fails++;
+      console.log('   %s  %d of %d vertices in the river channel reach the water%s',
+        ok ? 'ok  ' : 'FAIL', up, wet,
+        up ? ` (worst ${worst.toFixed(2)} m above it)` : '');
+    }
+  }
+
+  console.log('');
   console.log('NO GEM IS INSIDE THE THING IT MARKS');
   console.log('   The postcard hunt hangs a gem at each landmark\'s own height, which');
   console.log('   is chosen to read well as a label and was never asked whether there');

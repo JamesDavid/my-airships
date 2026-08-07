@@ -396,6 +396,10 @@ export function buildWorld(scene) {
   // (src/paris_terrain.js) at twice the survey's resolution, with the same
   // patchwork texture over it so the open country still reads as country.
   // Beyond the survey a flat skirt carries on to the horizon at the datum.
+  // The one level the Seine is drawn at, wanted by the terrain below and by the
+  // water sheet further down. Published on the world so a check can measure the
+  // bed against it rather than working it out again for itself.
+  const RIVER_Y = seinePoints()[0].y;
   {
     const SUB = 2;
     const gx = (PHF.nx - 1) * SUB, gz = (PHF.nz - 1) * SUB;
@@ -404,8 +408,30 @@ export function buildWorld(scene) {
     g.rotateX(-Math.PI / 2);
     const cx = PHF.x0 + (gx * st) / 2, cz = PHF.z0 + (gz * st) / 2;
     const a = g.attributes.position;
+    // THE BED IS HELD UNDER THE WATER, and it was not.
+    //
+    // The Seine is one flat sheet 140 m wide following the survey, and the
+    // terrain generator carves a bed for it — but the heightfield is on a 50 m
+    // grid and the carve is a distance test, so between a carved station and an
+    // uncarved one the ground interpolates back up. Measured across the whole
+    // river: 3.8% of the ground under the water sheet stood at or above it, the
+    // worst by 2.92 m, and those are the bright rippling patches lying on the
+    // bank and flickering as the eye moves — the z-fighting reported from the
+    // headset over Saint-Cloud.
+    //
+    // Narrowing the sheet does not cure it: even at 92 m wide, which is far
+    // narrower than the Seine, samples still touch. So the MESH is held clear
+    // instead, exactly as Monaco's seabed is: any vertex inside the river
+    // corridor is pushed to at least a metre under the surface. Only the
+    // drawing moves — parisGround still answers what the survey says, so the
+    // guide rope, the landing and isWater are all unchanged.
+    const BED_CLEAR = 1.0;
     for (let i = 0; i < a.count; i++) {
-      a.setY(i, parisGround(a.getX(i) + cx, a.getZ(i) + cz));
+      const wx = a.getX(i) + cx, wz = a.getZ(i) + cz;
+      let y = parisGround(wx, wz);
+      const near = riverNear(wx, wz);
+      if (near && near.dist < RIVER_HALF && y > RIVER_Y - BED_CLEAR) y = RIVER_Y - BED_CLEAR;
+      a.setY(i, y);
     }
     g.computeVertexNormals();
     const tex = makeGroundTexture();
@@ -575,7 +601,7 @@ export function buildWorld(scene) {
   // (the measured fall is 3.4 m over 23 km — one part in seven thousand). The
   // bed is carved 1.4 m under the surface, so the sheet is never below its own
   // river bed and the quays are never left standing proud of the water.
-  seine.position.y = riverPts[0].y;      // the surface is one level — see paris_terrain.js
+  seine.position.y = RIVER_Y;            // the surface is one level — see paris_terrain.js
   seine.userData.noLift = true;
   scene.add(seine);
 
@@ -1064,6 +1090,7 @@ export function buildWorld(scene) {
     // the ground is no longer a plane: the ship, the guide rope and every
     // spawn measure their height from here
     groundAt: parisGround,
+    riverY: RIVER_Y,                 // the one level the Seine is drawn at
     flags: [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag],
     buildings, clouds, riverPts, trees,
     towerPos: TOWER_POS, padPos: PAD_POS,
