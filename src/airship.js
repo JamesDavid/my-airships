@@ -674,25 +674,37 @@ export class Airship {
       this.panelCanvas = c;
       this.panelTex = new THREE.CanvasTexture(c);
       this.panelTex.colorSpace = THREE.SRGBColorSpace;
-      // 0.30 m across and set 0.44 m from the eye, low and tipped up — a slate
-      // you GLANCE DOWN at, the way you would a compass on a binnacle. It was
-      // 0.46 m across at 0.29 m to begin with, which is 77 degrees of your view
-      // filled by an instrument panel and nearer than most eyes focus.
+      // THE SLATE, hung square to the eye and clear of the brass.
+      //
+      // It was tilted by setting rotation.x AND rotation.y on the same mesh,
+      // which does not tilt a panel — it skews it, because the second rotation
+      // is about an axis the first has already moved. It went up crooked. And
+      // its frame was mounted 12 mm toward the pilot rather than away, so the
+      // wooden back was in front of the canvas and the readings were being
+      // drawn on the far side of a lid: "the tablet is crooked... and has a
+      // black cover on it that blocks the text which is on the inside face of
+      // the back surface".
+      //
+      // A group carries the yaw, the plane tilts inside it, and the frame goes
+      // BEHIND. Set to port at z -0.30: the barometer is at -0.20 and the
+      // compass at +0.20, and the slate was landing between them.
+      const slate = new THREE.Group();
+      slate.position.set(bx + 0.40, -drop + 0.30, -0.30);
+      slate.rotation.y = -Math.PI / 2;
+      this.pitchGroup.add(slate);
       const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.19),
         new THREE.MeshBasicMaterial({ map: this.panelTex, transparent: true }));
-      pm.position.set(bx + 0.40, -drop + 0.33, 0);
-      pm.rotation.y = -Math.PI / 2;
-      pm.rotation.x = -0.62;                 // tipped up toward the eye
-      this.panelMesh = pm;
-      pm.visible = false;                    // only in a headset
-      this.pitchGroup.add(pm);
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.21, 0.32),
+      pm.rotation.x = -0.55;                 // tipped up toward the eye
+      pm.position.z = 0.004;                 // ...and proud of its own frame
+      slate.add(pm);
+      this.panelMesh = slate;
+      slate.visible = false;                 // only in a headset
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.22, 0.012),
         new THREE.MeshLambertMaterial({ color: 0x4a3a28 }));
-      frame.position.copy(pm.position).x -= 0.012;
-      frame.rotation.x = pm.rotation.x;
-      frame.visible = false;
-      this.panelFrame = frame;
-      this.pitchGroup.add(frame);
+      frame.rotation.x = -0.55;
+      frame.position.z = -0.008;             // BEHIND the canvas, not in front
+      slate.add(frame);
+      this.panelFrame = null;                // the frame rides with the slate
     }
 
     // ballast sacks hung along the rim — one vanishes with each SPACE

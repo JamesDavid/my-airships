@@ -559,7 +559,9 @@ export function pollVR(ship) {
       const along = _hp.x * Math.cos(yaw) - _hp.z * Math.sin(yaw);
       if (trimHand !== i) { trimHand = i; trimFrom = along; trimBase = trimHeldValue; }
       trimHeldValue = Math.max(-1, Math.min(1, trimBase + (along - trimFrom) / 0.16));
-      ship.setTrimFromHand(trimHeldValue * 0.16);
+      // the lever itself is driven from the ship's own `pitch` in
+      // updateTransforms, so there is nothing to tell it here — one state, one
+      // lever, and no second way to move it that could disagree
       anyHeld = true;
     } else if (trimHand === i && !hold) { trimHand = -1; }
 

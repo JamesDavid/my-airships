@@ -537,7 +537,14 @@ export function buildWorld(scene) {
     addStrip(scene, g.a.x, g.a.z, g.b.x, g.b.z, g.half * 2, 0x7f9159, 0.11);
   }
   // aerodrome grounds
-  addFlat(scene, PAD_POS.x, PAD_POS.z, 500, 500, 0x84925f, 0.1);   // the flying ground
+  // 320 m square, not 500. At 500 the flying ground reached a quarter of a
+  // kilometre in every direction and hung out over the Seine — "there is a
+  // field on top of the sine river that we launch from at the aero club... the
+  // guide rope touches the water underneath the land" — and no site on this
+  // bank could hold it without either the water or the hillside. It is a club's
+  // park, not an aerodrome in the modern sense: 320 m is ample to walk an
+  // air-ship out on and leaves 84 m of bank between the turf and the river.
+  addFlat(scene, PAD_POS.x, PAD_POS.z, 320, 320, 0x84925f, 0.1);   // the flying ground
 
   // ---------- the Seine: stone quays and living, reflecting water ----------
   const riverPts = seinePoints();
@@ -1896,7 +1903,16 @@ function addBookPlaces(scene, buildings) {
   const scRand = mulberry32(1901);
   const _h = placeLegacy('stcloud');
   // west of the field, and no longer overrunning it
-  const HILL = { x: _h.x - 520, z: _h.z - 60, rTop: 330, rBot: 820, h: 95 };
+  // WELL BACK. Its foot has a radius of 820 m, and the club stood 772 m from
+  // its axis — so the slope came down across the flying ground and stood in the
+  // hangar's doorway: "there is a hill that is right in front of the hangar".
+  // My own check for that measured to the AXIS and never added the foot.
+  //
+  // Pushed west and south, mostly beyond the survey's edge at x -5100, which is
+  // what it is FOR: to be the Saint-Cloud hillside the heightfield stops short
+  // of. 1,084 m from the field's centre now, against the 980 its foot and the
+  // turf need between them.
+  const HILL = { x: _h.x - 900, z: _h.z + 100, rTop: 330, rBot: 820, h: 95 };
   const hillH = (x, z) => {
     const r = Math.hypot(x - HILL.x, z - HILL.z);
     if (r <= HILL.rTop) return HILL.h;

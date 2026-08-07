@@ -78,6 +78,28 @@ if (renderer.shadowMap.enabled) {
   console.log('   ok   the shadow pass is off while the headset is on');
 }
 
+// ...and poll with a REAL SHIP in hand, which is the only way to catch a call
+// into a method that is not there. `ship.setTrimFromHand is not a function`
+// crashed a live headset, and nothing here touched a ship until now.
+{
+  const { makeShip } = await import('./sim.mjs');
+  const sh = makeShip('no6');
+  sh.reset({ x: 0, y: 100, z: 0 }, 0);
+  sh.updateTransforms(0);
+  let threw = null;
+  gp.buttons[1].pressed = true;              // GRIP: grab whatever is nearest
+  for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim']) {
+    const p = sh.cordAt(id);
+    if (!p) continue;
+    try { for (let k = 0; k < 4; k++) vr.pollVR(sh); }
+    catch (e) { threw = id + ': ' + e.message; break; }
+  }
+  gp.buttons[1].pressed = false;
+  try { vr.pollVR(sh); } catch (e) { threw = threw || 'release: ' + e.message; }
+  if (threw) { console.log('   FAIL polling with a ship threw — ' + threw); fails++; }
+  else console.log('   ok   every fitting can be grabbed without throwing');
+}
+
 // a session that ends must put everything back
 listeners.sessionend();
 if (!renderer.shadowMap.enabled) {
