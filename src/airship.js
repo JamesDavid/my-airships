@@ -691,6 +691,34 @@ export class Airship {
         this.pullCords.push({ id, mesh: tog, rest: bot.clone(), pulled: 0 });
       }
 
+      // ---- THE PANEL OF PUSHES, on the basket's side ----
+      // Four brass buttons on a plate screwed to the port rail, where a hand
+      // falls when it is not flying her: the fault book, the ship's book, GO
+      // for a trial, and the way out of the headset. Everything else in this
+      // basket is a thing you take hold of; these are things you push.
+      {
+        const plateW = new THREE.MeshLambertMaterial({ color: 0x5d4a33 });
+        // 0.12 m apart, which is wider than the 0.10 m grab radius: at 0.08
+        // they were inside one another and a hand could not pick one out.
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.13), plateW);
+        back.position.set(bx - 0.02, -drop + 0.02, -0.40);
+        back.rotation.x = -0.5;
+        this.pitchGroup.add(back);
+        const PUSH = [['bug', 'FAUTE', 0xb5442f], ['menu', 'CARNET', 0xb08a3c],
+                      ['go', 'PARTIR', 0x5f8a74], ['exitvr', 'SORTIE', 0x8a8a8a]];
+        PUSH.forEach(([id, text, colour], i) => {
+          const x = bx - 0.20 + i * 0.12;
+          const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.022, 10),
+            new THREE.MeshPhongMaterial({ color: colour, shininess: 70 }));
+          btn.rotation.x = -0.5 + Math.PI / 2;
+          btn.position.set(x, -drop + 0.035, -0.394);
+          this.pitchGroup.add(btn);
+          placard(this.pitchGroup, text, x, -drop + 0.105, -0.425);
+          this.pullCords.push({ id: 'push_' + id, mesh: btn, lever: true,
+            rest: btn.position.clone(), pulled: 0, push: true });
+        });
+      }
+
       // THE BELL-PULL. A third cord, aft of the other two and plainly a
       // different thing — a brass ring rather than a wooden toggle — that opens
       // the ship's book: the menu, the courses, the scenarios. In a headset the

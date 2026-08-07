@@ -77,6 +77,8 @@ vr.initVR(renderer, camera, {
   onBallast: () => { if (ship && !ship.wrecked) ship.dropBallast(); },
   onCamera: () => cycleCamera(),
   onMenu: () => toggleMenu(),
+  onBug: () => (bugBookOpen() ? closeBugBook() : openBugBook()),
+  onGo: () => tryStartRace(),
   onStart: () => {
     stillWater(true);
     swapCityForVR(true);

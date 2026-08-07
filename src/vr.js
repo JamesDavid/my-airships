@@ -56,6 +56,7 @@ let sparkEdge = false, sparkHeld = 0, menuPressEdge = false;
 let trimHand = -1, trimFrom = 0, trimBase = 0, trimHeldValue = 0;
 let carbHand = -1, carbFrom = 0, carbBase = 0, carbValue = 0;
 let helmHand = -1, helmFrom = 0, helmBase = 0, helmValue = 0;
+let pushEdge = null;
 const pressed = new Set();
 
 /**
@@ -84,6 +85,8 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
   VR_ACTIONS.menu = opts.onMenu || (() => {});
   VR_ACTIONS.start = opts.onStart || (() => {});
   VR_ACTIONS.end = opts.onEnd || (() => {});
+  VR_ACTIONS.bug = opts.onBug || (() => {});
+  VR_ACTIONS.go = opts.onGo || (() => {});
 
   // ---- and something to see them with ----
   // The controllers were added to the rig and given nothing to draw, so a
@@ -169,7 +172,7 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
 }
 
 const VR_ACTIONS = { ballast: () => {}, camera: () => {}, menu: () => {},
-  start: () => {}, end: () => {} };
+  start: () => {}, end: () => {}, bug: () => {}, go: () => {} };
 
 /**
  * Put the rig into the current scene. Travelling between Paris, Monaco and
@@ -548,6 +551,7 @@ export function pollVR(ship) {
   pad.throttle = 0; pad.rudder = 0; pad.pitch = 0;
   pad.vent = false; pad.coax = false;
   let sawBallast = false, sawCam = false, sawMenu = false, sawSpark = false;
+  let sawPush = null;
   reach.ballast = false; reach.vent = false; reach.spark = false;
   reach.menu = false; reach.trim = false; reach.carb = false; reach.tiller = false;
   pad.throttleSet = null;
@@ -590,7 +594,7 @@ export function pollVR(ship) {
       ctrl.getWorldPosition(_hp);
       let best = GRAB;
       for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb',
-        'tiller']) {
+        'tiller', 'push_bug', 'push_menu', 'push_go', 'push_exitvr']) {
         const cp = ship.cordAt(id, _cp);
         if (!cp) continue;
         const d = _hp.distanceTo(cp);
@@ -649,7 +653,10 @@ export function pollVR(ship) {
       if (on === 'ballast') sawBallast = true;
       else if (on === 'vent') pad.vent = true;
       else if (on === 'spark') sawSpark = true;
-      else if (on === 'menu') sawMenu = true;
+      else if (on === 'menu' || on === 'push_menu') sawMenu = true;
+      else if (on === 'push_bug') sawPush = 'bug';
+      else if (on === 'push_go') sawPush = 'go';
+      else if (on === 'push_exitvr') sawPush = 'exit';
     }
 
     // the sticks fly her whenever that hand is not holding something
@@ -685,6 +692,15 @@ export function pollVR(ship) {
   } else sparkHeld = 0;
   if (sawMenu && !menuEdge) { VR_ACTIONS.menu(); if (ship) ship.pullCord('menu'); rumble(0.4, 40); }
   if (sawCam && !camEdge) VR_ACTIONS.camera();
+  // the four pushes on the port rail: the fault book, GO, and the way out
+  if (sawPush && sawPush !== pushEdge) {
+    if (ship) ship.pullCord('push_' + (sawPush === 'exit' ? 'exitvr' : sawPush));
+    rumble(0.5, 45);
+    if (sawPush === 'bug') VR_ACTIONS.bug();
+    else if (sawPush === 'go') VR_ACTIONS.go();
+    else if (sawPush === 'exit' && session) session.end();
+  }
+  pushEdge = sawPush;
   ballastEdge = sawBallast; ventEdge = pad.vent; sparkEdge = sawSpark;
   camEdge = sawCam; menuEdge = sawMenu;
   return pad;

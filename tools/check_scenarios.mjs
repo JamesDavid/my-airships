@@ -302,7 +302,8 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       (sh.eyePoint || sh.basketMesh).getWorldPosition(eye);
       // ALLUM. is only fitted where there is a motor to light
       const want = sh.spec.prop === 'none' ? ['ballast', 'vent', 'menu']
-        : ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller'];
+        : ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller',
+        'push_bug', 'push_menu', 'push_go', 'push_exitvr'];
       const got = {};
       for (const c of want) {
         const p2 = sh.cordAt(c);
@@ -329,10 +330,11 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     else if (worstCord > 0.9) { console.log('   FAIL a cord is out of reach'); fails++; }
     else if (worstSlate < 0.35) { console.log('   FAIL the slate is too close to focus on'); fails++; }
     else if (behind) { console.log('   FAIL a slate is behind the pilot'); fails++; }
-    // twice the grab radius in vr.js (0.10), so the nearer of any two fittings
-    // is always the one a hand is actually on. CARB. and ALLUM. are neighbours
-    // on one quadrant and were 0.10 m apart, which made CARB. unreachable.
-    else if (nearest < 0.20) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
+    // wider than the grab radius in vr.js (0.10), so the nearer of any two
+    // fittings is always the one the hand is actually on. The four pushes on
+    // the port rail are a row and sit 0.12 apart; they were 0.08, which is
+    // inside the radius and no hand could have picked one out.
+    else if (nearest < 0.115) { console.log('   FAIL two fittings overlap — a hand cannot tell them apart'); fails++; }
     else console.log('   ok   LEST, SOUPAPE, CARB., ALLUM., POIDS and CARNET in reach and distinct');
 
     // ...and the test that matters: a hand laid ON a fitting must find THAT
@@ -343,11 +345,13 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       const sh = makeShip(id);
       sh.reset({ x: 0, y: 100, z: 0 }, 0);
       sh.updateTransforms(0);
-      for (const want2 of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller']) {
+      for (const want2 of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller',
+        'push_bug', 'push_menu', 'push_go', 'push_exitvr']) {
         const at = sh.cordAt(want2);
         if (!at) continue;
         let best = null, bestD = Infinity;
-        for (const other of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller']) {
+        for (const other of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb', 'tiller',
+        'push_bug', 'push_menu', 'push_go', 'push_exitvr']) {
           const p3 = sh.cordAt(other);
           if (!p3) continue;
           const d = at.distanceTo(p3);
