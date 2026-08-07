@@ -3624,7 +3624,11 @@ function vrPanel() {
   // can never drift apart
   const sub = (document.getElementById('centerSub') || {}).textContent || '';
   const last = msgBox && msgBox.lastElementChild;
-  ship.drawPanel(rows, sub || (last ? last.textContent : ''));
+  const note = sub || (last ? last.textContent : '');
+  // an ending is a paragraph: grow the slate and make it solid for it, and let
+  // it shrink back to a see-through reading when the notice goes
+  ship.bigPanel(note.length > 90);
+  ship.drawPanel(rows, note);
 }
 
 renderer.setAnimationLoop(frame);

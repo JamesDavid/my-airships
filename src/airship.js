@@ -811,6 +811,7 @@ export class Airship {
       // clear of the fore shifting weight, which hauls in only to x 1.62 and is
       // 2.18 m ahead of here at its nearest.
       slate.position.set(bx + 0.70, -drop + 0.44, 0);
+      this.panelHome = bx + 0.70;
       slate.rotation.y = -Math.PI / 2;
       this.pitchGroup.add(slate);
       // smaller and see-through: it is a reading, not a wall. At 0.30 x 0.19
@@ -1255,6 +1256,25 @@ export class Airship {
       if (ly <= c.height - 20) g.fillText(line, 26, ly);
     }
     this.panelTex.needsUpdate = true;
+  }
+
+  /**
+   * Grow the slate and make it solid, for an ending — a scenario's last word is
+   * a paragraph, and 0.21 m of half-transparent canvas is the wrong place to
+   * read one. It goes back to its small, see-through self when the notice does.
+   */
+  bigPanel(on) {
+    if (!this.panelMesh || this._panelBig === on) return;
+    this._panelBig = on;
+    const k = on ? 2.4 : 1;
+    this.panelMesh.scale.set(k, k, 1);
+    this.panelMesh.position.x = this.panelHome
+      ? this.panelHome + (on ? -0.10 : 0) : this.panelMesh.position.x;
+    this.panelMesh.traverse((o) => {
+      if (o.material && o.material.transparent !== undefined) {
+        o.material.opacity = on ? 1 : (o.geometry && o.geometry.type === 'BoxGeometry' ? 0.6 : 0.72);
+      }
+    });
   }
 
   /** Show or hide the panel and its frame — headset only. */

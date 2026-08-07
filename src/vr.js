@@ -383,9 +383,14 @@ function ensureMenuBoard() {
   menuMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.2),
     new THREE.MeshBasicMaterial({ map: menuTex, transparent: true, depthTest: false }));
   menuMesh.renderOrder = 999;              // over the world, like a held card
-  // the rig is turned to the ship's heading, so its local +x is over the bow
-  menuMesh.position.set(1.15, 0.05, 0);
-  menuMesh.rotation.y = -Math.PI / 2;
+  // IN FRONT, AND AT THE INSTRUMENTS' HEIGHT. The rig now turns so that local
+  // -Z is over the bow (a headset looks down -Z), so the old local +X put this
+  // board out over the port rail. And it hung at eye level a metre and a bit
+  // out, which is a different place from everything else a pilot reads: the
+  // compass, the barometer and the slate are all about 0.11 m under the eye on
+  // the forward panel. The board sits with them.
+  menuMesh.position.set(0, 1.49, -1.05);
+  menuMesh.rotation.y = 0;
   menuMesh.visible = false;
   rig.add(menuMesh);
 }
