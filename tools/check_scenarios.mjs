@@ -19,6 +19,7 @@ import { flyTrack } from './fly_track.mjs';
 const scene = { children: [], add(...o) { this.children.push(...o); },
   remove() {}, traverse(f) { f(this); } };
 const world = buildWorld(scene, 'paris');
+export { world };
 
 /** Fly one scenario to its own verdict. `pilot(ship, t)` returns input. */
 export function play(def, { shipId, pilot, secs = 900, dt = 1 / 30 } = {}) {
@@ -64,9 +65,21 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   const NBAGS = SHIPS[sc.shipId].physics.bags;
   for (let b = 0; b <= NBAGS; b++) {
     let n = 0;
+    // BOTH HALVES NOW. Fly west under power and LOW, where the wind is
+    // thinner; when the wires foul, pull the lever right back — she has nine
+    // seconds — and then choose the ballast.
     const r = play(sc, { pilot: (sh, t) => {
-      if (t >= 15 && n < b) { sh.dropBallast(); n++; }
-      return { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 };
+      const dead = sh.motorDead;
+      // the wires are in the screw: pull the lever right back, as he did
+      const cut = dead || sh.wiresFouled;
+      if (dead && n < b) { sh.dropBallast(); n++; }
+      // ABOVE THE GROUND, not above sea level. Holding 60 m absolute over the
+      // Chaillot plateau — ground 26 m with 26 m roofs on it — flies you into
+      // the chimney-pots, which is how this pilot kept ending the flight on a
+      // roof half way home.
+      const agl = sh.pos.y - world.groundAt(sh.pos.x, sh.pos.z);
+      return { throttle: cut ? -1 : (sh.throttle < 0.98 ? 1 : 0),
+        rudder: 0, pitch: agl > 85 ? -0.5 : 0.35, vent: 0, coax: 0 };
     } });
     if (r.verdict && r.verdict.ok) { wins++; if (b === 0 && r.onRoof) roofWin = true; }
     console.log('%s  %s  %s', String(b).padStart(3),

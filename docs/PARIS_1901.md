@@ -324,41 +324,11 @@ Said plainly so nobody spends a week on it:
 
 ## Backlog
 
-- **SCENARIO II SHOULD BEGIN AT THE TOWER, NOT AT THE FALL.** A pilot asked
-  whether "in the book was he coming from the opposite direction into a slight
-  headwind after rounding the tower over the river Seine" (#66), and the answer
-  is yes — that leg is real and the scenario skips it. Ch. XIII:
-
-  > "I turned the Tower at the end of nine minutes and **took my way back to St
-  > Cloud**; but my balloon was losing hydrogen through one of its two automatic
-  > gas valves… By the time I had got back to **the fortifications of Paris, near
-  > La Muette**, it caused the suspension wires to sag so much that those nearest
-  > to the screw propeller caught in it as it revolved. I saw the propeller
-  > cutting and tearing at the wires. **I stopped the motor instantly.**"
-
-  So the afternoon has two halves and the game only plays the second. He rounds
-  the Tower, flies WEST toward St Cloud — crossing the Seine, into the wind that
-  is about to become his problem — and gets as far as La Muette before the
-  propeller starts eating the suspension. Only then does he stop the motor, and
-  only then does the drift east begin, which is where scenario II opens.
-
-  What it should be:
-
-  1. Start beside the Tower, just rounded, motor running, homeward — west, into
-     the head wind, over the river.
-  2. The balloon sags as she loses gas; at La Muette the wires foul the screw.
-     The pilot must STOP THE MOTOR himself (the ALLUM. lever, or the key) — and
-     if he does not, the propeller cuts them and it is a wreck.
-  3. From that moment it is the scenario as it stands: no power, the wind
-     carrying her back onto the Tower, and the ballast the only decision.
-
-  That makes the ballast trade mean something, because you arrive at it having
-  earned the situation rather than being handed it. It also gives the pilot the
-  one thing the present version cannot explain — WHY the motor is dead.
-
-  Not done here: it wants the geometry re-solved end to end (start point, wind,
-  leak rate, where the fouling fires) and flown through `tools/check_scenarios.mjs`
-  for every ballast choice, the way the current one was.
+- ~~**SCENARIO II SHOULD BEGIN AT THE TOWER, NOT AT THE FALL.**~~ **DONE.** It
+  plays both halves of 8 August now: round the Tower, home into the head wind
+  losing gas as you go, the wires foul at La Muette, stop the motor yourself or
+  the screw cuts them through — and only then the drift back and the ballast.
+  See the passage in docs/BOOK_REFERENCE.md A14.
 
 
 - **CAN THE DEUTSCH PRIZE BE WON INTO THE DAY'S WIND?** Unresolved, and it
