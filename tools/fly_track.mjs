@@ -49,7 +49,9 @@ export function flyTrack(track, world, { shipId = 'no6', secs = 3000, dt = 1 / 3
     while (e < -Math.PI) e += 2 * Math.PI;
     s.update(dt, { throttle: lever, rudder: Math.max(-1, Math.min(1, e * 2.5)),
       pitch: Math.max(-1, Math.min(1, (g.y - s.pos.y) * 0.05)),
-      vent: s.pos.y > g.y + 30 ? 1 : 0, coax: 0 }, wind, env);
+      // vent only when a long way high AND still with gas to spare: venting
+      // down a big descent empties her and she can never climb to the next gate
+      vent: (s.pos.y > g.y + 60 && s.gas > 88) ? 1 : 0, coax: 0 }, wind, env);
     if (s.wrecked) return { ok: false, why: 'wrecked', t, gate, lap, log };
     const rel2 = { x: s.pos.x - g.x, y: s.pos.y - g.y, z: s.pos.z - g.z };
     const sd = gatePlane(rel2, headings[gate]);

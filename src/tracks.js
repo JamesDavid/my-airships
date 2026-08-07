@@ -2,6 +2,7 @@ import { placeLegacy } from './paris_geo.js';
 import { place as placeMC, groundAt as groundMC } from './monaco_geo.js';
 import { LONGCHAMP } from './paris_stcloud.js';
 import { parisGround } from './world.js';
+import { LANDMARKS } from './paris_landmarks.js';
 
 /** "…a distance of about 35 kilometres (22 miles)" for ten circuits of
  *  Longchamps, 12 July 1901 (Ch. XII). A lap round the traced course measures
@@ -52,49 +53,39 @@ export const TRACKS = [
       LONGCHAMP.rx * LAP_INSET, LONGCHAMP.rz * LAP_INSET, 6, 60, 20),
   },
   {
-    id: 'gymkhana', location: 'paris', laps: 2, v: 5,
-    name: 'The Aerial Gymkhana',
-    sub: 'skirt the Roue, the Tower’s shoulder, under the Arc — 2 laps',
-    // Hung off the landmarks themselves rather than written out: the places
-    // moved onto their true coordinates, and gates written as numbers would
-    // still be circling where the Roue and the Trocadéro used to stand.
+    id: 'gymkhana', location: 'paris', laps: 1, v: 6,
+    name: 'The Tour of Paris',
+    sub: 'twelve landmarks, once round — the Tower, Montmartre, the Bastille, Notre-Dame',
+    // ONE LAP OF THE WHOLE CITY, instead of two of six gates round the Champ de
+    // Mars. Seventeen point seven kilometres, which the No. 6 has the petroleum
+    // for three times over, and every gate is a place rather than a coordinate:
+    // she is flown from the Tower out to the Étoile, along the grands boulevards
+    // to Montmartre, down the eastern edge by the République and the Bastille,
+    // back along the river past Notre-Dame and the Panthéon, and home over the
+    // Invalides.
+    //
+    // Hung off the places themselves, like everything else here, so that when a
+    // landmark moves onto better coordinates the course follows it.
     gates: (() => {
       const P = (id) => placeLegacy(id);
-      const roue = P('roue'), twr = P('eiffel'), troc = P('trocadero'), arc = P('etoile');
-      const ec = P('ecolemil');
-      // HEIGHTS OVER THE GROUND, not over the datum.
+      const M = (id) => LANDMARKS.find((l) => l.id === id);
+      // [what, how high over its own ground, how wide the ring]
       //
-      // These were absolute, from when Paris was flat. The city has its hills
-      // now and two of these gates went underground with them: the Étoile mound
-      // is 25 m up, so "UNDER the Arc" at y 13 was ELEVEN METRES BELOW THE
-      // PAVEMENT and the Champs-Élysées gate at 16 was level with the kerb.
-      // Neither could be flown through, which is why nobody has ever finished
-      // this course — eighteen attempts on the boards and not one completion.
-      const G = (x, z, h) => parisGround(x, z) + h;
-      return [
-        // SKIRT the rim — outside it. The Grande Roue's rim radius is 46 m and
-        // this gate stood 52 m from its axis with a radius of 30, so its inner
-        // edge was twenty-two metres INSIDE the wheel and the rim ran straight
-        // through the hoop: "the first target is kinda smooshed into the Ferris
-        // wheel" (bug #33). 88 m out leaves twelve metres of daylight.
-        { x: roue.x + 88, y: G(roue.x + 88, roue.z, 44), z: roue.z, r: 30 },
-        { x: (twr.x + ec.x) / 2, y: G((twr.x + ec.x) / 2, (twr.z + ec.z) / 2, 24),
-          z: (twr.z + ec.z) / 2, r: 34 },              // low over the Champ de Mars
-        { x: twr.x, y: G(twr.x, twr.z - 150, 34), z: twr.z - 150, r: 34 },  // the Tower's shoulder
-        // PAST the palace front, not through it. This gate sat on the rotunda
-        // at 50 m with a radius of 34, and gateHeadings pointed it down the
-        // z axis — which is exactly the line the Trocadéro's two 70 m towers
-        // stand on, at 21 m either side of the centre. You were being asked to
-        // fly between them through a ring wider than the gap: "this goal is
-        // twisted should be turned so not blocked by towers" (bug #37).
-        //
-        // Sixty-two metres out over the forecourt keeps the low pass and the
-        // drama — the rotunda is 18 m across and the curved galleries all sweep
-        // the OTHER way, toward the Tower — with eighteen metres of daylight.
-        { x: troc.x - 62, y: G(troc.x - 62, troc.z, 17), z: troc.z, r: 26 },
-        { x: arc.x + 300, y: G(arc.x + 300, arc.z + 150, 22), z: arc.z + 150, r: 26 },  // DOWN the Champs-Élysées
-        { x: arc.x, y: G(arc.x, arc.z, 13), z: arc.z, r: 11, ang: -2.034 },  // UNDER the Arc (its opening is 29 m)
+      // The heights clear what they are named for: the Tower is rounded at her
+      // second platform rather than over the top, Montmartre's basilica stands
+      // 86 m up on the butte before it starts, and the rest are flown past at
+      // roof height, which is where a pilot of 1901 actually was.
+      const STOPS = [
+        [P('eiffel'), 120, 46], [P('trocadero'), 58, 38],
+        [P('etoile'), 62, 36], [M('madeleine'), 52, 34],
+        [P('opera'), 58, 34], [P('montmartre'), 46, 40],
+        [M('republique'), 46, 34], [M('bastille'), 58, 34],
+        [P('notredame'), 52, 36], [P('pantheon'), 58, 36],
+        [M('gareorsay'), 46, 34], [P('invalides'), 62, 36],
       ];
+      return STOPS.filter(([p]) => p).map(([p, h, r]) => ({
+        x: p.x, y: parisGround(p.x, p.z) + h, z: p.z, r,
+      }));
     })(),
   },
   {
