@@ -348,7 +348,9 @@ export const SCENARIOS = [
       ctx.place(px, 90, pz, Math.atan2(-(S.z - pz), S.x - px));   // facing the stage
       ctx.ship.gas = 90;
       ctx.setZone(S.clone(), 55);
-      ctx.setCenter('February 14th, 1902', 'Imperfectly inflated, sinking — the wind is behind you. Spend the sand and run for the stage.');
+      ctx.setCenter('February 14th, 1902', ('Imperfectly inflated, sinking — the wind is behind you. Spend the '
+        + (ctx.ship.spec.ballast === 'water' ? 'water' : 'sand')
+        + ' and run for the stage.'));
     },
     tick(ctx, dt) {
       ctx.ship.gas = Math.max(82, ctx.ship.gas - 0.12 * dt);

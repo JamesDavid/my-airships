@@ -438,6 +438,24 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('NO SCENARIO TELLS A WATER SHIP TO SPEND ITS SAND');
+  {
+    const src2 = await (await import('node:fs/promises')).readFile('src/scenarios.js', 'utf8');
+    const bad2 = [];
+    // any literal mention of sand or water that is not chosen from the ship
+    for (const m of src2.matchAll(/'[^']*(sand|water)[^']*'/g)) {
+      const around = src2.slice(Math.max(0, m.index - 120), m.index + m[0].length);
+      if (!/spec\.ballast/.test(around)) bad2.push(m[0].slice(0, 54));
+    }
+    if (bad2.length) {
+      console.log('   FAIL a scenario names the ballast outright: ' + bad2[0]);
+      fails++;
+    } else {
+      console.log('   ok   every mention of ballast is chosen from the ship');
+    }
+  }
+
+  console.log('');
   console.log('%s', fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');
   process.exit(fails ? 1 : 0);
 }
