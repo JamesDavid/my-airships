@@ -308,35 +308,41 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('   one ramp was in the middle of the Seine."');
   console.log('');
   {
-    const { PONT } = await import('../src/paris_stcloud.js');
+    const { PONT, AVRE } = await import('../src/paris_stcloud.js');
     const { RIVER_HALF } = await import('../src/paris_terrain.js');
-    // walk out along the bridge's own axis and ask the world where the water is
-    const wb = scene.children.find((o) => o && o.position
-      && Math.abs(o.position.x - PONT.x) < 1 && Math.abs(o.position.z - PONT.z) < 1
-      && Array.isArray(o.children) && o.children.length > 8);
-    if (!wb) { console.log('   FAIL cannot find the bridge to measure'); fails++; }
-    else {
-      // the longest thing in it is the deck; the widest-spread children are the
-      // abutments and ramps
-      let deck = 0, outermost = 0;
+    // BOTH CROSSINGS. Fixing the road bridge and not the aqueduct earned two
+    // more reports a minute apart, and the second of them was the aqueduct's
+    // GREEN EMBANKMENT standing in the water: "dark green in the water?"
+    for (const [name, at] of [['the road bridge', PONT], ['the aqueduct', AVRE]]) {
+      const wb = scene.children.find((o) => o && o.position
+        && Math.abs(o.position.x - at.x) < 1 && Math.abs(o.position.z - at.z) < 1
+        && Array.isArray(o.children) && o.children.length > 8);
+      if (!wb) { console.log('   FAIL cannot find %s to measure', name); fails++; continue; }
+      // the deck is the longest thing in it; everything else must either be a
+      // pier (thin, meant to stand in the stream) or clear of the water
+      let deck = 0, worst = null;
       for (const c of wb.children) {
         const p = c && c.geometry && c.geometry.parameters;
         if (p && p.width > deck) deck = p.width;
-        if (c && c.position) outermost = Math.max(outermost, Math.abs(c.position.x));
       }
-      const spansWater = deck / 2 >= RIVER_HALF;
-      // and nothing solid may stand between the banks except the piers, which
-      // are meant to: the ABUTMENTS must be outside the waterline
-      const abut = wb.children.filter((c) => {
+      for (const c of wb.children) {
         const p = c && c.geometry && c.geometry.parameters;
-        return p && p.width === 14 && p.height === 6.5;
-      });
-      const abutOk = abut.length > 0 && abut.every((c) => Math.abs(c.position.x) - 7 >= RIVER_HALF - 0.5);
-      const ok = spansWater && abutOk;
+        if (!p || !c.position || !Number.isFinite(p.width)) continue;
+        if (p.width >= deck - 0.01) continue;            // the deck and its parapets
+        if (p.width <= 10) continue;                     // a pier or a railing post
+        const inner = Math.abs(c.position.x) - p.width / 2;
+        if (inner < RIVER_HALF - 0.5) {
+          const into = RIVER_HALF - inner;
+          if (!worst || into > worst.into) worst = { into, w: p.width };
+        }
+      }
+      const spans = deck / 2 >= RIVER_HALF;
+      const ok = spans && !worst;
       if (!ok) fails++;
-      console.log('   %s  deck %s m across a river %s m wide; abutments at +-%s m, waterline at %s m',
-        ok ? 'ok  ' : 'FAIL', deck.toFixed(0), (RIVER_HALF * 2).toFixed(0),
-        abut.length ? Math.abs(abut[0].position.x).toFixed(0) : '?', RIVER_HALF.toFixed(0));
+      console.log('   %s  %s: deck %s m across %s m of river%s',
+        ok ? 'ok  ' : 'FAIL', name.padEnd(15), deck.toFixed(0), (RIVER_HALF * 2).toFixed(0),
+        worst ? `, and a ${worst.w.toFixed(0)} m block standing ${worst.into.toFixed(0)} m INTO the water`
+          : spans ? ', nothing solid in it but piers' : ' — IT DOES NOT REACH');
     }
   }
 

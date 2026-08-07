@@ -1961,7 +1961,18 @@ function addBookPlaces(scene, buildings) {
   // built 1891-93, and the very structure of the plate captioned "Returning to
   // Aéro Club Grounds above Aqueduct". It crosses the reach beside the start.
   const aq = new THREE.Group();
-  const SPAN = 150, DECK = 15;
+  // THE OTHER CROSSING, and it had the same fault as the Pont de Saint-Cloud.
+  //
+  // 150 m of deck is +-75, and the Seine here is 144 wide — so it cleared the
+  // water by three metres and no more, its abutments straddled the waterline,
+  // and the green embankments that carry the bank away from them began at +-69,
+  // three metres INSIDE the river. Two reports, one minute apart, from a pilot
+  // circling the same spot: "this bridge is weird and starts in the middle of
+  // the sine", and "dark green in the water?" — which is that embankment,
+  // standing in it.
+  //
+  // Measured off the river now, like the road bridge.
+  const SPAN = (RIVER_HALF + 8) * 2, DECK = 15;
   const deck = new THREE.Mesh(new THREE.BoxGeometry(SPAN, 2.2, 9), iron);
   deck.position.y = DECK;
   aq.add(deck);
@@ -1995,15 +2006,18 @@ function addBookPlaces(scene, buildings) {
   // heights just made a flight of stairs out of it.
   const EMB = 90;
   for (const sx of [-1, 1]) {
-    const abut = new THREE.Mesh(new THREE.BoxGeometry(20, DECK + 1.5, 14), stone);
-    abut.position.set(sx * (SPAN / 2 - 4), (DECK + 1.5) / 2 - 0.6, 0);
+    const ABW = 20;
+    const abut = new THREE.Mesh(new THREE.BoxGeometry(ABW, DECK + 1.5, 14), stone);
+    // its inner face on the waterline, so the masonry stands on dry ground
+    abut.position.set(sx * (RIVER_HALF + ABW / 2), (DECK + 1.5) / 2 - 0.6, 0);
     abut.castShadow = abut.receiveShadow = true;
     aq.add(abut);
-    // the bank itself: high at the abutment, running out to nothing
+    // the bank itself: high at the abutment, running out to nothing — and
+    // starting BEYOND it, not three metres out in the stream
     const slope = Math.atan2(DECK - 0.5, EMB);
     const emb = new THREE.Mesh(new THREE.BoxGeometry(EMB, 8, 24),
       new THREE.MeshLambertMaterial({ color: 0x7b8a54 }));
-    emb.position.set(sx * (SPAN / 2 + EMB / 2 - 6),
+    emb.position.set(sx * (RIVER_HALF + ABW + EMB / 2),
       (DECK - 0.5) / 2 - 3.4, 0);
     emb.rotation.z = -sx * slope;           // FAR end down: the near end meets the deck
     emb.receiveShadow = true;
