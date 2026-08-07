@@ -174,6 +174,58 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('NOTHING IN PARIS IS BUILT UPSIDE DOWN');
+  console.log('   Chasing #57 — "upside down cones like we had on the river bank" out');
+  console.log('   in the Bois. Most of this world lives in instance matrices, and the');
+  console.log('   harness could not read one until now: setMatrixAt threw the matrix');
+  console.log('   away and Matrix4.makeScale returned itself unchanged, so the');
+  console.log('   question could not be asked at all and three investigations came');
+  console.log('   back empty. It can be asked now.');
+  console.log('');
+  {
+    let meshes = 0, insts = 0;
+    const bad = [];
+    for (const o of scene.children) {
+      if (!o || !o.isInstancedMesh || !Array.isArray(o.matrices)) continue;
+      meshes++;
+      for (const m of o.matrices) {
+        if (!m || !m.s || !m.p) continue;
+        insts++;
+        if (m.s.x < 0 || m.s.y < 0 || m.s.z < 0
+          || !Number.isFinite(m.s.x) || !Number.isFinite(m.s.y) || !Number.isFinite(m.s.z)
+          || !Number.isFinite(m.p.x) || !Number.isFinite(m.p.y) || !Number.isFinite(m.p.z)) {
+          bad.push(m);
+        }
+      }
+    }
+    if (!insts) { console.log('   FAIL no instance matrices were readable at all'); fails++; }
+    else {
+      const ok = bad.length === 0;
+      if (!ok) fails++;
+      console.log('   %s  %d instances across %d meshes; %d inverted or non-finite%s',
+        ok ? 'ok  ' : 'FAIL', insts, meshes, bad.length,
+        bad.length ? ` (first at ${bad[0].p.x.toFixed(0)}, ${bad[0].p.z.toFixed(0)})` : '');
+    }
+    // ...and the trees of the Bois stand ON the Bois, which is the other half
+    // of what an upside-down cone out there could have been.
+    const TX = -3086, TZ = -1051;
+    let planted = 0, adrift = 0, worst = 0;
+    for (const o of scene.children) {
+      if (!o || !o.isInstancedMesh || !Array.isArray(o.matrices)) continue;
+      for (const m of o.matrices) {
+        if (!m || !m.p || Math.hypot(m.p.x - TX, m.p.z - TZ) > 600) continue;
+        planted++;
+        const off = m.p.y - world.groundAt(m.p.x, m.p.z);
+        if (off < -0.5) { adrift++; worst = Math.min(worst, off); }
+      }
+    }
+    const ok2 = adrift === 0 && planted > 50;
+    if (!ok2) fails++;
+    console.log('   %s  %d things stand within 600 m of the report; %d are under their own ground%s',
+      ok2 ? 'ok  ' : 'FAIL', planted, adrift, adrift ? ` (worst ${worst.toFixed(1)} m)` : '');
+  }
+
+  console.log('');
   console.log('THE AERODROME STANDS ON THE GROUND');
   console.log('   liftToTerrain walks the scene\'s TOP-LEVEL children only, so the');
   console.log('   Aero-Club\'s field went up by the height under its own origin —');
