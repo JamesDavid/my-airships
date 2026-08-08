@@ -475,7 +475,7 @@ export function cullForVR(from, scene) {
   // untouched. Close to, the detailed group comes back.
   for (const o of cullScene.children) {
     const p = o.userData && o.userData.farProxy;
-    if (!p) continue;
+    if (!p || p.userData.baked) continue;      // baked outright; nothing to swap
     const dx = o.position.x - from.x, dz = o.position.z - from.z;
     const near = dx * dx + dz * dz < LOD_FAR * LOD_FAR;
     if (o.visible !== near) o.visible = near;

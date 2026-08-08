@@ -1589,7 +1589,7 @@ function makeFarProxy(group) {
  * Only the heavy ones: nineteen of the twenty-three cost four draws each and
  * merging them would save nothing worth the risk of them looking different.
  */
-export function addFarProxies(scene, minLeaves = 12) {
+export function addFarProxies(scene, minLeaves = 6) {
   const made = [];
   const isMesh = (n) => n.geometry && typeof n.geometry.type === 'string';
   const count = (o) => {
@@ -1605,10 +1605,29 @@ export function addFarProxies(scene, minLeaves = 12) {
     if (count(o) < minLeaves) continue;
     const proxy = makeFarProxy(o);
     if (!proxy) continue;
+    // NO "ONLY KEEP IT IF IT WINS" TEST HERE, though that is the obvious guard.
+    // The headless three gives every mesh its own material object, so nothing
+    // ever groups there and such a test discards EVERY proxy — leaving the
+    // harness with no structure to check and the feature unverified. The
+    // threshold above does the same job deterministically in both places, and
+    // the real ratios are measured in a browser (see docs/VR_PERFORMANCE.md).
     scene.add(proxy);
     o.userData.farProxy = proxy;
     proxy.userData.lodOwner = o;
     made.push(proxy);
+    // ...AND IF IT NEVER MOVES, THE MERGE IS SIMPLY THE BUILDING.
+    //
+    // A distance swap is only needed for something you would see change. These
+    // are stone: the merge holds the same vertices in the same places, so close
+    // to it is indistinguishable from the original, and there is no reason to
+    // pay for the original at any distance. The detailed group STAYS in the
+    // scene, hidden — invisible costs nothing to draw, and every check that
+    // measures a monument's real size still has real geometry to measure.
+    if (!o.userData.animates) {
+      o.visible = false;
+      proxy.visible = true;
+      proxy.userData.baked = true;
+    }
   }
   return made;
 }
@@ -2046,7 +2065,14 @@ function addLandmarks(scene) {
     leg.rotation.z = sx * 0.5;
     roue.add(leg);
   }
-  { const _p = placeLegacy('roue'); roue.position.set(_p.x, 0, _p.z); farSeen(roue); }
+  // SHE TURNS, so she cannot be baked. Everything else on this list is dead
+  // stone that never moves, and a merged copy of dead stone can simply replace
+  // it — but the wheel's rim really rotates (0.025 rad/s, below), and baking a
+  // rotation into vertices freezes it. She keeps the distance SWAP instead: the
+  // frozen merge only appears past 1,400 m, where a quarter of a degree a
+  // second is not something anybody can see.
+  { const _p = placeLegacy('roue'); roue.position.set(_p.x, 0, _p.z); farSeen(roue);
+    roue.userData.animates = true; }
   roue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(roue);
   // Collide with the LEGS only — daring pilots may thread the wheel. Taken from

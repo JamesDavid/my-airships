@@ -1274,17 +1274,39 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
         const n = count(o);
         if (n < 12) continue;
         heavy.push(n);
-        if (!u.farProxy || !count(u.farProxy)) missing.push(n);
+        if (!u.farProxy || typeof u.farProxy !== 'object' || !count(u.farProxy)) missing.push(n);
       }
       console.log('   %d monuments of 12+ draws (%s); each carries a merged far version',
         heavy.length, heavy.sort((a, b) => b - a).join(', '));
+      // AND NOTHING THAT MOVES IS BAKED.
+      //
+      // Merging bakes every transform into the vertices, so a merged copy of
+      // something that turns is FROZEN. All of these are dead stone except one:
+      // the Grande Roue really rotates (0.025 rad/s), which is why she alone
+      // keeps the distance swap and her merge is only shown past 1,400 m where
+      // a quarter of a degree a second cannot be seen. It would have been an
+      // easy and completely silent thing to get wrong.
+      const frozen = [];
+      for (const o of scene.children) {
+        const u = o.userData || {};
+        if (!u.farProxy) continue;
+        // STRICT ===, not truthiness. One object in the scene has a permissive
+        // stub proxy for userData that answers every property with a function,
+        // so a truthy test says it both animates AND is baked, and the check
+        // condemns a world that is correct. Fourth time this session.
+        if (u.animates === true && u.farProxy.userData
+          && u.farProxy.userData.baked === true) frozen.push(o);
+      }
       if (!heavy.length) {
         console.log('   FAIL no heavy monuments found — the measurement has stopped working');
         fails++;
       } else if (missing.length) {
         console.log('   FAIL %d of them have no far version', missing.length); fails++;
+      } else if (frozen.length) {
+        console.log('   FAIL something that turns has been baked, and is now frozen');
+        fails++;
       } else {
-        console.log('   ok   every heavy monument has one, and only one of the pair is drawn');
+        console.log('   ok   every heavy monument has one; nothing that moves is baked');
       }
     }
 
