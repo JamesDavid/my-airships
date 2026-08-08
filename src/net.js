@@ -95,6 +95,9 @@ async function req(path, opts = {}) {
         ...(opts.headers || {}),
       },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
+      // a request made while the page is going away has to outlive it, or the
+      // hours a pilot just flew are lost the moment he closes the tab
+      keepalive: !!opts.keepalive,
     });
     const text = await r.text();
     let data = null;
@@ -239,18 +242,44 @@ const LS_RECORDS = 'myairships_records';
 export function recordsOn() { return store.get(LS_RECORDS) !== '0'; }
 export function setRecordsOn(on) { store.set(LS_RECORDS, on ? '1' : '0'); }
 
-export function logFlight({ place, kind, ref, shipId, outcome, secs, detail }) {
+export function logFlight({ place, kind, ref, shipId, outcome, secs, detail, keepalive }) {
   if (!enabled() || !recordsOn()) return;
   if (!kind || !ref || !outcome) return;
   const row = {
-    pilot_id: pilotId(), place, kind, ref, ship_id: shipId, outcome,
+    // THE NAME, NOT ONLY THE ID. A flight carried a pilot_id and nothing else,
+    // and a uuid out of localStorage is not a pilot: it is a browser. Eight of
+    // them had flown by the seventh of August and there was no way to tell
+    // whether that was eight people or one person with a headset and two
+    // laptops. The log wants a name on it.
+    pilot: pilotName(), pilot_id: pilotId(),
+    place, kind, ref, ship_id: shipId, outcome,
     secs: Number.isFinite(secs) ? +secs.toFixed(1) : null,
     detail: detail || null, client_version: CLIENT_VERSION,
   };
   // fire and forget: a record is never worth a moment of the pilot's flight,
   // and a failure here must be invisible
-  req('/rest/v1/flights', { method: 'POST', body: row, timeout: 8000,
+  req('/rest/v1/flights', { method: 'POST', body: row, timeout: 8000, keepalive,
     headers: { Prefer: 'return=minimal' } }).catch(() => {});
+}
+
+/**
+ * THE PILOT LOG: hours aloft, by pilot.
+ *
+ * Every attempt has carried its own duration since the flights table was made,
+ * and not one of them could be read back — the table is insert-only by design,
+ * because a flight row says where a named person was and when. So the log is
+ * read from a VIEW that carries no positions, no times of day and no detail:
+ * a name, how many flights, how long in the air, and where they have been.
+ *
+ * Returns [] rather than throwing when the office is unreachable, like
+ * everything else here.
+ */
+export async function pilotLog(limit = 25) {
+  if (!enabled()) return [];
+  try {
+    const r = await req(`/rest/v1/pilot_log?order=secs.desc&limit=${limit}`, { timeout: 9000 });
+    return (r.ok && Array.isArray(r.data)) ? r.data : [];
+  } catch { return []; }
 }
 
 // ---------------------------------------------------------------- plumbing

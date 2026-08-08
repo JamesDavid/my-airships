@@ -159,6 +159,7 @@ function spawnShip(specId, where = null) {
   ship.showPanel(vr.inVR());
   document.getElementById('helpTitle').textContent = `My Airships — ${ship.spec.name}`;
   addMsg('ship', `${ship.spec.name} — ${ship.spec.sub}`, 0);
+  freeFlightBegin();          // the log starts when the ship does
 }
 
 /**
@@ -1510,6 +1511,24 @@ function flightBegin(kind, ref) {
   flightEnd('abandoned');                    // whatever was open is over
   flight = { kind, ref, at: performance.now(), ship: currentShip, place: currentLocation };
 }
+
+/**
+ * ORDINARY FLYING COUNTS TOO.
+ *
+ * Only scenarios, trials and games were ever logged, so an afternoon spent
+ * going nowhere in particular — which is most of what this game is for, and all
+ * of what it is for in a headset — left no trace at all. The records table has
+ * never had a single row in it by anybody; the hours have. So the hours are
+ * what there is to show, and they have to be collected.
+ *
+ * Opened whenever a ship is put in the air with nothing else running, and
+ * closed by whatever starts next, which flightBegin already does.
+ */
+function freeFlightBegin() {
+  if (flight) return;                        // a scenario or trial owns the log
+  flight = { kind: 'free', ref: currentLocation, at: performance.now(),
+    ship: currentShip, place: currentLocation };
+}
 function flightEnd(outcome, detail) {
   // Today's sky back, whatever else happens. A scenario may reconstruct its own
   // afternoon with ctx.setWind — VII does — and a flight can end in more ways
@@ -1524,8 +1543,16 @@ function flightEnd(outcome, detail) {
   const f = flight;
   flight = null;                             // before the send: never log twice
   net.logFlight({ place: f.place, kind: f.kind, ref: f.ref, shipId: f.ship,
-    outcome, secs: (performance.now() - f.at) / 1000, detail });
+    outcome, secs: (performance.now() - f.at) / 1000, detail, keepalive: leaving });
 }
+
+// THE LAST FLIGHT OF THE DAY IS STILL A FLIGHT. Nothing closed the log when the
+// page went away, so a pilot who simply flew and then shut the tab -- which is
+// every free flight there has ever been -- logged nothing at all. pagehide is
+// the one event a mobile browser reliably gives you, and the request goes out
+// with keepalive so it outlives the page that made it.
+let leaving = false;
+addEventListener('pagehide', () => { leaving = true; flightEnd('stopped'); });
 
 // ---------------------------------------------------------------- the games
 // Tag, the postcard hunt, hot-and-cold and follow-the-leader. What is being

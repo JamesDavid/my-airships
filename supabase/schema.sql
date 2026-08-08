@@ -177,3 +177,43 @@ create policy flights_insert_anon on public.flights
 -- How many DIFFERENT pilots gave up on a thing, versus how many attempts:
 --   select ref, count(*) as attempts, count(distinct pilot_id) as pilots
 --     from public.flights where outcome = 'abandoned' group by ref;
+
+-- ---------------------------------------------------------------- the pilot log
+--
+-- The records table has never had a row in it. Not one time has been submitted
+-- by anybody, ever — a course has to be flown clean, inside the limit, past the
+-- validator, and nobody has done it. Meanwhile every attempt anyone has ever
+-- made carried its own duration and nobody could see any of it.
+--
+-- So the thing worth showing is not the fastest lap. It is the hours: who has
+-- been up, how long, and where. "Maybe we should just track flight time and
+-- uuid/name so we can have meaningful [numbers]" — the pilot log.
+alter table public.flights add column if not exists pilot text;
+
+-- ...and ORDINARY FLYING COUNTS. kind was scenario|trial|game, so an afternoon
+-- spent going nowhere in particular — which is most of what this game is for —
+-- was not recorded at all.
+alter table public.flights drop constraint if exists flights_kind;
+alter table public.flights add constraint flights_kind
+  check (kind in ('scenario','trial','game','free'));
+
+-- A flight row says where a named person was and when, so the table stays
+-- unreadable. The LOG carries none of that: a name, a count, a total, and the
+-- places — nothing that says where anybody was or at what hour.
+create or replace view public.pilot_log
+with (security_invoker = false) as
+  select coalesce(nullif(max(pilot), ''), 'a pilot unknown') as pilot,
+         count(*)                                            as flights,
+         round(sum(coalesce(secs, 0)))::int                   as secs,
+         count(distinct place)                                as places,
+         count(distinct ship_id)                              as ships,
+         count(*) filter (where outcome in ('complete','finished')) as completed,
+         max(created_at)::date                                as last_flown
+    from public.flights
+   group by pilot_id
+  having sum(coalesce(secs, 0)) > 0;
+
+grant select on public.pilot_log to anon;
+
+-- The log, in the dashboard:
+--   select * from public.pilot_log order by secs desc;
