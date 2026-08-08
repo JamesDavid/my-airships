@@ -249,6 +249,55 @@ if (renderer.shadowMap.enabled) {
       putBack ? 'lifts again when the headset comes off' : 'IS NEVER LIFTED');
   }
 
+  // THE DUCKBOARD RAISES THE PILOT AND NOTHING ELSE.
+  //
+  // "In vr small pilots cant see over the basket." The rim stands a metre over
+  // the floor because that is where it stood, so what moves is a loose slatted
+  // board laid ON the weave — raised a notch a press by two buttons on the
+  // starboard boards. The whole point is that ONLY the inside changes: the
+  // basket, its walls and its rim must not move, or the ship grows to fit the
+  // man in it and every outside view is a lie.
+  {
+    const { Airship, DECK_LIFT_MAX } = await import('../src/airship.js');
+    const { SHIPS } = await import('../src/ships.js');
+    const noScene = { add() {}, remove() {} };
+    const env2 = { groundAt: () => 0, buildings: [], underCloud: false, inBois: false };
+    const nw2 = { x: 0, y: 0, z: 0 };
+    let worstBasket = 0, lift = 0, rimLeft = 9, n2 = 0, hasButtons = true;
+    for (const id of Object.keys(SHIPS)) {
+      const sh = new Airship(noScene, SHIPS[id]);
+      if (!sh.deckBoard) continue;                 // a saddle ship has no basket
+      n2++;
+      const step = () => sh.update(1 / 30,
+        { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 }, nw2, env2);
+      sh.deckLift = 0; step();
+      const lo = sh.deckPoint.position.y, bLo = sh.basketMesh.position.y;
+      sh.deckLift = DECK_LIFT_MAX; step();
+      const hi = sh.deckPoint.position.y, bHi = sh.basketMesh.position.y;
+      worstBasket = Math.max(worstBasket, Math.abs(bHi - bLo));
+      lift = hi - lo;
+      rimLeft = Math.min(rimLeft, -sh.spec.keel.drop + 0.05 - hi);
+      if (!sh.pullCords.some((c) => c.id === 'push_deckup')
+        || !sh.pullCords.some((c) => c.id === 'push_deckdn')) hasButtons = false;
+    }
+    console.log('   %d baskets: the deck rises %s m, the basket moves %s m,'
+      + ' and %s m of rim is left over the raised deck',
+      n2, lift.toFixed(2), worstBasket.toFixed(3), rimLeft.toFixed(2));
+    if (!n2) { console.log('   FAIL no ship has a duckboard at all'); fails++; }
+    else if (!hasButtons) {
+      console.log('   FAIL a basket has no PLANCHER buttons to work it'); fails++;
+    } else if (lift < 0.2) {
+      console.log('   FAIL the board hardly lifts the pilot at all'); fails++;
+    } else if (worstBasket > 0.001) {
+      console.log('   FAIL the BASKET moves — the ship is growing to fit the pilot');
+      fails++;
+    } else if (rimLeft < 0.55) {
+      console.log('   FAIL the rim is below the pilot hip at full lift'); fails++;
+    } else {
+      console.log('   ok   only the inside of the basket changes, and the rim is still a rail');
+    }
+  }
+
   // THE ROOM NOTICE STANDS DOWN. It was set when the room opened and never
   // taken away, so on the screen it parked at the top for the whole flight and
   // in a headset it rode along the bottom of the slate for ever, because the

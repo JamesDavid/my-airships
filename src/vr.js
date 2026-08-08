@@ -15,6 +15,7 @@
 // browser reports a headset; on a desktop or a phone nothing here runs at all,
 // beyond one feature test at boot.
 import * as THREE from 'three';
+import { DECK_LIFT_MAX, DECK_LIFT_STEP } from './airship.js';
 
 // ---------------------------------------------------------------- the seat
 // The XR camera's pose comes from the headset and is expressed in the local
@@ -686,7 +687,7 @@ export function pollVR(ship) {
       ctrl.getWorldPosition(_hp);
       let best = GRAB;
       for (const id of ['ballast', 'vent', 'spark', 'menu', 'trim', 'carb',
-        'tiller', 'push_bug', 'push_menu', 'push_go', 'push_exitvr']) {
+        'tiller', 'push_bug', 'push_menu', 'push_go', 'push_exitvr', 'push_deckup', 'push_deckdn']) {
         const cp = ship.cordAt(id, _cp);
         if (!cp) continue;
         const d = _hp.distanceTo(cp);
@@ -754,6 +755,8 @@ export function pollVR(ship) {
       else if (on === 'vent') pad.vent = true;
       else if (on === 'spark') sawSpark = true;
       else if (on === 'menu' || on === 'push_menu') sawMenu = true;
+      else if (on === 'push_deckup') sawPush = 'deckup';
+      else if (on === 'push_deckdn') sawPush = 'deckdn';
       else if (on === 'push_bug') sawPush = 'bug';
       else if (on === 'push_go') sawPush = 'go';
       else if (on === 'push_exitvr') sawPush = 'exit';
@@ -799,6 +802,14 @@ export function pollVR(ship) {
     if (sawPush === 'bug') VR_ACTIONS.bug();
     else if (sawPush === 'go') VR_ACTIONS.go();
     else if (sawPush === 'exit' && session) session.end();
+    // PLANCHER: a notch a press, and the ship remembers it. Handled here and
+    // not through VR_ACTIONS because it is the ship's own furniture — nothing
+    // outside the basket knows or needs to know that the duckboard has moved.
+    else if (ship && (sawPush === 'deckup' || sawPush === 'deckdn')) {
+      const d = sawPush === 'deckup' ? DECK_LIFT_STEP : -DECK_LIFT_STEP;
+      ship.deckLift = Math.max(0, Math.min(DECK_LIFT_MAX, (ship.deckLift || 0) + d));
+      try { localStorage.setItem('myairships_deck', String(ship.deckLift)); } catch { /* private mode */ }
+    }
   }
   pushEdge = sawPush;
   ballastEdge = sawBallast; ventEdge = pad.vent; sparkEdge = sawSpark;

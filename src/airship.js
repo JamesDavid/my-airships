@@ -22,6 +22,12 @@ const VANE = 0.35;
 // a third of the keel ahead of her middle and so pulls her head round.
 const ROPE_VANE = 0.6;
 
+// How far the duckboard can be raised off the basket floor, and by how much a
+// press. At the top the rim still stands 0.7 m over the pilot's feet — hip high
+// on a small pilot, which is a rail and not a trip hazard.
+export const DECK_LIFT_MAX = 0.34;
+export const DECK_LIFT_STEP = 0.085;
+
 // ------------------------------------------------------- the pitch pendulum
 /**
  * How fast a ship swings in pitch, in radians per second, from her own size.
@@ -587,6 +593,69 @@ export class Airship {
       this.deckPoint = new THREE.Object3D();
       this.deckPoint.position.set(bx, cy - H / 2 + T, 0);
       this.pitchGroup.add(this.deckPoint);
+
+      // THE DUCKBOARD ITSELF. A loose slatted board laid on the weave, raised
+      // by the PLANCHER buttons. It is a separate thing ON the floor, not the
+      // floor: the basket keeps its own boards, its walls and its height, and
+      // nothing outside it moves. Slats, because that is what a duckboard is,
+      // and because seeing the wicker between them tells you it is loose gear
+      // rather than the ship.
+      const board = new THREE.Group();
+      const slatM = new THREE.MeshLambertMaterial({ color: 0x8a6a42 });
+      const SL = 7, IW = W - 2 * T - 0.02, ID = D - 2 * T - 0.02;
+      for (let i = 0; i < SL; i++) {
+        const b2 = new THREE.Mesh(new THREE.BoxGeometry(IW, 0.022, ID / SL * 0.7), slatM);
+        b2.position.z = -ID / 2 + ((i + 0.5) / SL) * ID;
+        board.add(b2);
+      }
+      for (const sx of [-1, 1]) {                 // two bearers under it
+        const r2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, ID), slatM);
+        r2.position.set(sx * (IW / 2 - 0.06), -0.026, 0);
+        board.add(r2);
+      }
+      board.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      basket.add(board);
+      this.deckBoard = board;
+      this.deckBoardRest = -H / 2 + T + 0.03;
+      board.position.y = this.deckBoardRest;
+      // PLANCHER — the duckboard, and the reason it is here.
+      //
+      // A short pilot in a headset cannot see over the basket. The rim stands a
+      // metre above the floor because that is where it stood, and nothing about
+      // the ship should change to suit the man in it — so what moves is a loose
+      // slatted board laid ON the floor, which is what you would actually do in
+      // a wicker basket, and it changes nothing an observer outside can see.
+      // The basket, the rim and the weave are untouched.
+      //
+      // Two discrete buttons rather than a lever: a floor is a thing you set
+      // once and forget, not a control you fly with, and a notch a press is
+      // something you can do without looking down. On the STARBOARD boards,
+      // opposite the push bank on the port side.
+      {
+        const dbMat = new THREE.MeshPhongMaterial({ color: 0x8a7f5a, shininess: 60 });
+        [['deckup', '▲', 0.075], ['deckdn', '▼', -0.075]].forEach(([id, glyph, dz]) => {
+          const btn = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.024, 0.024, 0.020, 10), dbMat);
+          btn.rotation.z = Math.PI / 2;              // face outboard, to starboard
+          btn.position.set(bx + 0.30, -drop - 0.30, 0.394 + dz * 0);
+          btn.position.z = 0.394;
+          btn.position.x = bx + 0.30 + dz;
+          this.pitchGroup.add(btn);
+          placard(this.pitchGroup, glyph, btn.position.x, -drop - 0.20, 0.425,
+            Math.PI, 0.075);
+          this.pullCords.push({ id: 'push_' + id, mesh: btn,
+            rest: btn.position.clone(), pulled: 0, push: true, lever: true });
+        });
+        placard(this.pitchGroup, 'PLANCHER', bx + 0.30, -drop - 0.40, 0.425,
+          Math.PI, 0.155);
+      }
+      this.deckPointRest = cy - H / 2 + T;
+      // Remembered: a pilot's height does not change between ships, and being
+      // made to find the buttons again on every one of them is the fault the
+      // buttons were added to fix.
+      let saved = 0;
+      try { saved = parseFloat(localStorage.getItem('myairships_deck')) || 0; } catch { saved = 0; }
+      this.deckLift = Math.max(0, Math.min(DECK_LIFT_MAX, saved));
       // ...and the box the weave encloses, published so a check can ask what
       // has been run through the cabin rather than working the numbers out
       // again for itself and testing its own copy of them.
@@ -851,6 +920,7 @@ export class Airship {
       // clone carries is three.js's business, not ours
       this.pullCords.push({ id: 'spark', mesh: this.sparkLever, lever: true,
         offset: new THREE.Vector3(0, 0.3, 0), rest: null, pulled: 0 });
+
     }
     this.sparkT = 0;
 
@@ -1642,6 +1712,14 @@ export class Airship {
       if (this.fuel === 0) this.events.push('fuelOut');
     }
     this.motorOn = P.thrust > 0 && this.fuel > 0 && !this.motorDead;
+    // THE DUCKBOARD rides where the PLANCHER buttons put it, and the pilot's
+    // deck point rides with it. That is the whole trick: his eye goes up
+    // because the FLOOR went up, so the rim, the dials, the cords and his own
+    // hands all stay exactly where they were relative to him.
+    if (this.deckBoard) {
+      this.deckBoard.position.y = this.deckBoardRest + this.deckLift;
+      if (this.deckPoint) this.deckPoint.position.y = this.deckPointRest + this.deckLift;
+    }
     this.rudderInput = input.rudder;
     // THE WEIGHT IS HAULED, NOT TELEPORTED. "By means of lighter cords each of
     // these two weights could be drawn into the basket" — a man pulling a
