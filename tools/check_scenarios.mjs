@@ -50,6 +50,7 @@ export function play(def, { shipId, pilot, secs = 900, dt = 1 / 30 } = {}) {
     def.tick(ctx, dt);
   }
   return { verdict, msgs, t: ship._t, pos: { ...ship.pos },
+    route,                                  // the hoops the scenario marked out
     onRoof: !!ship.restingOnRoof,
     bags: ship.bags, landed: ship.landed, wrecked: ship.wrecked };
 }
@@ -275,11 +276,17 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('');
   console.log('THE WALL AT NEUILLY IS A WALL AND NOT A ROW OF FINS');
   {
-    // "The wall pieces are 90 degrees off" (#102) — and exactly 90. A box laid
-    // on a circle must have its long axis TANGENT to it; rotation.y = theta
-    // sends local +X to (cos t, 0, -sin t), so the tangent at angle a wants
-    // -(a + pi/2), and writing -a stands every segment out from the wall like
-    // a fin. Measured on the built scene: the long axis against the radius.
+    // "The wall pieces are 90 degrees off" (#102) -- and exactly 90. A box's
+    // long axis is its local +X, and rotation.y = t sends that to
+    // (cos t, 0, -sin t), so a post laid along a side running (dx, dz) wants
+    // atan2(-dz, dx). Written -a for the old ring, every segment stood out
+    // from the wall like a fin.
+    //
+    // Asked SHAPE-INDEPENDENTLY, because the lot has since stopped being a
+    // circle: each post's long axis must point at its nearest neighbour. That
+    // is true along any wall of any shape, and false the moment the rule is
+    // mis-signed -- and it does not have to be rewritten when the wall is
+    // rebuilt as a rectangle, which a tangent-to-the-radius test did.
     const neu = placeLegacy('neuilly');
     const yard = scene.children.find((o) => o.position
       && Math.hypot(o.position.x - neu.x, o.position.z - neu.z) < 1
@@ -288,28 +295,40 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       console.log('   FAIL the walled yard at Neuilly is not in the scene');
       fails++;
     } else {
-      let worstDeg = 0, segs = 0;
-      for (const c of yard.children) {
-        const p = c.position;
-        const r = Math.hypot(p.x, p.z);
-        if (Math.abs(r - 95) > 6) continue;          // the wall ring only
-        segs++;
-        // the segment's long axis in world terms, and the radius under it
+      const posts = yard.children.filter((c) => c.geometry
+        && c.geometry.parameters && c.geometry.parameters.height === 4.2);
+      let off = 0, worstDeg = 0;
+      for (const c of posts) {
+        // the BEST-ALIGNED of the near neighbours, not simply the closest: a
+        // post at a corner has a neighbour round the corner at ninety degrees
+        // to it, and judging it by that one condemns eight good posts.
+        const near = posts.filter((d) => d !== c)
+          .map((d) => ({ q: Math.hypot(d.position.x - c.position.x,
+            d.position.z - c.position.z), d }))
+          .filter((e) => e.q < 12).sort((e, f) => e.q - f.q).slice(0, 3);
+        if (!near.length) continue;                     // alone, by the gateway
         const t = c.rotation.y;
         const ax = Math.cos(t), az = -Math.sin(t);
-        const rx = p.x / r, rz = p.z / r;
-        // a wall is perpendicular to its own radius: |axis . radius| = 0
-        const deg = Math.abs(90 - Math.acos(Math.min(1, Math.abs(ax * rx + az * rz)))
-          * 180 / Math.PI);
+        const deg = Math.min(...near.map((e) => Math.acos(Math.min(1, Math.abs(
+          ax * (e.d.position.x - c.position.x) / e.q
+          + az * (e.d.position.z - c.position.z) / e.q))) * 180 / Math.PI));
+        if (deg > 6) off++;
         worstDeg = Math.max(worstDeg, deg);
       }
-      console.log('   %d wall segments; worst is %s degrees off tangent', segs, worstDeg.toFixed(1));
-      if (segs < 40) {
+      // and it must be a LOT, not a ring: four straight sides, so the posts
+      // fall on exactly four bearings
+      const bearings = new Set(posts.map((c) => Math.round(
+        ((c.rotation.y * 180 / Math.PI) % 180 + 180) % 180)));
+      console.log('   %d wall posts on %d bearings; %d not laid along the wall (worst %s deg)',
+        posts.length, bearings.size, off, worstDeg.toFixed(1));
+      if (posts.length < 40) {
         console.log('   FAIL the wall has fallen down'); fails++;
-      } else if (worstDeg > 3) {
-        console.log('   FAIL the segments are not laid along the wall'); fails++;
+      } else if (off) {
+        console.log('   FAIL the posts are not laid along the wall'); fails++;
+      } else if (bearings.size > 4) {
+        console.log('   FAIL the lot is a ring of posts, not a walled rectangle'); fails++;
       } else {
-        console.log('   ok   every segment lies along the wall, tangent to it');
+        console.log('   ok   four straight sides, every post laid along its own');
       }
     }
   }
@@ -328,9 +347,9 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     const r = play(acosta, { secs: 1200, pilot: (sh, t) => {
       const agl = sh.pos.y - world.groundAt(sh.pos.x, sh.pos.z);
       const fromYard = Math.hypot(sh.pos.x - neu.x, sh.pos.z - neu.z);
-      // the wall is 4.2 m and stands at NEUILLY_R: record the least clearance
-      // she has as she crosses the line of it
-      if (Math.abs(fromYard - 95) < 12) wallClear = Math.min(wallClear, agl - 4.2);
+      // the wall is 4.2 m and the lot runs 110 m from its middle: record the
+      // least clearance she has as she crosses the line of it
+      if (Math.abs(fromYard - 110) < 14) wallClear = Math.min(wallClear, agl - 4.2);
       const d = Math.hypot(sh.pos.x - bag.x, sh.pos.z - bag.z);
       if (d < 240) sawPolo = true;
       // one circuit of the field, then down
@@ -384,6 +403,39 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       fails++;
     } else {
       console.log('   ok   he coaches her from the road until she outruns him');
+    }
+
+    // AND THE WAY SHE IS SENT MUST NOT BE OVER THE ROOFS. "The course goes diag
+    // thru the city? seems like it would have been an easier flight for first
+    // solo" (#107) -- and the hoops were struck along the straight line to
+    // Bagatelle, which runs slantwise across Neuilly. Measured on the route the
+    // scenario actually sets, not on a line assumed about it.
+    const route = r.route || [];
+    const legs = [{ x: neu.x, z: neu.z }, ...route.map((v) => ({ x: v.x, z: v.z }))];
+    let pts = 0, near = 0;
+    for (let i = 0; i < legs.length - 1; i++) {
+      const A = legs[i], B = legs[i + 1];
+      const L = Math.hypot(B.x - A.x, B.z - A.z) || 1;
+      for (let q = 0; q <= L; q += 40) {
+        const x = A.x + (B.x - A.x) * q / L, z = A.z + (B.z - A.z) * q / L;
+        pts++;
+        let bd = 1e9;
+        for (const bl of world.buildings) {
+          const d2 = Math.hypot(bl.x - x, bl.z - z);
+          if (d2 < bd) bd = d2;
+        }
+        if (bd < 45) near++;
+      }
+    }
+    const pct = pts ? 100 * near / pts : 0;
+    console.log('   the marked way spends %s%% of itself within 45 m of a house (the straight line: 42%%)',
+      pct.toFixed(0));
+    if (!route.length) {
+      console.log('   FAIL she is given no marked way at all'); fails++;
+    } else if (pct > 30) {
+      console.log('   FAIL a first solo is sent slantwise over the rooftops'); fails++;
+    } else {
+      console.log('   ok   out over the wall to the river, and down clear of the houses');
     }
   }
 

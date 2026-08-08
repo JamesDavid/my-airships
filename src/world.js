@@ -367,9 +367,21 @@ export const SHED = { dx: -85, dz: 0, w: 52, d: 34, h: 15 };
 // gateway — the way the tent faces and the way the ships came out, which is
 // toward Bagatelle and the river beyond it. Published so the scenario that
 // starts inside the wall and the check that measures it read one number.
-export const NEUILLY_R = 95;
-export const NEUILLY_OUT = 2.294;         // atan2(z, x) toward Bagatelle
-export const NEUILLY_TENT = 58;           // how far back from the middle it stands
+// Neuilly St James: a VACANT LOT, so a rectangle behind a wall — "the fence
+// around the hangar is a circle not a square?" (#108), and it was, because a
+// ring of posts was the easy thing to write. A walled building plot in Neuilly
+// is not a stone circle.
+//
+// It faces the RIVER, which is the other half of the same report: "didn't he
+// have his second hangar on a river too that he flew out toward the river?" He
+// did, and the book gives the departure exactly — "Mounting diagonally in the
+// air from my own open grounds I pass over my wall, the Boulevard de la Seine,
+// and turn when well above the river" (A11). The gateway is on that side.
+export const NEUILLY_LONG = 220;          // the lot, along the way out
+export const NEUILLY_WIDE = 160;          // and across it
+export const NEUILLY_OUT = -2.435;        // atan2(z, x) toward the Seine, 623 m off
+export const NEUILLY_TENT = 70;           // how far back from the middle it stands
+export const NEUILLY_GATE = 26;           // the opening in the front wall
 /**
  * The turn round the Eiffel Tower, cut to the tower.
  *
@@ -1130,28 +1142,53 @@ export function buildWorld(scene) {
     yard.add(tent);
     buildings.push({ x: n.x + tx, z: n.z + tz, w: 46, d: 30, h: 15, top: 18 });
 
-    // the high stone wall round the vacant lot — a real obstacle, and the
-    // thing you must climb over. Built as posts so the ground can roll under
-    // it, and every one of them sits on the earth beneath ITSELF (the lesson
-    // of the buried aerodrome above).
+    // The high stone wall round the vacant lot — a real obstacle, and the
+    // thing she has to get over. FOUR SIDES, because a vacant lot in Neuilly is
+    // a rectangle: it was a ring of posts, which read from the air as a stone
+    // circle drawn round a tent (#108). Built as separate posts so the ground
+    // can roll under it, each sitting on the earth beneath ITSELF — the lesson
+    // of the buried aerodrome above.
     const wallM = new THREE.MeshLambertMaterial({ color: 0xbdb3a0 });
-    const R = NEUILLY_R, WALL_H = 4.2, N = 64;
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      // leave the gateway open on the river side, where the ships came out
-      if (Math.abs(((a - NEUILLY_OUT + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.16) continue;
-      const px2 = Math.cos(a) * R, pz2 = Math.sin(a) * R;
-      const seg = new THREE.Mesh(
-        new THREE.BoxGeometry(R * 2 * Math.PI / N * 1.08, WALL_H, 1.1), wallM);
-      seg.position.set(px2, WALL_H / 2 + sitN(px2, pz2), pz2);
-      // TANGENT to the circle, not radial. rotation.y = θ sends local +X to
-      // (cos θ, 0, -sin θ); the tangent at angle a is (-sin a, 0, cos a), which
-      // wants θ = -(a + π/2). Written as -a the segments stood out from the
-      // wall like fins — "the wall pieces are 90 degrees off" (#102), and
-      // exactly 90.
-      seg.rotation.y = -(a + Math.PI / 2);
-      seg.castShadow = seg.receiveShadow = true;
-      yard.add(seg);
+    const WALL_H = 4.2, STEP = 7;
+    // the lot's own frame: +u is the way out, +v across it
+    const ux = Math.cos(NEUILLY_OUT), uz = Math.sin(NEUILLY_OUT);
+    const vx = -uz, vz = ux;
+    const HL = NEUILLY_LONG / 2, HW = NEUILLY_WIDE / 2;
+    // A box's long axis is its local +X, and rotation.y = t sends that to
+    // (cos t, 0, -sin t). So a post laid along a side running in the world
+    // direction (dx, dz) wants atan2(-dz, dx) — the rule that was written as
+    // -a for the ring and stood every segment out from the wall like a fin.
+    const layAlong = (mesh, dx, dz) => { mesh.rotation.y = Math.atan2(-dz, dx); };
+    const side = (aL, aW, bL, bW, gap) => {
+      const len = Math.hypot(bL - aL, bW - aW);
+      const n2 = Math.max(1, Math.round(len / STEP));
+      const dLx = (bL - aL) / len, dWx = (bW - aW) / len;
+      const wx = dLx * ux + dWx * vx, wz = dLx * uz + dWx * vz;   // world direction
+      for (let i = 0; i < n2; i++) {
+        const s2 = (i + 0.5) / n2 * len;
+        if (gap && Math.abs(s2 - len / 2) < gap / 2) continue;    // the gateway
+        const l = aL + dLx * s2, w2 = aW + dWx * s2;
+        const px2 = l * ux + w2 * vx, pz2 = l * uz + w2 * vz;
+        const seg = new THREE.Mesh(
+          new THREE.BoxGeometry(len / n2 * 1.06, WALL_H, 1.1), wallM);
+        seg.position.set(px2, WALL_H / 2 + sitN(px2, pz2), pz2);
+        layAlong(seg, wx, wz);
+        seg.castShadow = seg.receiveShadow = true;
+        yard.add(seg);
+      }
+    };
+    side(HL, -HW, HL, HW, NEUILLY_GATE);    // the front, on the river — the gateway
+    side(-HL, -HW, -HL, HW, 0);             // the back
+    side(-HL, -HW, HL, -HW, 0);             // the two long sides
+    side(-HL, HW, HL, HW, 0);
+    // the gate piers, so the opening reads as a gate and not a gap
+    for (const sw of [-1, 1]) {
+      const l = HL, w2 = sw * NEUILLY_GATE / 2;
+      const px2 = l * ux + w2 * vx, pz2 = l * uz + w2 * vz;
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(1.6, WALL_H + 1.4, 1.6), wallM);
+      pier.position.set(px2, (WALL_H + 1.4) / 2 + sitN(px2, pz2), pz2);
+      pier.castShadow = true;
+      yard.add(pier);
     }
     scene.add(yard);
   }

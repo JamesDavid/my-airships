@@ -1,7 +1,7 @@
 import { placeLegacy } from './paris_geo.js';
 import { ROTHSCHILD } from './paris_stcloud.js';
 import { inRiver } from './paris_terrain.js';
-import { PAD_POS, NEUILLY_R, NEUILLY_OUT, NEUILLY_TENT } from './world.js';
+import { PAD_POS, NEUILLY_OUT, NEUILLY_TENT, NEUILLY_LONG } from './world.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -540,30 +540,58 @@ export const SCENARIOS = [
     // from a brief — they come up off the road, from a man on a bicycle, for
     // exactly as long as he can keep up with you.
     brief: 'You are Aida de Acosta, nineteen, and you have had three lessons — all of them on the ground, with the ship held down. Now the men let go. Take the No. 9 up out of the walled yard at Neuilly, over the wall, and fly her to the polo ground at Bagatelle. Santos-Dumont cannot come: she carries one. He is on a bicycle in the road below, shouting. Listen for him while he can still keep up.',
+    /**
+     * Where she turns: the nearest point of the Seine to the yard, which is
+     * 623 m off the gateway. Asked of the world rather than typed, so the turn
+     * cannot drift away from the water if the river is ever retraced.
+     */
+    riverTurn(world, n) {
+      let best = null;
+      for (const p of world.riverPts) {
+        const d = Math.hypot(p.x - n.x, p.z - n.z);
+        if (!best || d < best.d) best = { d, x: p.x, z: p.z };
+      }
+      return best || { x: n.x, z: n.z };
+    },
     setup(ctx) {
       const n = placeLegacy('neuilly'), b = placeLegacy('bagatelle');
       this.n = n; this.b = b;
-      // On the grass just outside the tent doors, pointing down the yard at the
-      // gateway, with the whole lot in front of her to get up in — she starts
-      // 30 m out from the tent and has 65 m of run to the wall. She was first
-      // put down BEHIND the tent, facing its blind side, which a pilot rightly
-      // called backwards (#101).
-      const out = NEUILLY_TENT - 28;
-      ctx.place(n.x + Math.cos(NEUILLY_OUT) * out, ctx.ship.spec.keel.drop + 1.2,
-        n.z + Math.sin(NEUILLY_OUT) * out,
-        Math.atan2(-(b.z - n.z), b.x - n.x));
+      // On the grass just outside the tent doors, pointing down the yard at
+      // the gateway, with the whole lot in front of her to get up in. She was
+      // first put down BEHIND the tent facing its blind side (#101).
+      const ux = Math.cos(NEUILLY_OUT), uz = Math.sin(NEUILLY_OUT);
+      const start = -NEUILLY_TENT + 50;        // 28 m clear of the doors
+      ctx.place(n.x + ux * start, ctx.ship.spec.keel.drop + 1.2, n.z + uz * start,
+        Math.atan2(-uz, ux));
       // "a fine, still morning" — the No. 9 is a runabout, not a racer, and
       // this was flown in the calm. A light air off the river, no more.
       ctx.setWind(0.9, -1.4);
       ctx.setZone(V(b.x, 4, b.z), 150);          // the polo ground
+
+      // ---- THE WAY OUT IS THE BOOK'S WAY, AND IT IS ALSO THE KIND WAY ----
+      //
+      // "Mounting diagonally in the air from my own open grounds I pass over my
+      // wall, the Boulevard de la Seine, and turn when well above the river"
+      // (A11). The hoops used to be struck along the straight line to
+      // Bagatelle, which runs slantwise across the roofs of Neuilly — a pilot
+      // asked "the course goes diag thru the city? the rings are on different
+      // streets. seems like it would have been an easier flight for first solo"
+      // (#107). Measured: the straight line spends 42% of its length within
+      // 45 m of a house. Out to the river and down is 0% and then 18%.
+      //
+      // So: over the wall, over the boulevard, turn above the water, and run
+      // down to the polo ground. Longer — 2.2 km against 1.4 — and very much
+      // easier, which is what you want under a girl with three lessons.
+      const river = this.riverTurn(ctx.world, n);
+      this.turn = river;
       ctx.setRoute([
-        V(n.x + Math.cos(NEUILLY_OUT) * (NEUILLY_R + 60), 26,
-          n.z + Math.sin(NEUILLY_OUT) * (NEUILLY_R + 60)),
-        V(n.x + (b.x - n.x) * 0.45, 34, n.z + (b.z - n.z) * 0.45),
-        V(n.x + (b.x - n.x) * 0.80, 30, n.z + (b.z - n.z) * 0.80),
+        V(n.x + ux * (NEUILLY_LONG / 2 + 55), 30, n.z + uz * (NEUILLY_LONG / 2 + 55)),
+        V(river.x, 40, river.z),                                  // above the Seine
+        V(river.x + (b.x - river.x) * 0.45, 38, river.z + (b.z - river.z) * 0.45),
+        V(river.x + (b.x - river.x) * 0.80, 32, river.z + (b.z - river.z) * 0.80),
       ]);
       ctx.setCenter('June 29th, 1903, Neuilly St James',
-        'Over the wall, and follow the road to Bagatelle. (green ring — land on the polo ground)');
+        'Over the wall and the boulevard, turn above the Seine, then down to Bagatelle. (green ring — land on the polo ground)');
       this.said = {};
       this.t = 0;
       this.aloft = false;
@@ -612,12 +640,12 @@ export const SCENARIOS = [
       const fromYard = Math.hypot(p.x - n.x, p.z - n.z);
 
       // ---- the wall ----
-      if (heard && fromYard < NEUILLY_R + 30 && clear < 12) {
+      if (heard && fromYard < NEUILLY_LONG / 2 + 30 && clear < 12) {
         say('wall', '“The wall! Up, up — mount her diagonally, do not try to turn in the yard!”');
       }
-      if (fromYard > NEUILLY_R + 20 && !this.said.out) {
+      if (fromYard > NEUILLY_LONG / 2 + 20 && !this.said.out) {
         this.said.out = 1;
-        ctx.addMsg('out', 'Over the wall and over the Boulevard de la Seine, exactly as he does it.', 6);
+        ctx.addMsg('out', 'Over the wall and over the Boulevard de la Seine, exactly as he does it — now turn when you are well above the river.', 6);
       }
 
       // ---- coaching down the road, while he is still under you ----
