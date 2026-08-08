@@ -100,6 +100,55 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('SHE COMES HEAD TO WIND ON HER ROPE, AND NOT OTHERWISE');
+  {
+    // A pilot watching the No. 6 shoved sideways down the wind with her guide
+    // rope dragging asked whether she would not turn into it. She would, and
+    // she could not: yaw was the rudder and nothing else, so the hull had no
+    // opinion about which way it pointed.
+    //
+    // Two terms were missing. The fins are well aft, so sideslip swings the
+    // nose back into the airflow; and the rope is made fast a third of the keel
+    // FORWARD, so its drag on the ground is a moment as well as a brake and she
+    // rides to it like a boat to her anchor. The second does the work at a
+    // drift: the brake goes as the square of the speed, so at a few metres a
+    // second she nearly keeps up with the air and the vane has almost nothing
+    // to bite on.
+    //
+    // The other half of the answer is that a FREE balloon must not do it. She
+    // goes with the wind, feels no airflow, and has no business preferring a
+    // heading. A model that turned her head to wind up there would be wrong in
+    // the more interesting direction.
+    const nw = { x: 7, y: 0, z: 0 };
+    const flat = { groundAt: () => 0, buildings: [], underCloud: false, inBois: false };
+    const swing = (id, rope) => {
+      const sh = makeShip(id);
+      const P = sh.spec.physics;
+      sh.reset({ x: 0, y: rope ? 12 : 150, z: 0 }, Math.PI / 2);   // broadside
+      for (let k = 0; k < 200 * 30; k++) {
+        sh.update(1 / 30, { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 }, nw, flat);
+        if (rope) sh.pos.y = Math.min(sh.pos.y, P.ropeLen * 0.55);
+      }
+      let e = Math.PI - sh.yaw;
+      while (e > Math.PI) e -= 2 * Math.PI;
+      while (e < -Math.PI) e += 2 * Math.PI;
+      return Math.abs(e) * 180 / Math.PI;
+    };
+    const onRope = swing('no6', true), free = swing('no6', false);
+    console.log('   broadside to a 7 m/s wind, helm amidships: on the rope she ends %s deg'
+      + ' off head to wind, free ballooning %s deg', onRope.toFixed(0), free.toFixed(0));
+    if (onRope > 20) {
+      console.log('   FAIL she is shoved sideways down the wind on a dragging rope');
+      fails++;
+    } else if (free < 45) {
+      console.log('   FAIL a free balloon weathercocks, and it has no airflow to do it with');
+      fails++;
+    } else {
+      console.log('   ok   she rides to her rope, and drifts as she pleases without one');
+    }
+  }
+
+  console.log('');
   console.log('SHE PITCHES LIKE A PENDULUM, AND EACH SHIP LIKE HERSELF');
   {
     // "Is the pitch rate realistic when we adjust the weights?" It was not.

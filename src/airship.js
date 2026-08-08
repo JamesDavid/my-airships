@@ -13,6 +13,15 @@ export { windAt }; // re-export for existing importers
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+// How hard she weathercocks: turns per hull length of airflow, the same unit
+// the rudder is quoted in. 0.35 brings her head to wind in about half a minute
+// on the rope, and holds a heading without fighting the helm under way.
+const VANE = 0.35;
+
+// ...and how hard she rides to a dragging guide rope, which is made fast about
+// a third of the keel ahead of her middle and so pulls her head round.
+const ROPE_VANE = 0.6;
+
 // ------------------------------------------------------- the pitch pendulum
 /**
  * How fast a ship swings in pitch, in radians per second, from her own size.
@@ -1813,8 +1822,23 @@ export class Airship {
     const flab = 1 + this.fold * 2.2 + Math.max(0, 0.6 - this.fullness) * 1.2;
     acc.addScaledVector(fwdFlat, -(P.dragQ * flab * vf * Math.abs(vf) + P.dragL * vf));
     acc.addScaledVector(latFlat, -(0.9 * vl + 0.12 * vl * Math.abs(vl)));
-    // rope ground drag (B4: the brake)
-    acc.addScaledVector(fwdFlat, -this.groundedFrac * 0.06 * vf * Math.abs(vf));
+    // ROPE GROUND DRAG (B4: the brake) — AGAINST THE WAY SHE IS ACTUALLY GOING.
+    //
+    // This was applied along fwdFlat and reckoned on vf, the airspeed's forward
+    // component: a rope that only ever braked along the hull's own axis. So a
+    // ship shoved sideways down the wind with sixty metres of rope on the
+    // ground felt no brake at all from it, which is the other half of why she
+    // slid instead of coming round. The rope drags on the EARTH, so it works on
+    // her speed over the ground and in whatever direction that is.
+    if (this.groundedFrac > 0) {
+      const gx = this.vel.x, gz = this.vel.z;
+      const gs = Math.hypot(gx, gz);
+      if (gs > 0.01) {
+        const k = this.groundedFrac * 0.06 * gs;
+        acc.x -= k * gx;
+        acc.z -= k * gz;
+      }
+    }
 
     // energy exchange: a nose-down dive rams the streamlined hull forward
     // (altitude is stored speed); hauling the nose up bleeds it away
@@ -1899,7 +1923,53 @@ export class Airship {
       ? this.throttle * this.motorHealth * Math.min(4, P.thrust * 0.55) : 0;
     const flow = vf + wash;                        // the airflow over the tail
     const hull = this.spec.envelope.length || 30;
-    const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55);
+    // ---- SHE WEATHERCOCKS (and she never did) ----
+    //
+    // Yaw was the rudder and nothing else, so the hull had no opinion about
+    // which way it pointed. A pilot watching the No. 6 shoved sideways down the
+    // wind with her guide rope dragging asked whether she would not turn into
+    // it. She would. The fins are a long way aft of the middle of her, so any
+    // sideslip makes a moment that swings the nose back into the airflow — it
+    // is why an airship at her mast lies head to wind and why she holds a
+    // heading at all with the helm amidships.
+    //
+    // The airflow that matters is the one over the HULL: airspeedV, her motion
+    // through the air. Free-ballooning she has none — she goes with the wind
+    // and has no preferred heading, which is right. But with the rope down she
+    // is held back, the air goes past her, and she comes round head to wind
+    // like a boat riding to her anchor. One term does both; neither is a
+    // special case.
+    const airH = Math.hypot(airspeedV.x, airspeedV.z);
+    let vane = 0;
+    if (airH > 0.25) {
+      const into = Math.atan2(-airspeedV.z, airspeedV.x);
+      let e = into - this.yaw;
+      while (e > Math.PI) e -= 2 * Math.PI;
+      while (e < -Math.PI) e += 2 * Math.PI;
+      // the same form as the rudder — a rate, per hull length of airflow — so a
+      // ship that turns lazily also weathercocks lazily. A folded bag has lost
+      // the tail that does it.
+      vane = VANE * (airH / hull) * Math.sin(e) * (1 - (this.fold || 0) * 0.7);
+    }
+    // ---- AND SHE RIDES TO HER ROPE ----
+    //
+    // The vane alone is weak at a drift: the rope's brake goes as the square of
+    // the speed, so at a few metres a second she nearly keeps up with the air
+    // and there is little airflow to weathercock with -- measured, a quarter of
+    // a metre a second, which swings her at a sixth of a degree.
+    //
+    // But the rope is made fast well FORWARD (ropeAttachWorld: 0.35 of the keel
+    // ahead of the middle), so its drag on the ground is a MOMENT as well as a
+    // brake. Drifting to starboard, the drag at the bow holds the bow back and
+    // the stern goes on down the wind, and she comes head to wind about the
+    // rope exactly as a boat does about her anchor. That is the term that was
+    // missing, and at a drift it is the one that does the work.
+    if (this.groundedFrac > 0) {
+      const gl = this.vel.x * latFlat.x + this.vel.z * latFlat.z;
+      vane += ROPE_VANE * this.groundedFrac * (gl / hull);
+    }
+    this.sideslip = vane;
+    const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55) + vane;
     // she leans into it over about three seconds — a hull this size does not
     // change its mind quickly, and neither does the air around it
     this.yawVel += (want - this.yawVel) * Math.min(1, dt / 3);
