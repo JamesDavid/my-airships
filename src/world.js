@@ -1512,7 +1512,7 @@ function farSeen(o) { if (o) { o.userData = o.userData || {}; o.userData.vrFar =
  * an import the headless stub cannot answer would blind every check that walks
  * these meshes.
  */
-function makeFarProxy(group, sawInstanced = { hit: false }) {
+function makeFarProxy(group, sawInstanced = { hit: false }, merged = []) {
   const byMat = new Map();
   const m4 = new THREE.Matrix4();
   const walk = (o, parent) => {
@@ -1535,12 +1535,13 @@ function makeFarProxy(group, sawInstanced = { hit: false }) {
     // result. "You messed up the eiffel tower, its just platforms." It was.
     if (g && (o.isInstancedMesh || Array.isArray(o.matrices))) {
       sawInstanced.hit = true;
-      return;
+      return;                        // left where it is; it is already one draw
     }
     if (g && typeof g.type === 'string' && o.material) {
       let e = byMat.get(o.material);
       if (!e) { e = { mat: o.material, parts: [] }; byMat.set(o.material, e); }
       e.parts.push({ geom: g, at: world.clone() });
+      merged.push(o);                // remember it, so only IT gets hidden
     }
     if (Array.isArray(o.children)) for (const c of o.children) walk(c, world);
   };
@@ -1618,14 +1619,15 @@ export function addFarProxies(scene, minLeaves = 6) {
     if (!u.vrFar || u.isFarProxy || u.noLod) continue;
     if (!Array.isArray(o.children) || !o.children.length) continue;
     if (count(o) < minLeaves) continue;
-    // ...and nothing that MOVES gets one at all now. The Grande Roue was the
-    // only animated monument, and instancing her repeated parts took her from
-    // thirty draws to seven — so the frozen far copy she used to need is both
-    // unnecessary and, since her parts are instanced, would be wrong.
+    // ...and nothing that MOVES gets one at all. The Grande Roue was the only
+    // animated monument, and instancing her repeated parts took her from thirty
+    // draws to seven — so the frozen far copy she used to need is unnecessary
+    // and, since her parts are instanced, would be wrong.
     if (o.userData.animates) continue;
     const saw = { hit: false };
-    const proxy = makeFarProxy(o, saw);
-    if (!proxy || saw.hit) continue;      // instanced parts: already one draw each
+    const mergedLeaves = [];
+    const proxy = makeFarProxy(o, saw, mergedLeaves);
+    if (!proxy) continue;
     // NO "ONLY KEEP IT IF IT WINS" TEST HERE, though that is the obvious guard.
     // The headless three gives every mesh its own material object, so nothing
     // ever groups there and such a test discards EVERY proxy — leaving the
@@ -1644,11 +1646,15 @@ export function addFarProxies(scene, minLeaves = 6) {
     // pay for the original at any distance. The detailed group STAYS in the
     // scene, hidden — invisible costs nothing to draw, and every check that
     // measures a monument's real size still has real geometry to measure.
-    if (!o.userData.animates) {
-      o.visible = false;
-      proxy.visible = true;
-      proxy.userData.baked = true;
-    }
+    // HIDE ONLY WHAT WAS MERGED, not the whole monument. Bailing on any group
+    // that held an instanced row was too blunt: the Eiffel Tower is ONE
+    // instanced row of 2,292 lattice members — already a single draw — plus
+    // twelve plain platforms, and there is no reason the platforms should not
+    // be merged just because the lattice cannot be. Hiding the group outright
+    // is what took her lattice away and left the platforms behind.
+    for (const leaf of mergedLeaves) leaf.visible = false;
+    proxy.visible = true;
+    proxy.userData.baked = true;
   }
   return made;
 }
