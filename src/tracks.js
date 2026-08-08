@@ -98,8 +98,23 @@ export const TRACKS = [
       // Function, where there is no city to measure against. Both sides must
       // read the same numbers. check_scenarios re-measures them against the
       // built city and fails if the city moves under them.
+      // ...AND OFF THE TOWER HERSELF. "What the hell this is impossible it's
+      // right in the tower." It was: a 46 m ring hung on the Eiffel Tower's own
+      // axis at 120 m, where the Tower is 23 m across — so the iron stood dead
+      // in the middle of the hoop and all that was left to fly through was a
+      // 23 m annulus round a three-hundred-metre tower. The ring check missed
+      // it because the Tower is not in world.buildings; she has her own taper,
+      // towerRadiusAt(), and now the check asks it.
+      //
+      // She is rounded rather than threaded, so the gate goes out past her on
+      // the Champ de Mars side — you come from the Trocadéro, over the Tower,
+      // and take the ring beyond. 130 m out, which is 61 m of daylight between
+      // the ring's near rim and the iron.
+      const _e = P('eiffel'), _t = P('trocadero');
+      const _d = Math.hypot(_e.x - _t.x, _e.z - _t.z) || 1;
+      const _ex = ((_e.x - _t.x) / _d) * 130, _ez = ((_e.z - _t.z) / _d) * 130;
       const STOPS = [
-        [P('eiffel'), 120, 46], [P('trocadero'), 58, 38, -66, 24],
+        [P('eiffel'), 120, 46, _ex, _ez], [P('trocadero'), 58, 38, -66, 24],
         [P('etoile'), 62, 36], [M('madeleine'), 52, 34, 98, -69],
         [P('opera'), 58, 34], [P('montmartre'), 46, 40],
         [M('republique'), 46, 34], [M('bastille'), 58, 34, 48, -13],

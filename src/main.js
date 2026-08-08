@@ -2452,7 +2452,7 @@ async function submitBest(t, run) {
   if (rank && race.state === 'done' && track && track.id === t.id) {
     const big = document.getElementById('centerBig').textContent;
     const sub = document.getElementById('centerSub').textContent;
-    setCenter(big, sub + (took ? ' — and the world record with it!' : ` — ${ordinal(rank)} in the world.`));
+    setCenter(big, sub + (took ? ' — and the world record with it!' : ` — ${ordinal(rank)} in the world.`), 0);
   }
 }
 
@@ -2718,7 +2718,7 @@ function finishRace() {
       if (ace && currentLocation !== 'stlouis') sub += ' A pace no dirigible of 1901 could have touched.';
       if (rivals.length) sub += beatRivals ? ' The rival dirigibles trail behind you.' : ' …but a rival crossed first.';
     }
-    setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…', sub);
+    setCenter(won ? '“Have I won?” — “YES!”' : 'The half-hour is past…', sub, 0);
     return;
   }
   // time trial: record the run, crown a new ghost
@@ -2857,13 +2857,13 @@ function scenComplete(text) {
   if (scenBeacon) scenBeacon.visible = false;
   clearRoute();
   scenario = null;
-  setCenter('Scenario complete', `${text}  (Esc for the menu)`);
+  setCenter('Scenario complete', `${text}  (Esc for the menu)`, 0);
 }
 
 function scenFail(text) {
   flightEnd('failed');
   scenario._failed = true;
-  setCenter('Not this time', `${text}  (R to retry)`);
+  setCenter('Not this time', `${text}  (R to retry)`, 0);
 }
 
 function fmt(t) {
@@ -2915,7 +2915,7 @@ function resolveHit(q, n, pen, s, hard, keel) {
   if (hard && j > wreckAt) {
     ship.wreck('building');
     setCenter(keel ? 'The keel smashes against the wall!' : 'Wrecked on the housetops!',
-      '“Chimney-pots that threaten to pierce its belly…” (R)');
+      '“Chimney-pots that threaten to pierce its belly…” (R)', 0);
     return true;
   }
   if (hard && j > (keel ? 0.7 : 1.2)) {
@@ -2972,7 +2972,7 @@ function checkCollisions(dt) {
       }
       if (hit) {
         ship.wreck('tower');
-        setCenter('Dashed against the Tower!', '“The impact would certainly burst my balloon, and I should fall like a stone.” (R)');
+        setCenter('Dashed against the Tower!', '“The impact would certainly burst my balloon, and I should fall like a stone.” (R)', 0);
         return;
       }
     }
@@ -2981,7 +2981,7 @@ function checkCollisions(dt) {
   // the sea — landing in it ends the experiments (Ch. XX, Monaco)
   if (world.isWater(ship.pos.x, ship.pos.z) && ship.pos.y < ship.spec.keel.drop + 1.6) {
     ship.wreck('water');
-    setCenter('Down into the bay!', '“Balloon, keel, and motor were successfully fished up the next day…” (R)');
+    setCenter('Down into the bay!', '“Balloon, keel, and motor were successfully fished up the next day…” (R)', 0);
     return;
   }
 
@@ -3085,8 +3085,18 @@ function setCenter(big, sub, holdFor = 0) {
   c.classList.remove('parked');
   c.style.top = '';               // hand the position back to the stylesheet
   centerSetAt = performance.now();
-  centerHold = holdFor;
+  // EVERYTHING STANDS DOWN BY ITSELF NOW.
+  //
+  // The hold was given to the room notice alone, and the pilot flew straight
+  // into the next one: "the white text boxes are there and don't go away it
+  // should be up top and go away after 5s". He is right, and the exception is
+  // not the instruction — it is the VERDICT. A wreck, an ending, a result is
+  // something you have finished flying and are meant to sit and read; those ask
+  // for a hold of 0, which means for ever. Everything else takes itself away.
+  centerHold = holdFor === 0 ? 0 : (holdFor || CENTRE_DWELL);
 }
+// long enough to read two lines twice, and no longer
+const CENTRE_DWELL = 9000;
 
 const seen = new Set();
 function once(key, text) { if (!seen.has(key)) { seen.add(key); addMsg(key, text, 0); } }
@@ -3128,7 +3138,7 @@ function drainEvents() {
     if (ev.startsWith('wreck:')) {
       flightEnd('wrecked', { how: ev.slice(6) });
       const r = ev.slice(6);
-      if (r === 'hardLanding') setCenter('Wrecked!', '“He who wishes to navigate an air-ship should first practise landings…” (R)');
+      if (r === 'hardLanding') setCenter('Wrecked!', '“He who wishes to navigate an air-ship should first practise landings…” (R)', 0);
       continue;
     }
     const e = EVENT_TEXT[ev];

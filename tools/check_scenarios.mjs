@@ -355,11 +355,28 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('   rim was at 46 m: "the rings for the course should be in the avenue');
   console.log('   and not over the buildings."');
   console.log('');
+  const { towerRadiusAt } = await import('../src/world.js');
+  const _eif = placeLegacy('eiffel');
   for (const t of TRACKS.filter((x) => x.location === 'paris')) {
     let blocked = 0, worst = null;
     for (let i = 0; i < t.gates.length; i++) {
       const g = t.gates[i];
       const rim = g.y - (g.r || 24);
+      // THE TOWER IS NOT IN world.buildings. She has her own taper, and a ring
+      // hung on her axis at 120 m had 23 m of iron dead in the middle of it —
+      // "what the hell this is impossible it's right in the tower" (#98). Every
+      // other gate in Paris was measured against the city and she was measured
+      // against nothing.
+      {
+        const d = Math.hypot(g.x - _eif.x, g.z - _eif.z);
+        const R = towerRadiusAt(g.y);
+        if (R > 0 && d - R < (g.r || 24)) {
+          blocked++;
+          const over = (g.r || 24) - (d - R);
+          if (!worst || over > worst.over) worst = { i: i + 1, over, top: R, rim, tower: true };
+          continue;
+        }
+      }
       for (const b of world.buildings) {
         const d = Math.hypot(b.x - g.x, b.z - g.z) - Math.hypot(b.w, b.d) / 2;
         if (d > (g.r || 24)) continue;
@@ -375,7 +392,9 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     if (!ok) fails++;
     console.log('   %s  %s  %d of %d rings have a roof through them%s',
       ok ? 'ok  ' : 'FAIL', t.id.padEnd(16), blocked, t.gates.length,
-      worst ? ` (worst gate ${worst.i}: a ${worst.top.toFixed(0)} m roof through a rim at ${worst.rim.toFixed(0)} m)` : '');
+      worst ? (worst.tower
+        ? ` (worst gate ${worst.i}: the Eiffel Tower stands ${worst.over.toFixed(0)} m inside the hoop)`
+        : ` (worst gate ${worst.i}: a ${worst.top.toFixed(0)} m roof through a rim at ${worst.rim.toFixed(0)} m)`) : '');
   }
 
   console.log('');

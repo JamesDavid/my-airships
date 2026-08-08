@@ -257,11 +257,19 @@ if (renderer.shadowMap.enabled) {
     const src = await (await import('node:fs/promises')).readFile('src/main.js', 'utf8');
     const hasHold = /function setCenter\(big, sub, holdFor = 0\)/.test(src)
       && /if \(centerHold && performance\.now\(\) - centerSetAt > centerHold\) setCenter\('', ''\)/.test(src);
-    const roomUses = /Press Enter — or GO — when the room is ready to fly\.'[\s\S]{0,200}?\d{4,}\)/.test(src);
-    const ok = hasHold && roomUses;
+    // EVERY notice stands down unless it is a verdict. The hold was given to
+    // the room message alone and the pilot flew straight into the next one:
+    // "the white text boxes are there and don't go away it should be up top
+    // and go away after 5s" (#99). So the default is a dwell, and a wreck, an
+    // ending or a result asks for 0 -- which means for ever, because you are
+    // meant to sit and read those.
+    const byDefault = /centerHold = holdFor === 0 \? 0 : \(holdFor \|\| CENTRE_DWELL\)/.test(src);
+    // ...and the verdicts must actually say so, or they vanish mid-sentence
+    const verdicts = (src.match(/setCenter\([^;]*?,\s*0\);/g) || []).length;
+    const ok = hasHold && byDefault && verdicts >= 6;
     if (!ok) fails++;
-    console.log('   %s  setCenter can hold an instruction for a while (%s), and the room notice does (%s)',
-      ok ? 'ok  ' : 'FAIL', hasHold ? 'yes' : 'NO', roomUses ? 'yes' : 'NO');
+    console.log('   %s  notices stand down by themselves (%s); %d verdicts marked to stay',
+      ok ? 'ok  ' : 'FAIL', byDefault ? 'yes' : 'NO', verdicts);
   }
 
   // NO TWO PLACARDS LIE ACROSS EACH OTHER.
