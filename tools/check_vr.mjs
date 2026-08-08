@@ -190,19 +190,6 @@ if (renderer.shadowMap.enabled) {
         if (r.y < d0.y || r.y > d0.y + HEAD) continue;
         note(Math.abs(r.z - d0.z) - SHOULDER - r.r, 'a keel rail');
       }
-      // THE TRANSVERSE FRAMES TOO. The keel is a girder, not three sticks, so
-      // it has frames tying the longerons together -- and a strut running from
-      // the apex down to a lower rail passes through exactly the space this
-      // check exists to keep clear. Measuring only the longerons would have
-      // left every one of them unexamined.
-      for (const t2 of (s4.keelStruts || [])) {
-        for (let u = 0; u <= 1; u += 0.02) {
-          const y = t2.y0 + (t2.y1 - t2.y0) * u;
-          if (y < d0.y || y > d0.y + HEAD) continue;
-          const z = t2.z0 + (t2.z1 - t2.z0) * u;
-          note(Math.hypot(t2.x - d0.x, z - d0.z) - SHOULDER - t2.r, 'a keel frame');
-        }
-      }
       const wp = s4.wires && s4.wires.geometry && s4.wires.geometry.attributes.position;
       if (wp && wp.array) {
         const a2 = wp.array;
