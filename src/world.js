@@ -1512,7 +1512,7 @@ function farSeen(o) { if (o) { o.userData = o.userData || {}; o.userData.vrFar =
  * an import the headless stub cannot answer would blind every check that walks
  * these meshes.
  */
-function makeFarProxy(group) {
+function makeFarProxy(group, sawInstanced = { hit: false }) {
   const byMat = new Map();
   const m4 = new THREE.Matrix4();
   const walk = (o, parent) => {
@@ -1522,6 +1522,12 @@ function makeFarProxy(group) {
       o.scale || new THREE.Vector3(1, 1, 1));
     const world = new THREE.Matrix4().multiplyMatrices(parent, local);
     const g = o.geometry;
+    // AN INSTANCED ROW CANNOT BE MERGED THIS WAY. Its geometry is ONE copy and
+    // the other fifteen live in a matrix array this walker never reads, so
+    // baking it would produce a single rim, a single spoke and a single car
+    // where a wheel should be. It is also already one draw, which is the thing
+    // merging is for. Left alone, and the caller is told the group had one.
+    if (g && Array.isArray(o.matrices)) { sawInstanced.hit = true; return; }
     if (g && typeof g.type === 'string' && o.material) {
       let e = byMat.get(o.material);
       if (!e) { e = { mat: o.material, parts: [] }; byMat.set(o.material, e); }
@@ -1603,8 +1609,14 @@ export function addFarProxies(scene, minLeaves = 6) {
     if (!u.vrFar || u.isFarProxy || u.noLod) continue;
     if (!Array.isArray(o.children) || !o.children.length) continue;
     if (count(o) < minLeaves) continue;
-    const proxy = makeFarProxy(o);
-    if (!proxy) continue;
+    // ...and nothing that MOVES gets one at all now. The Grande Roue was the
+    // only animated monument, and instancing her repeated parts took her from
+    // thirty draws to seven — so the frozen far copy she used to need is both
+    // unnecessary and, since her parts are instanced, would be wrong.
+    if (o.userData.animates) continue;
+    const saw = { hit: false };
+    const proxy = makeFarProxy(o, saw);
+    if (!proxy || saw.hit) continue;      // instanced parts: already one draw each
     // NO "ONLY KEEP IT IF IT WINS" TEST HERE, though that is the obvious guard.
     // The headless three gives every mesh its own material object, so nothing
     // ever groups there and such a test discards EVERY proxy — leaving the
@@ -2041,21 +2053,54 @@ function addLandmarks(scene) {
   const roue = new THREE.Group();
   const steel = new THREE.MeshLambertMaterial({ color: 0x4a443c });
   const wheel = new THREE.Group();
-  for (const dz of [-3.5, 3.5]) {
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(46, 0.9, 8, 40), steel);
-    rim.position.z = dz;
-    wheel.add(rim);
+  // SHE IS THE SAME PART, OVER AND OVER — so she is instanced, and then she can
+  // be both cheap and turning.
+  //
+  // Thirty draws for two rims, twelve spokes and sixteen cars, and she was the
+  // one monument that could not simply be baked because her rim really rotates:
+  // merging bakes transforms into vertices and a merged wheel is a frozen one.
+  // A pilot asked whether she needs to turn at all -- the spokes repeat every
+  // 15 degrees and the cars every 22.5, so the whole pattern is identical every
+  // 45, which at 0.025 rad/s is once every 31 seconds -- and then whether she
+  // might turn only close to.
+  //
+  // Both would work. Neither is needed: identical parts repeated round a circle
+  // is exactly what an InstancedMesh is for, and instancing costs her nothing
+  // she has. Three draws instead of thirty, turning at every distance, no
+  // frozen copy and no distance rule to get wrong.
+  const mtx = new THREE.Matrix4();
+  const qt = new THREE.Quaternion();
+  const pv = new THREE.Vector3(), sv = new THREE.Vector3(1, 1, 1);
+  {
+    const rims = new THREE.InstancedMesh(new THREE.TorusGeometry(46, 0.9, 8, 40), steel, 2);
+    [-3.5, 3.5].forEach((dz, i) => {
+      rims.setMatrixAt(i, mtx.compose(pv.set(0, 0, dz), qt.set(0, 0, 0, 1), sv));
+    });
+    if (rims.instanceMatrix) rims.instanceMatrix.needsUpdate = true;
+    wheel.add(rims);
   }
-  for (let i = 0; i < 12; i++) {
-    const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 92, 5), steel);
-    spoke.rotation.z = (i * Math.PI) / 12;
-    wheel.add(spoke);
+  {
+    const spokes = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.45, 0.45, 92, 5), steel, 12);
+    for (let i = 0; i < 12; i++) {
+      const a = (i * Math.PI) / 12;
+      qt.set(0, 0, Math.sin(a / 2), Math.cos(a / 2));       // about Z, as before
+      spokes.setMatrixAt(i, mtx.compose(pv.set(0, 0, 0), qt, sv));
+    }
+    if (spokes.instanceMatrix) spokes.instanceMatrix.needsUpdate = true;
+    wheel.add(spokes);
   }
-  for (let i = 0; i < 16; i++) {
-    const car = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 6), new THREE.MeshLambertMaterial({ color: 0x7a4a34 }));
-    const a = (i / 16) * Math.PI * 2;
-    car.position.set(Math.cos(a) * 46, Math.sin(a) * 46, 0);
-    wheel.add(car);
+  {
+    const carMat = new THREE.MeshLambertMaterial({ color: 0x7a4a34 });
+    const cars = new THREE.InstancedMesh(new THREE.BoxGeometry(3.4, 2.4, 6), carMat, 16);
+    qt.set(0, 0, 0, 1);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      cars.setMatrixAt(i, mtx.compose(
+        pv.set(Math.cos(a) * 46, Math.sin(a) * 46, 0), qt, sv));
+    }
+    if (cars.instanceMatrix) cars.instanceMatrix.needsUpdate = true;
+    wheel.add(cars);
   }
   wheel.position.y = 52;
   roue.add(wheel);

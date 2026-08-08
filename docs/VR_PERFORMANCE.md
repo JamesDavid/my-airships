@@ -19,7 +19,7 @@ Measured by `tools/check_scenarios.mjs`, from the St-Cloud aerodrome:
 | | |
 |---|---|
 | meshes in the Paris scene | 2,496 |
-| **drawn from the aerodrome** | **~248** (966 → 580 clouds → 408 city trim → 248 baked monuments) |
+| **drawn from the aerodrome** | **~221** (966 → 580 clouds → 408 city trim → 221 monuments) |
 | budget | ~200 |
 
 So this world is **draw-call bound**, by about 5×. That is the answer to
@@ -82,16 +82,26 @@ scale on the basket slate, live, inside the headset.
    by their merge; the detailed group stays in the scene hidden, costing
    nothing to draw and leaving real geometry for the size checks to measure.
 
-   **The exception is the one that moves.** Merging bakes every transform into
-   the vertices, so a merged copy of something that turns is *frozen* — and the
-   Grande Roue really rotates, at 0.025 rad/s. She alone keeps the distance
-   swap, and her frozen merge is shown only past 1,400 m where a quarter of a
-   degree a second cannot be seen. This would have been an easy and completely
-   silent thing to get wrong, so a check now asserts that nothing which
-   animates is ever baked.
+   **The exception was the one that moves** — merging bakes transforms into
+   vertices, so a merged copy of something that turns is *frozen*, and the
+   Grande Roue really rotates at 0.025 rad/s. She had a distance swap to a
+   frozen copy. She does not need one: she is **2 rims, 12 spokes and 16 cars**,
+   which is identical geometry repeated round a circle, and that is what an
+   `InstancedMesh` is for. **34 draws → 7, turning at every distance**, no
+   frozen copy and no distance rule to get wrong.
 
-   Measured in the browser: **monument draws 262 → 102**, with 214 hidden and
-   never submitted. Nine baked (196 → 23), one swapped (34 → 17).
+   The general shape of that: *before freezing or hiding something that
+   repeats, instance it.* A merge and an instance buy the same draw call; only
+   the instance survives being animated.
+
+   Two traps, both now guarded: a check asserts nothing which animates is ever
+   baked; and the merger **skips instanced rows entirely**, because their
+   geometry is one copy and the rest live in a matrix array the walker never
+   reads — merging the wheel would have produced a single rim, a single spoke
+   and a single car.
+
+   Measured in the browser: **monument draws 262 → 75**, with 197 hidden and
+   never submitted.
 
 0b-detail. **The original per-monument figures.** Four of the twenty-three were 184 of their
    262 draws. Each monument of twelve draws or more now carries a copy of
