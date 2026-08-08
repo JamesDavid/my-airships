@@ -380,6 +380,11 @@ export const CITY_NEAR = 1150;
 // Where a monument hands over to its merged far version. Comfortably beyond the
 // haze, so the swap happens in weather rather than in front of you.
 export const LOD_FAR = 1400;
+
+// Where the housetops lose their chimneys, and then their roof caps. Fractions
+// of the haze's own reach, so they always sit inside it.
+export const CITY_CHIM = CITY_NEAR * 0.5;
+export const CITY_ROOF = CITY_NEAR * 0.8;
 const SMALL = 60;             // half-extent, in metres: bigger than this is scenery you steer by
 
 let cullScene = null, cullList = null;
@@ -441,7 +446,18 @@ export function cullForVR(from, scene) {
       // measured to the chunk's NEAREST corner, or a chunk would blink out
       // while a corner of it was still inside the haze
       const dx = u.chunkAt.x - from.x, dz = u.chunkAt.z - from.z;
-      on = Math.hypot(dx, dz) - u.chunkR < CITY_NEAR;
+      const d = Math.hypot(dx, dz) - u.chunkR;
+      // THE HOUSES SHED THEIR TRIM BEFORE THEY GO. A block, its roof cap and
+      // its chimneys are three separate instanced rows, so dropping the fiddly
+      // ones at range saves DRAW CALLS and not merely triangles. The chimneys
+      // go first because at half the haze's reach they are 1.6 pixels an eye —
+      // the worst thing you can hand a tiled renderer, which shades 2x2 quads
+      // and so pays four times over for a one-pixel triangle. The roof cap is
+      // sixteen pixels there and still shapes the skyline, so it holds on until
+      // the haze has most of it anyway.
+      const part = u.chunkPart;
+      const reach = part === 'chim' ? CITY_CHIM : part === 'roof' ? CITY_ROOF : CITY_NEAR;
+      on = d < reach;
     } else {
       const dx = o.position.x - from.x, dz = o.position.z - from.z;
       on = dx * dx + dz * dz < KEEP_NEAR * KEEP_NEAR;

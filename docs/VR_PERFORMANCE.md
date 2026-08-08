@@ -19,7 +19,7 @@ Measured by `tools/check_scenarios.mjs`, from the St-Cloud aerodrome:
 | | |
 |---|---|
 | meshes in the Paris scene | 2,496 |
-| **drawn from the aerodrome** | **~412** (966 before batching; 580 after the clouds) |
+| **drawn from the aerodrome** | **~408** (966 → 580 clouds → 412 monuments → 408) |
 | budget | ~200 |
 
 So this world is **draw-call bound**, by about 5×. That is the answer to
@@ -97,11 +97,19 @@ scale on the basket slate, live, inside the headset.
    which also means every check that measures a monument's real size still has
    real geometry to measure.
 
-2. **Cull by screen-space size, not distance.** The chunk cull is a distance
-   test. A small object at 400 m and a large one at 400 m cost the same to
-   submit and are not worth the same. Sub-pixel triangles are the worst case on
-   a tiler: the GPU shades 2×2 quads, so a one-pixel triangle costs 4× and
-   thrashes cache.
+0c. **DONE — the housetops shed their trim.** A house is three instanced rows:
+   the block, its roof cap, its chimneys. So dropping the fiddly ones at range
+   saves *draw calls*, not merely triangles. At half the haze's reach a 1 m
+   chimney subtends **1.6 pixels an eye** — the worst thing there is to hand a
+   tiler, which shades in 2×2 quads and so pays four times over for a one-pixel
+   triangle. The roof cap is 15.9 px there and still shapes the skyline, so it
+   holds on to 0.8 of the reach. **Over the Opéra the city costs 79 draws
+   instead of 111**; 18–33 saved from every city viewpoint.
+
+2. **Cull by screen-space size, not distance.** The chunk cull is still a
+   distance test — the banding above is a coarse stand-in for it. A small object
+   at 400 m and a large one at 400 m cost the same to submit and are not worth
+   the same.
 3. **LOD on the monuments.** They are marked `vrFar` and deliberately never
    culled — the Deutsch prize is flying to a Tower you can see from St-Cloud,
    5.4 km off — so they need cheap far versions rather than culling.

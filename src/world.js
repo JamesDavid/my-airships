@@ -3438,6 +3438,17 @@ export function addBuildingMeshes(scene, list, colorOf) {
   body.castShadow = body.receiveShadow = true;
   roof.castShadow = roof.receiveShadow = true;
   chim.castShadow = true;
+  // NAMED, so a headset can drop the fiddly parts at a distance. A house is
+  // three instanced rows — the block, its roof cap and its chimneys — and at
+  // range the last two are not worth submitting. Measured: at half the haze's
+  // reach a 1 m chimney subtends 1.6 PIXELS an eye, which is the worst case
+  // there is on a tiled renderer (it shades in 2x2 quads, so a one-pixel
+  // triangle costs four times over and thrashes cache). The roof cap is 15.9
+  // pixels at the same range and still carries the silhouette, so it goes
+  // later.
+  body.userData.chunkPart = 'body';
+  roof.userData.chunkPart = 'roof';
+  chim.userData.chunkPart = 'chim';
   scene.add(body, roof, chim);
   return [body, roof, chim];
 }

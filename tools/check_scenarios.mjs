@@ -1201,6 +1201,44 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     }
     console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
 
+    // THE HOUSETOPS SHED THEIR TRIM BEFORE THEY GO.
+    //
+    // A house is three instanced rows -- the block, its roof cap, its chimneys
+    // -- so dropping the fiddly ones at range saves DRAW CALLS and not merely
+    // triangles. At half the haze's reach a 1 m chimney subtends 1.6 pixels an
+    // eye, which is the worst thing there is to hand a tiled renderer: it
+    // shades in 2x2 quads, so a one-pixel triangle costs four times over. The
+    // roof cap is 15.9 pixels at the same range and still shapes the skyline,
+    // so it holds on until 0.8 of the reach where the haze has most of it.
+    {
+      const { CITY_CHIM, CITY_ROOF, CITY_NEAR: NEAR } = await import('../src/vr.js');
+      const cm = scene.children.filter((o) => o && o.userData && o.userData.chunkAt
+        && typeof o.userData.chunkPart === 'string');
+      const at = placeLegacy('opera');
+      let plain = 0, banded = 0;
+      for (const m of cm) {
+        const u = m.userData;
+        const d = Math.hypot(u.chunkAt.x - at.x, u.chunkAt.z - at.z) - u.chunkR;
+        if (d < NEAR) plain++;
+        const reach = u.chunkPart === 'chim' ? CITY_CHIM
+          : u.chunkPart === 'roof' ? CITY_ROOF : NEAR;
+        if (d < reach) banded++;
+      }
+      const parts = new Set(cm.map((m) => m.userData.chunkPart));
+      console.log('   over the Opera the city costs %d draws, %d with the trim shed past'
+        + ' %s m and %s m', plain, banded, CITY_CHIM, CITY_ROOF);
+      if (parts.size < 3) {
+        console.log('   FAIL the housetops are not split into block, roof and chimneys');
+        fails++;
+      } else if (banded >= plain) {
+        console.log('   FAIL shedding the trim saves nothing'); fails++;
+      } else if (CITY_CHIM >= NEAR || CITY_ROOF >= NEAR) {
+        console.log('   FAIL the trim outlives the haze that hides it'); fails++;
+      } else {
+        console.log('   ok   %d draws saved, and the chimneys go first', plain - banded);
+      }
+    }
+
     // EVERY HEAVY MONUMENT HAS A FAR VERSION.
     //
     // They are never culled and never should be -- the Deutsch prize is flying
