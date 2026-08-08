@@ -2798,14 +2798,19 @@ function scenCtx() {
         routeRings.push(r);
       }
     },
-    setZone(pos0, r) {
+    // `kind` is 'land' (the default) or 'over'. A ring means LAND HERE almost
+    // everywhere, and a pilot who was shown one and put her down in it was told
+    // he had failed (#109). The review at Longchamps is the one place a ring
+    // means fly over this and do NOT come down, so it says so, and the check
+    // that forbids a landing ring from failing you knows the difference.
+    setZone(pos0, r, kind = 'land') {
       const pos = pos0.clone();
       if (world && world.groundAt) pos.y += world.groundAt(pos.x, pos.z);
       // remembered, so a scenario's tick can ASK where its ring is instead of
       // repeating the coordinates. Repeating them meant that when the places
       // moved onto their true positions, rings moved and the checks did not:
       // you could land inside the green ring and be told you had missed.
-      scenZone = { pos: pos.clone(), r };
+      scenZone = { pos: pos.clone(), r, kind };
       scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24);
       scenBeacon.visible = true;
       scenBeacon.position.set(pos.x, pos.y + 75, pos.z);

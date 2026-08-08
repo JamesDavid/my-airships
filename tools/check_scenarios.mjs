@@ -30,7 +30,7 @@ export function play(def, { shipId, pilot, secs = 900, dt = 1 / 30 } = {}) {
     ship, world, wind,
     place: (x, y, z, yaw) => ship.reset({ x, y, z }, yaw),
     setWind: (x, z) => { wind.x = x; wind.z = z; },
-    setZone: (v, r) => { zone = { v, r }; },
+    setZone: (v, r, kind = 'land') => { zone = { v, r, kind }; },
     clearZone: () => { zone = null; },
     zoneDist: () => (zone ? Math.hypot(ship.pos.x - zone.v.x, ship.pos.z - zone.v.z) : 1e9),
     zoneR: () => (zone ? zone.r : 0),
@@ -45,12 +45,13 @@ export function play(def, { shipId, pilot, secs = 900, dt = 1 / 30 } = {}) {
     underCloud: false, inBois: false };
   for (let i = 0; i * dt < secs && !verdict; i++) {
     const t = i * dt;
-    ship.update(dt, pilot ? pilot(ship, t) : { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 },
+    ship.update(dt, pilot ? pilot(ship, t, zone) : { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 },
       wind, env);
     def.tick(ctx, dt);
   }
   return { verdict, msgs, t: ship._t, pos: { ...ship.pos },
     route,                                  // the hoops the scenario marked out
+    zone,                                   // and the ring, as it stood at the end
     onRoof: !!ship.restingOnRoof,
     bags: ship.bags, landed: ship.landed, wrecked: ship.wrecked };
 }
@@ -1201,6 +1202,56 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     }
     if (missing.length) { console.log('   FAIL not seen from afar: ' + missing.join(', ')); fails++; }
     else console.log('   ok   every monument is drawn from anywhere in the frame');
+  }
+
+  console.log('');
+  console.log('A GREEN RING IS NEVER A PLACE THAT FAILS YOU');
+  {
+    // "I landed in the green ring for the scenario 2 mission and it gave me a
+    // failure message" (#109). He had: 108 m inside a 170 m ring, down on a
+    // roof, which is the winning ground -- but the ring was the ENDING marker,
+    // hung from the first tick, and it sits squarely on the way to La Muette,
+    // which is what has to happen first. The game says a ring means land here.
+    // So fly it exactly as he did: go where the ring is and put her down in it
+    // the moment you are inside, and see what the scenario says.
+    for (const def of SCENARIOS.filter((d) => d.location === 'paris')) {
+      let sawRing = false;
+      const r = play(def, { secs: 900, pilot: (sh, t, zone) => {
+        const agl = sh.pos.y - world.groundAt(sh.pos.x, sh.pos.z);
+        if (t < 12) return { throttle: 1, rudder: 0, pitch: 0.5, vent: 0, coax: 0 };
+        if (!zone) {           // nothing marked: hold on and keep flying
+          return { throttle: sh.throttle < 0.9 ? 1 : 0, rudder: 0,
+            pitch: agl < 60 ? 0.5 : 0, vent: 0, coax: 0 };
+        }
+        sawRing = true;
+        const d = Math.hypot(sh.pos.x - zone.v.x, sh.pos.z - zone.v.z);
+        const want = Math.atan2(-(zone.v.z - sh.pos.z), zone.v.x - sh.pos.x);
+        let e = want - sh.yaw;
+        while (e > Math.PI) e -= 2 * Math.PI;
+        while (e < -Math.PI) e += 2 * Math.PI;
+        const inside = d < zone.r * 0.7;
+        return { throttle: inside ? -1 : (sh.throttle < 0.9 ? 1 : 0),
+          rudder: Math.max(-1, Math.min(1, e * 2.2)),
+          pitch: inside ? -0.6 : Math.max(-1, Math.min(1, (55 - agl) * 0.05)),
+          vent: inside && agl > 4 ? 1 : 0, coax: 0 };
+      } });
+      // ONLY judge it if she truly came down inside the ring. A crude autopilot
+      // that lands short and is then told "far from the boys at Bagatelle" is
+      // evidence about the autopilot, not about the ring, and counting it would
+      // have condemned three innocent scenarios.
+      const zEnd = r.zone;
+      const dEnd = zEnd ? Math.hypot(r.pos.x - zEnd.v.x, r.pos.z - zEnd.v.z) : Infinity;
+      // an 'over' ring is not a landing place and is not judged as one
+      const landedIn = r.landed && zEnd && zEnd.kind !== 'over' && dEnd < zEnd.r;
+      const bad = landedIn && r.verdict && !r.verdict.ok && !r.wrecked;
+      console.log('   %s %s %s', bad ? 'FAIL' : 'ok  ', def.id.padEnd(15),
+        !sawRing ? 'never marks a ring for this pilot to aim at'
+          : !landedIn ? 'this pilot never got down inside the ring — nothing proved'
+            : (r.verdict ? (r.verdict.ok ? 'landing in the ring wins'
+              : 'LANDING IN THE RING FAILS: ' + r.verdict.msg.slice(0, 50))
+              : 'still flying at 900 s'));
+      if (bad) fails++;
+    }
   }
 
   console.log('');

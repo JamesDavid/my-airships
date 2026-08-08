@@ -174,10 +174,30 @@ export const SCENARIOS = [
       const wz = -ux * Math.sin(TH) + uz * Math.cos(TH);
       ctx.setWind(wx * 7, wz * 7);
       ctx.ship.gas = 98;
-      ctx.setZone(V(t.x - ux * 290, 40, t.z - uz * 290), 170);
+      // THE GREEN RING IS NOT SHOWN UNTIL IT MEANS ANYTHING.
+      //
+      // It used to be set here, over the Trocadero hotels at -290 — which is
+      // where the flight ENDS, but also squarely on the way to La Muette at
+      // -650, which is what you have to reach first. So a pilot flew west, saw
+      // the ring the brief had promised him, put her down in it, and was told
+      // he had failed: "I landed in the green ring for the scenario 2 mission
+      // and it gave me a failure message" (#109). He was 108 m inside a 170 m
+      // ring and on a roof, which is the winning ground — only the wires had
+      // not fouled yet, so the scenario judged him by the branch for coming
+      // down early.
+      //
+      // Hoops mean GO THIS WAY and a ring means LAND HERE, so now the way home
+      // is hooped and the ring is hung only when the motor stops and the wind
+      // turns her round. Nothing here reads the zone — this scenario judges by
+      // distance along the line — so the marker is free to say the true thing.
+      ctx.setRoute([
+        V(t.x - ux * 120, 60, t.z - uz * 120),
+        V(t.x - ux * 400, 45, t.z - uz * 400),
+        V(t.x - ux * 660, 40, t.z - uz * 660),      // La Muette, where it goes wrong
+      ]);
       ctx.setCenter('August 8th, 1901',
         'The Tower is rounded and the valve is gone. West for St. Cloud — and '
-        + 'LOW, where the wind is thinner. (green ring)');
+        + 'LOW, where the wind is thinner. (follow the hoops)');
       this.fouled = 0;
       this.dead = false;
       this.warned = false;
@@ -209,9 +229,12 @@ export const SCENARIOS = [
           this.dead = true;
           ctx.ship.motorDead = true;
           ctx.ship.wiresFouled = false;
+          // now — and only now — there is somewhere to come down
+          ctx.setRoute([]);
+          ctx.setZone(V(t.x - u.x * 290, 40, t.z - u.z * 290), 170);
           ctx.setCenter('The motor is stopped',
             'And the wind has you — it is carrying you back onto the Tower. '
-            + 'Ballast buys height and costs distance.');
+            + 'Ballast buys height and costs distance. (green ring — the hotel roofs)');
         } else if (this.fouled > 9) {
           ctx.ship.wreck('scripted');
           return ctx.fail('The propeller cut the wires through and the keel came away beneath you. He stopped his motor instantly; that is the whole of why he lived.');
@@ -488,7 +511,9 @@ export const SCENARIOS = [
     brief: 'You lunched at the Cascade, and the officers marking out the troops asked whether you would come to the review in her. Fly the little No. 9 over the massed army at Longchamps, low and slow, then away to the polo ground. Ten minutes, no more — do not disturb the good order of the review.',
     setup(ctx) {
       { const L = placeLegacy('longchamp'); ctx.place(L.x + 540, 22, L.z + 200, -0.6); }  // the Cascade lawn
-      { const L = placeLegacy('longchamp'); ctx.setZone(V(L.x, 10, L.z), 360); }  // the racecourse, full of troops
+      // 'over', not 'land': you fly across the review, you do not come down in
+      // the middle of it — the one ring in the game that is not a landing place
+      { const L = placeLegacy('longchamp'); ctx.setZone(V(L.x, 10, L.z), 360, 'over'); }
       ctx.setCenter('July 14th, 1903', 'Over the review at Longchamps — low, and under ten minutes. (green ring)');
       this.over = 0; this.saluted = false; this.done = false;
     },
