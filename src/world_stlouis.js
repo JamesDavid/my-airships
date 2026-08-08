@@ -625,9 +625,39 @@ export function buildWorldStLouis(scene) {
     gates: GATES,
     rivalSpecs: ['villedeparis', 'no6'],
     towSpots: [{ name: 'the Grand Basin plaza', pos: new THREE.Vector3(head.x - 130, 0, 130) }],
-    limitNote: 'three laps at the pace he asked for — half again the Deutsch',
+    // THE COURSE HE ACTUALLY PROPOSED, measured against his own words.
+    //
+    // Ch. XXIV: "I suggested that three great towers or flagstaffs be erected
+    // in the grounds at the corners of an equal-sided triangle. The
+    // comparatively short course around them — BETWEEN 10 AND 20 MILES — would
+    // afford a decisive test of dirigibility no matter in what way the wind
+    // might blow; while as for speed, the necessary average might be increased
+    // 50 PER CENT over that fixed for the Deutsch prize competition in Paris."
+    //
+    // The triangle was right: three pylons, sides of 935 m, equal to the last
+    // metre. The rest was not. Three laps of it is 8.42 km — 5.2 miles, half
+    // his minimum — and a 1,060 s limit asks for 28.6 km/h, which is 30 per
+    // cent over the Deutsch's 22, not fifty.
+    //
+    // The triangle cannot grow: 935 m sides are already most of the width of
+    // the Exposition grounds, and he chose those grounds precisely so that
+    // "the Exposition public would desire to see the flights from start to
+    // finish". So the LAPS grow instead — six of them make 16.8 km, which is
+    // 10.5 miles and inside his bracket — and the limit is set at the 33 km/h
+    // he asked for: 16,836 m at 33 km/h is 1,837 s.
+    //
+    // ...AND THE COURSE IS NOT THE DISTANCE FLOWN. His 33 km/h was a figure for
+    // a line on a plan. A ship with a real turning circle cannot fly a line: the
+    // No. 7 turns in 168 m, which is a fifth of the 935 m side, so each of the
+    // eighteen corners is swung wide and the path comes to about 21 km rather
+    // than 16.8. At his pace that is 2,280 s, and the test pilot gets round in
+    // 1,993 -- so the pace he asked for is still the thing being asked, and it
+    // is still hard.
+    //
+    // Which is fitting. Nobody ever won the St. Louis grand prize.
+    limitNote: 'six laps of the triangle — 10.5 miles at half again the Deutsch pace',
     windBase: WINDB,
-    raceLimit: 1060, raceRecord: 975, raceLaps: 3,
+    raceLimit: 2280, raceRecord: 2050, raceLaps: 6,
     vistaPos: new THREE.Vector3(fh.x, fhY + 62, fh.z + 60),
     hints: {
       idleNear: 'The grand prize waits — three pylons, two rivals.',
