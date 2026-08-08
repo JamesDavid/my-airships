@@ -14,8 +14,9 @@
 import * as THREE from 'three';
 import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurface,
          windify, windMats, generateFrontages, addBuildingMeshes,
-         keepOutOfReflection } from './world.js';
+         keepOutOfReflection, fitToBox } from './world.js';
 import { STREETS_MC } from './monaco_streets.js';
+import { footprint as mcFootprint } from './monaco_footprints.js';
 import { HF, place, groundAt, groundRaw, isSea, slopeAt } from './monaco_geo.js';
 import { inSiteMC } from './monaco_plan.js';
 
@@ -224,12 +225,20 @@ export function buildWorldMonaco(scene) {
 
   // ---------- what stood on the Rock ----------
   const pMat = new THREE.MeshLambertMaterial({ color: 0xe6d9c0 });
+  // Every landmark here was placed with a position and nothing else — no
+  // rotation, no size — exactly as Paris's were, and with the same result: all
+  // of them at rotation.y = 0 and about half scale, the Prince's Palace drawn
+  // 60 m where it is 133 and the Musée océanographique 40 m where it is 103.
+  // src/monaco_footprints.js holds the real outlines; anything with one is
+  // stood on it, keeping the ground height that `at` worked out.
   const put = (grp, id, extra = 0) => {
     const p = at(id, extra);
     grp.position.copy(p);
+    const f = mcFootprint(id);
+    if (f) { const y = grp.position.y; fitToBox(grp, f); grp.position.y = y; }
     grp.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     scene.add(grp);
-    return p;
+    return grp.position.clone();
   };
 
   const palace = new THREE.Group();

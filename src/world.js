@@ -247,7 +247,15 @@ export function makeShadowSun(scene, sunDir, intensity) {
  * heights are researched separately and must not be scaled with the plan.
  */
 function fitFootprint(g, id, opts = {}) {
-  const f = footprint(id);
+  return fitToBox(g, footprint(id), opts);
+}
+
+/**
+ * The same, given the rectangle rather than a name — so Monaco can use it too.
+ * Monaco had the identical fault: every landmark drawn at rotation.y = 0 and
+ * about half size, the Prince's Palace 60 m where it is 133.
+ */
+export function fitToBox(g, f, opts = {}) {
   if (!f) return null;
   // the group's own extent, before it is turned
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;

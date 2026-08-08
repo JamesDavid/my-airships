@@ -19,6 +19,8 @@
 #
 # Use: python tools/audit_landmarks.py [--refresh]
 #
+# Outlines come from tools/city_footprints.py's cache, which fetches them.
+#
 # Footprints are cached in tools/osm_landmarks.json so the audit runs offline
 # and Overpass is asked once. --refresh asks again.
 import json
@@ -31,7 +33,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-CACHE = os.path.join(HERE, 'osm_landmarks.json')
+CACHE = os.path.join(HERE, 'osm_paris_landmarks.json')
 
 # The frame, from src/paris_geo.js — kept here as numbers so the audit does not
 # depend on a JS runtime, and asserted against the file below.
