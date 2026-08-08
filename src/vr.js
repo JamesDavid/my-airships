@@ -115,6 +115,29 @@ function safeDetectedPlanes() {
   } catch { /* an older runtime with no such property: nothing to make safe */ }
 }
 
+/**
+ * The XR framebuffer scale, and where it is kept.
+ *
+ * 0.9 is the shipped value. 1.0 is native, 0.7 is the diagnostic drop.
+ */
+export const FB_SCALES = [1.0, 0.9, 0.8, 0.7];
+let fbScale = 0.9;
+function readScale() {
+  try {
+    const v = parseFloat(localStorage.getItem('myairships_fbscale'));
+    if (FB_SCALES.includes(v)) return v;
+  } catch { /* private mode */ }
+  return 0.9;
+}
+/** Set it, remember it, and apply it to a live session if there is one. */
+export function setFramebufferScale(v) {
+  fbScale = v;
+  try { localStorage.setItem('myairships_fbscale', String(v)); } catch { /* private mode */ }
+  try { if (renderer) renderer.xr.setFramebufferScaleFactor(v); } catch { /* older runtime */ }
+  return fbScale;
+}
+export function framebufferScale() { return fbScale; }
+
 export function initVR(rendererIn, cameraIn, opts = {}) {
   renderer = rendererIn;
   camera = cameraIn;
@@ -123,7 +146,15 @@ export function initVR(rendererIn, cameraIn, opts = {}) {
   try { renderer.xr.setReferenceSpaceType('local-floor'); } catch { /* older runtime */ }
   // a hair under native, which buys a lot of fill on a mobile chip for very
   // little that the eye can find
-  try { renderer.xr.setFramebufferScaleFactor(0.9); } catch { /* older runtime */ }
+  // THE A/B THAT TELLS YOU WHAT YOU ARE BOUND BY.
+  //
+  // A VR developer's first instruction, and the right one: drop the framebuffer
+  // scale and see what happens. If the frame rate jumps you are fill or
+  // bandwidth bound; if nothing moves you are CPU and draw-call bound, and no
+  // amount of resolution work will help. It has to be changeable IN the headset
+  // to be worth anything, so it lives in the Options tab of the ship's book and
+  // is remembered.
+  setFramebufferScale(readScale());
   rig = new THREE.Group();
   rig.name = 'xrRig';
 

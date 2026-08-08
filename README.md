@@ -159,6 +159,20 @@ The generators live in [`tools/`](tools/) and the method — including what the
 modern data gets wrong for 1902, and how it was checked — is written up in
 [`docs/PERIOD_NOTES.md`](docs/PERIOD_NOTES.md).
 
+## Working on the headset build
+
+Read [`docs/VR_PERFORMANCE.md`](docs/VR_PERFORMANCE.md) **before** proposing any
+rendering change. It states the target (Quest 3, Adreno tiled deferred,
+bandwidth-bound, no post-processing, ~11 ms a frame, under 200 draw calls), what
+is already done and must not be "fixed" again, what is measured — this world
+draws 966 meshes from the aerodrome against a budget of 200, so it is
+draw-call bound by about 5× — and which common suggestions are actively wrong
+here. Most performance advice on the web is desktop-shaped.
+
+In the game: **Options → Frame meter** puts fps, draw calls and triangles on the
+basket slate live, and **Options → Headset resolution** steps the XR framebuffer
+scale so you can tell fill-bound from draw-call bound from inside the headset.
+
 ## The source material
 
 `docs/BOOK_REFERENCE.md` is the design bible: a catalogue of the memoir's locale

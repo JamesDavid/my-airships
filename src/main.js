@@ -1086,6 +1086,20 @@ function buildMenuButtons() {
       if (tryChangeShip(id)) toggleMenu(false);
     }, id === currentShip);
   }
+  // ---- the two things a VR developer asked for, where a headset can reach ----
+  menuButton(optsDiv, 'Frame meter: ' + (meter.on ? 'on' : 'off'),
+    meter.on ? (meterLine() || 'reading…') : 'fps, draw calls and triangles, live',
+    () => { meter.on = !meter.on; buildMenuButtons(); });
+  {
+    const cur = vr.framebufferScale();
+    menuButton(optsDiv, 'Headset resolution: ' + cur.toFixed(2),
+      'tap to step down — if the frame rate jumps you are fill-bound, if it does '
+      + 'not you are draw-call bound', () => {
+        const i = vr.FB_SCALES.indexOf(cur);
+        vr.setFramebufferScale(vr.FB_SCALES[(i + 1) % vr.FB_SCALES.length]);
+        buildMenuButtons();
+      });
+  }
   const inRoomNotHost = live.inRoom() && !live.isHost();
   const locBtn = (id, label, sub) => menuButton(placeDiv, label,
     inRoomNotHost ? 'the room flies together — the host chooses' : sub, () => {
@@ -3602,7 +3616,7 @@ function frame(now) {
     // dead and the board could not be worked. The controllers are read here
     // whatever else is stopped.
     if (vr.inVR()) vr.pollVR(ship);
-    updateCamera(dt); draw();
+    updateCamera(dt); draw(); readMeter(dt * 1000);
     if (bugWanted) takeVRFault();   // or a fault filed over an open board never goes
     return;
   }
@@ -3758,6 +3772,7 @@ function frame(now) {
   drawThrottleLever();
   updateAudio();
   draw();
+  readMeter(dt * 1000);            // after the render: three resets info each frame
   // ...and only now, with the scene settled and the context live, take the
   // picture the FAUTE button asked for. Not in the button handler: that fires
   // out of a controller poll, where a render target of our own would be bound
@@ -3865,6 +3880,36 @@ function stillWater(on) {
 // the stereo pair, and a bloom pass over both eyes reads as a smear. So in a
 // headset we render straight, which is also the cheapest thing we can do at
 // ninety hertz on a mobile chip.
+// ---------------------------------------------------------------- the meter
+//
+// "Confirm the bottleneck before optimizing." You cannot, from outside a
+// headset, and this game had no way to say what it was doing — so the numbers
+// that decide every VR question are taken from the renderer itself and put
+// where a pilot in a headset can read them.
+//
+// renderer.info.render is reset each frame by three, so it must be read AFTER
+// the render and before the next one. calls is what matters here: measured from
+// the aerodrome this world draws 966 meshes, against a Quest's budget of about
+// two hundred, which says the answer is draw calls and not resolution before
+// any A/B is run at all.
+const meter = { on: false, fps: 0, calls: 0, tris: 0, _n: 0, _t: 0, _acc: 0 };
+function readMeter(dtMs) {
+  if (!meter.on) return;
+  meter._n++; meter._acc += dtMs;
+  const r = renderer.info.render;
+  meter.calls = r.calls; meter.tris = r.triangles;
+  if (meter._acc >= 500) {
+    meter.fps = Math.round(1000 / (meter._acc / meter._n));
+    meter._acc = 0; meter._n = 0;
+  }
+}
+/** One line, for the HUD and for the slate in a headset. */
+function meterLine() {
+  if (!meter.on) return null;
+  return `${meter.fps} fps · ${meter.calls} draws · `
+    + `${(meter.tris / 1000).toFixed(0)}k tris · fb ${vr.framebufferScale().toFixed(2)}`;
+}
+
 function draw() {
   if (vr.inVR()) renderer.render(scene, camera);
   else composer.render();
@@ -3957,6 +4002,12 @@ function vrPanel() {
   // scenario II's is 113 characters — so the slate went big and opaque on the
   // first frame of the flight and STAYED there, for the whole flight, with
   // nothing to make it small again.
+  // THE METER GOES ON THE SLATE, because the whole point of it is to be read
+  // inside the headset while flying — a number you have to take the headset off
+  // to see is a number that answers a different question.
+  const mline = meterLine();
+  if (mline) rows.push(['METER', mline]);
+
   ship.bigPanel(note.length > 90 && age < BIG_SLATE_DWELL);
   ship.drawPanel(rows, toast ? '' : note, nav, toast);
 }
