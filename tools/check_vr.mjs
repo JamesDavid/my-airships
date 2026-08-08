@@ -298,6 +298,47 @@ if (renderer.shadowMap.enabled) {
     }
   }
 
+  // NOTHING READS detectedPlanes AND LIVES.
+  //
+  // "in vr i got a failed to read the detectedPlanes property from XRFrame."
+  // three.js r160 reads it unguarded at the end of every XR frame, and Chrome
+  // throws unless the session asked for plane-detection. The throw comes out of
+  // WebGLAnimation's `animationLoop( time, frame )`, which runs BEFORE
+  // `requestAnimationFrame( onAnimationFrame )` — so the next frame is never
+  // requested and the headset stops dead. vr.js wraps the getter so it returns
+  // undefined instead. This asserts the wrap is in place and that it actually
+  // swallows a throwing getter.
+  {
+    const src2 = await (await import('node:fs/promises')).readFile('src/vr.js', 'utf8');
+    // Look for the CALL, not the name: "safeDetectedPlanes()" also matches the
+    // function's own definition, so the first cut of this passed with the call
+    // deleted -- a check that could not fail, again.
+    const call = src2.indexOf('safeDetectedPlanes();');
+    const wraps = src2.includes("Object.defineProperty(XRFrame.prototype, 'detectedPlanes'")
+      && call >= 0 && call < src2.indexOf('navigator.xr.requestSession');
+    // and prove the shape of it works: a getter that throws, made safe
+    const probe = {};
+    Object.defineProperty(probe, 'detectedPlanes', {
+      configurable: true,
+      get() { throw new DOMException('Cannot access detectedPlanes without plane-detection feature'); },
+    });
+    const d0 = Object.getOwnPropertyDescriptor(probe, 'detectedPlanes');
+    Object.defineProperty(probe, 'detectedPlanes', {
+      configurable: true,
+      get() { try { return d0.get.call(this); } catch { return undefined; } },
+    });
+    let threw = false, val = 'x';
+    try { val = probe.detectedPlanes; } catch { threw = true; }
+    if (!wraps) {
+      console.log('   FAIL nothing makes the detectedPlanes read safe before the session opens');
+      fails++;
+    } else if (threw || val !== undefined) {
+      console.log('   FAIL the wrap does not swallow a throwing getter'); fails++;
+    } else {
+      console.log('   ok   detectedPlanes is wrapped before the session, and reads undefined');
+    }
+  }
+
   // THE ROOM NOTICE STANDS DOWN. It was set when the room opened and never
   // taken away, so on the screen it parked at the top for the whole flight and
   // in a headset it rode along the bottom of the slate for ever, because the

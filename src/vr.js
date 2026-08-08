@@ -69,6 +69,52 @@ const pressed = new Set();
  *                        outside the ship without taking the headset off)
  * @param opts.onMenu     open and close the menu
  */
+/**
+ * THE detectedPlanes FREEZE.
+ *
+ * "in vr i got a failed to read the detectedPlanes property from XRFrame".
+ * Nothing here asks for planes and nothing here reads them. three.js r160 does,
+ * at the very end of its own XR frame:
+ *
+ *     if ( frame.detectedPlanes ) {
+ *       scope.dispatchEvent( { type: 'planesdetected', data: frame } );
+ *     }
+ *
+ * unguarded, every frame. Chrome throws on that read unless the session was
+ * requested with the `plane-detection` feature — "Cannot access detectedPlanes
+ * without plane-detection feature" — and this is not console noise. Look at
+ * where the throw lands: three's WebGLAnimation runs
+ *
+ *     animationLoop( time, frame );
+ *     requestId = context.requestAnimationFrame( onAnimationFrame );
+ *
+ * in that order, so the exception comes out of animationLoop and the next
+ * frame is NEVER REQUESTED. The headset stops dead.
+ *
+ * Asking for 'plane-detection' as an optional feature does not fix it: if the
+ * runtime refuses it the property still throws, and we would be asking for a
+ * capability we have no use for. So the read is made safe instead — the getter
+ * is wrapped once, and returns undefined where it used to throw, which is
+ * exactly what three's `if` is looking for. A newer three.js guards this
+ * itself; this repo takes three from a CDN with no build step, so the fix has
+ * to live here.
+ */
+function safeDetectedPlanes() {
+  try {
+    if (typeof XRFrame === 'undefined' || safeDetectedPlanes.done) return;
+    safeDetectedPlanes.done = true;
+    const d = Object.getOwnPropertyDescriptor(XRFrame.prototype, 'detectedPlanes');
+    if (!d || typeof d.get !== 'function') return;
+    Object.defineProperty(XRFrame.prototype, 'detectedPlanes', {
+      configurable: true,
+      enumerable: d.enumerable,
+      get() {
+        try { return d.get.call(this); } catch { return undefined; }
+      },
+    });
+  } catch { /* an older runtime with no such property: nothing to make safe */ }
+}
+
 export function initVR(rendererIn, cameraIn, opts = {}) {
   renderer = rendererIn;
   camera = cameraIn;
@@ -208,6 +254,7 @@ export async function offerVR(mount, onEnter) {
   b.addEventListener('click', async () => {
     if (session) { session.end(); return; }
     try {
+      safeDetectedPlanes();
       const s = await navigator.xr.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'],
       });

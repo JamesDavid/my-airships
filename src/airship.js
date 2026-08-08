@@ -636,10 +636,15 @@ export class Airship {
         [['deckup', '▲', 0.075], ['deckdn', '▼', -0.075]].forEach(([id, glyph, dz]) => {
           const btn = new THREE.Mesh(
             new THREE.CylinderGeometry(0.024, 0.024, 0.020, 10), dbMat);
-          btn.rotation.z = Math.PI / 2;              // face outboard, to starboard
-          btn.position.set(bx + 0.30, -drop - 0.30, 0.394 + dz * 0);
-          btn.position.z = 0.394;
-          btn.position.x = bx + 0.30 + dz;
+          // MOUNTED ON THE WALL, not standing out from it. A cylinder's axis
+          // is its local +Y, and rotation.x = t sends that to (0, cos t, sin t)
+          // — so the face lies against a wall whose normal is Z only when the
+          // turn is about X. Turned about Z instead, the axis went athwartships
+          // and the buttons stuck out of the weave sideways. The port bank has
+          // it right and is the model: -0.5 + PI/2 there, so the mirror of it
+          // here, tilted the same half-radian up toward the hand.
+          btn.rotation.x = 0.5 - Math.PI / 2;
+          btn.position.set(bx + 0.30 + dz, -drop - 0.30, 0.394);
           this.pitchGroup.add(btn);
           placard(this.pitchGroup, glyph, btn.position.x, -drop - 0.20, 0.425,
             Math.PI, 0.075);
