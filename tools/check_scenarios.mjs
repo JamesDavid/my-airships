@@ -1205,6 +1205,43 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE TROCADERO FACES THE TOWER IT WAS BUILT TO LOOK AT');
+  {
+    // "The trocodero palace seems like it is wrong rotation" (#112). It was.
+    // The galleries are struck symmetric about the group's +X axis and no
+    // rotation was ever applied, so the palace stood facing due east at 90
+    // degrees while the Tower lies at 130 -- forty degrees out, and side-on to
+    // anyone coming over the hill.
+    //
+    // The truth was taken off the map, not argued: OpenStreetMap relation
+    // 6826569 (building=palace) is the Palais de Chaillot, which stands on the
+    // Trocadero's own substructure and keeps its wings. Its wing tips are
+    // 426 m apart on a chord bearing 42 degrees and the Tower lies at 135 --
+    // square to that chord, so the palace looks straight down the axis at it.
+    const tp = placeLegacy('trocadero'), te = placeLegacy('eiffel');
+    const bear = (dx, dz) => ((Math.atan2(dx, -dz) * 180 / Math.PI) + 360) % 360;
+    const grp = scene.children.filter((o) => o && o.position && Array.isArray(o.children)
+      && Math.hypot(o.position.x - tp.x, o.position.z - tp.z) < 1 && o.children.length > 40);
+    const want = bear(te.x - tp.x, te.z - tp.z);
+    if (!grp.length) {
+      console.log('   FAIL the palace is not standing on its own site');
+      fails++;
+    } else {
+      const th = grp[0].rotation.y || 0;
+      const faces = bear(Math.cos(th), -Math.sin(th));
+      let off = Math.abs(faces - want); if (off > 180) off = 360 - off;
+      console.log('   it faces %s deg; the Tower is at %s deg; %s deg out',
+        faces.toFixed(0), want.toFixed(0), off.toFixed(0));
+      if (off > 8) {
+        console.log('   FAIL the palace is turned away from the Tower');
+        fails++;
+      } else {
+        console.log('   ok   the rotunda looks straight down the axis at the Tower');
+      }
+    }
+  }
+
+  console.log('');
   console.log('NO HOOP STANDS OVER A HOUSE');
   {
     // "The rings should not be above the buildings they should be in the wide

@@ -1242,7 +1242,12 @@ export function buildWorld(scene) {
         clue: 'The arch at the top of the great avenue — he rounded it “to the right, as the law directs”.' },
       { id: 'palais', name: 'the Grand Palais', ...LM('grandpalais'), y: 66, r: 45,
         clue: 'Stone below and a river of glass above: the exhibition palace of 1900.' },
-      { id: 'trocadero', name: 'the Trocadéro', ...LM('trocadero'), y: 86, r: 55,
+      // OVER the towers, not between them. Turning the palace to face the Tower
+      // (#112) swung its two 70 m towers onto higher ground — they reach 97 m
+      // now where they reached 84 — and a gem at 86 hung inside one of them.
+      // The same hand-written clearance the Grande Roue needs, for the same
+      // reason: a gem is placed by its landmark's height, not by collision.
+      { id: 'trocadero', name: 'the Trocadéro', ...LM('trocadero'), y: 106, r: 55,
         clue: '“The No. 5 came down on its roof.” A rotunda and two slim towers across the water from the Tower.' },
       { id: 'invalides', name: 'the Invalides', ...LM('invalides'), y: 70, r: 45,
         clue: 'A gilded dome over the soldiers’ hospital.' },
@@ -1630,6 +1635,27 @@ function addLandmarks(scene) {
   // Written FLAT, like every other collider: the grounding pass at the end of
   // buildWorld sets b.y from the terrain and lifts `top` with it.
   const _tp = placeLegacy('trocadero');
+  // IT MUST FACE THE TOWER, AND IT DID NOT.
+  //
+  // The galleries are struck symmetric about the group's +X axis, and no
+  // rotation was ever applied to the group — so the palace stood facing due
+  // east (90 degrees) while the Tower it was built to look at lies at 130.
+  // Forty degrees out, and a pilot coming over the hill saw it side-on:
+  // "the trocodero palace seems like it is wrong rotation" (#112).
+  //
+  // Checked against the map rather than argued about: OpenStreetMap relation
+  // 6826569, building=palace, is the Palais de Chaillot, which stands on the
+  // Trocadéro's own substructure and keeps its wings. Its wing tips are 426 m
+  // apart on a chord bearing 42 degrees, and the Tower lies at 135 — square to
+  // that chord. So the palace faces the Tower dead on, and this turns it to.
+  const _te0 = placeLegacy('eiffel');
+  const TROC_FACE = Math.atan2(-(_te0.z - _tp.z), _te0.x - _tp.x);
+  // a point of the unrotated plan, in world terms — the colliders are pushed
+  // flat and must be turned with the stone they stand for
+  const trocAt = (px, pz) => ({
+    x: _tp.x + px * Math.cos(TROC_FACE) + pz * Math.sin(TROC_FACE),
+    z: _tp.z - px * Math.sin(TROC_FACE) + pz * Math.cos(TROC_FACE),
+  });
   const troc = new THREE.Group();
   const trocC = new THREE.Mesh(new THREE.CylinderGeometry(17, 18, 30, 14), cream); trocC.position.y = 15; troc.add(trocC);
   lmColliders.push({ x: _tp.x, z: _tp.z, w: 34, d: 34, h: 30, top: 30 });
@@ -1637,8 +1663,8 @@ function addLandmarks(scene) {
   for (const s of [-1, 1]) {
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3, 62, 8), cream);
     tower.position.set(0, 31, s * 21); troc.add(tower);
-    lmColliders.push({ x: _tp.x, z: _tp.z + s * 21, w: 6, d: 6,
-      h: 62, top: 70 });                                   // the 70 m towers
+    { const q = trocAt(0, s * 21);
+      lmColliders.push({ x: q.x, z: q.z, w: 6, d: 6, h: 62, top: 70 }); }  // the 70 m towers
     const cap = new THREE.Mesh(new THREE.ConeGeometry(3.4, 8, 8), slate);
     cap.position.set(0, 66, s * 21); troc.add(cap);
     // The curved galleries. These used to be six detached boxes stepped round an
@@ -1659,8 +1685,9 @@ function addLandmarks(scene) {
       corn.position.set(px, 15.6, pz);
       corn.rotation.y = bay.rotation.y;
       troc.add(corn);
-      lmColliders.push({ x: _tp.x + px, z: _tp.z + pz, w: chord, d: 13,
-        ry: bay.rotation.y, h: 15, top: 16.4 });
+      { const q = trocAt(px, pz);
+        lmColliders.push({ x: q.x, z: q.z, w: chord, d: 13,
+          ry: bay.rotation.y + TROC_FACE, h: 15, top: 16.4 }); }
       // a pavilion where the gallery meets the rotunda, and again at its end
       if (w === 0 || w === BAYS - 1) {
         const pav = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 7, 21, 10), cream);
@@ -1673,6 +1700,7 @@ function addLandmarks(scene) {
     }
   }
   troc.position.set(_tp.x, 0, _tp.z);   // liftToTerrain puts it on the hill
+  troc.rotation.y = TROC_FACE;          // and this turns it to face the Tower
   farSeen(troc);
 
   // The great cascade, which is what the gardens were FOR: water off the
