@@ -587,6 +587,8 @@ function loadWorld(loc) {
   world = loc === 'paris' ? buildWorld(scene)
     : loc === 'monaco' ? buildWorldMonaco(scene)
     : buildWorldStLouis(scene);
+  // a fresh world is a fresh clock for whatever moves in it
+  moverWatch.peak = 0; moverWatch.what = null; moverWatch.last = null;
   if (vr.inVR()) { stillWater(true); swapCityForVR(true); }   // and for a world arrived at IN a headset
   startRing = makeRing(0xd9b24a); startRing.position.copy(world.startRing);
   track = null;
@@ -2008,6 +2010,44 @@ async function createOrJoinRoom(trackId, code, hosting, listed = true) {
 // when that office is reachable: with no keys configured there is nowhere to
 // send it, so the button is never built.
 
+// ---------------------------------------------------------------- the movers
+// A pilot has reported fast boats off Monaco five times. The escort measures
+// 11 km/h in the headless harness, in the real engine driven by hand, and in
+// the file the site is actually serving -- and he still sees them streak. I
+// cannot reproduce it, so rather than guess a fourth time the running game
+// clocks whatever the world says moves, and the next report carries the
+// number. Measured frame to frame, exactly as a pilot sees it, and kept as a
+// peak so a jump that lasts one frame is not averaged away.
+const moverWatch = { peak: 0, what: null, last: null, at: 0 };
+function clockTheMovers(dt) {
+  const m = world && world.movers;
+  if (!m || !m.length || dt <= 0) { moverWatch.last = null; return; }
+  const now = m.map((o) => ({ x: o.position.x, y: o.position.y, z: o.position.z }));
+  if (moverWatch.last && moverWatch.last.length === now.length) {
+    for (let i = 0; i < now.length; i++) {
+      const p = moverWatch.last[i];
+      // only what a pilot could actually see move: smoke recycles by fading out
+      // and reappearing at the funnel, which is a teleport in the arithmetic
+      // and no such thing in the basket
+      const mat = m[i].material;
+      if (m[i].visible === false) continue;
+      if (mat && mat.transparent && mat.opacity < 0.02) continue;
+      const v = Math.hypot(now[i].x - p.x, now[i].y - p.y, now[i].z - p.z) / dt;
+      if (v > moverWatch.peak) {
+        moverWatch.peak = v;
+        moverWatch.what = m[i].userData && m[i].userData.leg !== undefined ? 'escort boat' : 'smoke';
+        moverWatch.at = Math.round(now[i].x) + ',' + Math.round(now[i].z);
+      }
+    }
+  }
+  moverWatch.last = now;
+}
+function moverReport() {
+  if (!moverWatch.what) return null;
+  return { fastest: moverWatch.what, kmh: +(moverWatch.peak * 3.6).toFixed(1),
+    at: moverWatch.at, watching: (world.movers || []).length };
+}
+
 /** Everything worth knowing that a pilot should not have to type out. */
 function faultState() {
   const info = live.inRoom() ? live.roomInfo() : null;
@@ -2028,6 +2068,7 @@ function faultState() {
     room: info ? { code: info.code, trial: info.trackId, aboard: live.roster().length,
       holding: live.isHost(), watching: live.spectating() } : null,
     office: { url: cfg ? cfg.url : null },
+    onTheWater: moverReport(),
     faults: faultLog,
   };
   if (ship) {
@@ -3689,6 +3730,7 @@ function frame(now) {
   const flagAng = Math.atan2(-wind.z, wind.x);
   for (const f of world.flags || []) f.rotation.y = flagAng + Math.sin(windGustT * 3.1) * 0.14;
   world.tick?.(dt, windGustT, wind);
+  clockTheMovers(dt);
 
   // the sky box re-centers on the camera (or its walls show as black past 2 km)
   if (world.sky) world.sky.position.copy(camera.position);

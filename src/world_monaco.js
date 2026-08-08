@@ -600,6 +600,13 @@ export function buildWorldMonaco(scene) {
   return {
     name: 'Monaco, winter 1902',
     sun, sunDir, sky, waters: [sea], flags: [], tick,
+    // WHAT MOVES ON THIS WATER, published so it can be clocked in the running
+    // game and not only in a harness. A pilot has now reported fast boats off
+    // this coast five times; the escort measures 11 km/h in the stub, in the
+    // real engine and in the deployed file, and I have not been able to see
+    // what he sees. So the game clocks these itself and puts the answer in the
+    // next bug report, instead of my guessing a fourth time.
+    movers: escort.concat(puffs),
     buildings, clouds, trees: scrub,
     landmarks: [
       LM('casino', 'the Casino terrace', 40, 60,
