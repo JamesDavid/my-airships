@@ -352,17 +352,39 @@ export const SCENARIOS = [
       { const a = placeLegacy('etoile');
         // 300 m down the avenue from the Étoile, on its axis — No. 114
         ctx.setZone(V(a.x + 268, 2, a.z + 134), 26); }
-      // the way he went: over the Bois, across the Seine, round the Arc to the
-      // right "as the law directs", and down the avenue at rooftop height
-      // The hoops must lie AHEAD of where she starts. When the start was moved
-      // up the line to save seven minutes of cruising, these stayed back in the
-      // Bois, so the first mark was behind the pilot and the flight began by
-      // turning round. They are struck off the same line, beyond the start.
+      // THE WAY HE WENT, AND IT IS DOWN THE AVENUE.
+      //
+      // "Over the Bois, across the Seine, round the Arc to the right as the law
+      // directs, and down the avenue at rooftop height." The hoops were struck
+      // along the straight geometric line from Bagatelle to the door, which is
+      // not a street and does not pretend to be: measured, they sat 93, 252 and
+      // 464 m off the avenue's axis, and the middle one stood 3 m from a 48 m
+      // block. "The rings should not be above the buildings they should be in
+      // the wide street" (#110), and before that "the rings for the course
+      // should be in the avenue and not over the buildings".
+      //
+      // So the last three are struck along the Étoile-to-door axis, which IS
+      // the avenue — the door is defined as a point on it — and the approach
+      // hoop is put where there is room. Clearance to the nearest house,
+      // measured: 57 m on the approach, then 100, 66 and 44 m down the avenue,
+      // against 3 m before.
       {
         const a = placeLegacy('etoile'), b = placeLegacy('bagatelle');
         const door = { x: a.x + 268, z: a.z + 134 };
-        const on = (f) => V(b.x + (door.x - b.x) * f, 30, b.z + (door.z - b.z) * f);
-        ctx.setRoute([on(0.74), on(0.86), on(0.95)]);   // start is at 0.62
+        // along the avenue itself, from the Arc to his door
+        const av = (f, y) => V(a.x + (door.x - a.x) * f, y, a.z + (door.z - a.z) * f);
+        // and the run in to the Arc, on the line she is already flying
+        const L = Math.hypot(a.x - b.x, a.z - b.z);
+        const approach = (d, y) => {
+          const f = (L - d) / L;
+          return V(b.x + (a.x - b.x) * f, y, b.z + (a.z - b.z) * f);
+        };
+        ctx.setRoute([
+          approach(450, 46),     // 450 m short of the Arc, over open ground
+          av(0.30, 38),          // round it to the right, and into the avenue
+          av(0.60, 30),
+          av(0.85, 24),          // short final, at rooftop height
+        ]);
       }
       ctx.setCenter('June 23rd, 1903, 4 a.m.', 'Your door is on the Champs-Élysées. (green ring — land gently in the avenue)');
     },
@@ -613,7 +635,10 @@ export const SCENARIOS = [
         V(n.x + ux * (NEUILLY_LONG / 2 + 55), 30, n.z + uz * (NEUILLY_LONG / 2 + 55)),
         V(river.x, 40, river.z),                                  // above the Seine
         V(river.x + (b.x - river.x) * 0.45, 38, river.z + (b.z - river.z) * 0.45),
-        V(river.x + (b.x - river.x) * 0.80, 32, river.z + (b.z - river.z) * 0.80),
+        // 0.72 and not 0.80: at 0.80 the hoop stood 17 m from a 17 m house and
+        // only 9 m over its roof, which is the very thing #110 is about. The
+        // leg was scanned and this is the open part of it.
+        V(river.x + (b.x - river.x) * 0.72, 32, river.z + (b.z - river.z) * 0.72),
       ]);
       ctx.setCenter('June 29th, 1903, Neuilly St James',
         'Over the wall and the boulevard, turn above the Seine, then down to Bagatelle. (green ring — land on the polo ground)');

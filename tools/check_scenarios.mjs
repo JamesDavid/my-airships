@@ -1205,6 +1205,61 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('NO HOOP STANDS OVER A HOUSE');
+  {
+    // "The rings should not be above the buildings they should be in the wide
+    // street" (#110), and before that "the rings for the course should be in
+    // the avenue and not over the buildings". The Runabout's hoops were struck
+    // along the straight geometric line from Bagatelle to the door -- which is
+    // not a street -- so they sat 93, 252 and 464 m off the avenue's axis with
+    // one of them 3 m from a 48 m block.
+    //
+    // A hoop is fair if it is either in the open or well clear of the roof
+    // beneath it. Both are measured; neither is assumed.
+    const CLEAR = 30, OVER = 15;
+    for (const def of SCENARIOS.filter((d) => d.location === 'paris')) {
+      let route = [];
+      const probe = {
+        ship: { spec: SHIPS[def.shipId], pos: { x: 0, y: 0, z: 0 }, gas: 100 },
+        world, place() {}, setWind() {}, setZone() {}, clearZone() {},
+        setCenter() {}, addMsg() {}, setRoute(r) { route = r || []; },
+        complete() {}, fail() {}, zoneDist: () => 1e9, zoneR: () => 0,
+        raceResult: () => null,
+      };
+      try { def.setup(probe); } catch { /* a scenario that needs more than a probe */ }
+      if (!route.length) { console.log('   ok    %s   marks no hoops', def.id.padEnd(15)); continue; }
+      let worst = null;
+      for (const p of route) {
+        let bd = 1e9, bh = 0;
+        for (const bl of world.buildings) {
+          const d = Math.hypot(bl.x - p.x, bl.z - p.z);
+          if (d < bd) { bd = d; bh = bl.top || 0; }
+        }
+        const gy = world.groundAt(p.x, p.z);
+        const over = (gy + p.y) - bh;            // the hoop's height above that roof
+        const fair = bd > CLEAR || over > OVER;
+        if (!fair && (!worst || bd < worst.bd)) worst = { bd, bh, over };
+      }
+      if (worst) {
+        console.log('   FAIL  %s   a hoop stands %s m from a %s m house, only %s m over it',
+          def.id.padEnd(15), worst.bd.toFixed(0), worst.bh.toFixed(0), worst.over.toFixed(0));
+        fails++;
+      } else {
+        const cl = route.map((p) => {
+          let bd = 1e9;
+          for (const bl of world.buildings) {
+            const d = Math.hypot(bl.x - p.x, bl.z - p.z);
+            if (d < bd) bd = d;
+          }
+          return bd;
+        });
+        console.log('   ok    %s   %d hoops, nearest house %s m away',
+          def.id.padEnd(15), route.length, Math.min(...cl).toFixed(0));
+      }
+    }
+  }
+
+  console.log('');
   console.log('A GREEN RING IS NEVER A PLACE THAT FAILS YOU');
   {
     // "I landed in the green ring for the scenario 2 mission and it gave me a
