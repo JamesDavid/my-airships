@@ -18,8 +18,8 @@ Measured by `tools/check_scenarios.mjs`, from the St-Cloud aerodrome:
 
 | | |
 |---|---|
-| meshes in the Paris scene | 2,882 |
-| **drawn from the aerodrome** | **966** |
+| meshes in the Paris scene | 2,496 |
+| **drawn from the aerodrome** | **580** (was 966 before the clouds were batched) |
 | budget | ~200 |
 
 So this world is **draw-call bound**, by about 5×. That is the answer to
@@ -60,10 +60,26 @@ scale on the basket slate, live, inside the headset.
 
 ## What is worth doing, in order
 
-1. **Fewer draw calls.** 966 → 200 is the whole game. `InstancedMesh` /
+0. **DONE — the clouds.** Twenty-two clouds of twenty-odd spheres were 430
+   separate meshes: 464 of the 739 draws that are never culled at all, more
+   than every monument in Paris put together, and the largest single item in
+   the budget. `updateClouds` only ever moves `grp.position`, so a cloud is a
+   rigid body and an `InstancedMesh` of it loses no animation whatever. Now two
+   draws a cloud. **966 → 580 from the aerodrome.**
+
+   The lesson generalises: before optimising a scene, count what is never
+   culled and find out **what it actually is**. The assumption here was that
+   the never-culled cost was the monuments. It was 63% clouds.
+
+1. **Fewer draw calls.** 580 → 200 is the rest of the game. `InstancedMesh` /
    `BatchedMesh` for anything repeated; merge static geometry that shares a
    material. Fourteen instanced meshes exist already; the remaining calls are
    the landmarks and the ship.
+   Of the 353 draws that are still never culled, about 275 are the monuments
+   and 44 are the batched clouds. The monuments are the next prize: merging
+   leaves that share a material is unusually cheap here, because merging
+   normally trades away frustum culling and these are *already* never culled.
+
 2. **Cull by screen-space size, not distance.** The chunk cull is a distance
    test. A small object at 400 m and a large one at 400 m cost the same to
    submit and are not worth the same. Sub-pixel triangles are the worst case on

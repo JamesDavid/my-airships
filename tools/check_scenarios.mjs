@@ -1193,6 +1193,54 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     }
     console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
 
+    // A CLOUD IS TWO DRAWS, NOT TWENTY.
+    //
+    // Twenty-two clouds of twenty-odd spheres each were 430 separate meshes —
+    // 464 of the 739 draws that are never culled at all, more than every
+    // monument in Paris put together and the largest single item in the
+    // headset's budget. They cost nothing to batch: updateClouds only ever
+    // moves grp.position, so a cloud is a rigid body and an InstancedMesh of it
+    // loses no animation whatever.
+    //
+    // Counted STRICTLY — an instanced row has a real array of matrices. The
+    // first measurement asked `if (n.matrices)`, and the stub's permissive
+    // proxy makes that true of everything, so it reported 353 of 353 rows
+    // instanced and would have reported the same before the change.
+    {
+      const strict = (n) => Array.isArray(n.matrices) && n.matrices.length > 0;
+      let worst = 0, puffs = 0, rows = 0;
+      for (const c of (world.clouds || [])) {
+        let d = 0;
+        const walk = (o) => {
+          if (o.geometry) { d++; if (strict(o)) { rows++; puffs += o.matrices.length; } }
+          if (Array.isArray(o.children)) for (const k of o.children) walk(k);
+        };
+        walk(c.grp);
+        worst = Math.max(worst, d);
+      }
+      console.log('   %d clouds: worst is %d draws, and %d puffs ride in %d instanced rows',
+        (world.clouds || []).length, worst, puffs, rows);
+      if (!rows) {
+        console.log('   FAIL the clouds are not batched at all'); fails++;
+      } else if (worst > 4) {
+        console.log('   FAIL a cloud costs %d draws — it should be one a material', worst);
+        fails++;
+      } else if (puffs < 300) {
+        console.log('   FAIL only %d puffs survive; the sky has been thinned, not batched', puffs);
+        fails++;
+      } else {
+        console.log('   ok   every cloud is one draw a material, with all its puffs aboard');
+      }
+    }
+    // ...and the whole scene has a budget. A Quest wants under two hundred draw
+    // calls; this is nowhere near that yet, but it must not go backwards.
+    if (drawn > 700) {
+      console.log('   FAIL %d draws from the aerodrome — the headset budget is going backwards', drawn);
+      fails++;
+    } else {
+      console.log('   ok   %d draws from the aerodrome, against 966 before the clouds were batched', drawn);
+    }
+
     // THE CITY IS CUT INTO CHUNKS, and only the near ones are drawn. It used
     // to be MERGED instead — one box per city block, a third of the geometry
     // and a bar chart to look at: "the giant buildings look bad in vr". These

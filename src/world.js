@@ -3763,15 +3763,29 @@ export function makeClouds(scene, windBase, opts = {}) {
     const r = (58 + rand() * 90) * (towering ? 1.25 : 1);
     // shaded base row — a flat underside at the condensation level, wider than
     // the tops so the cloud sits on its own shelf of shadow
+    // ONE DRAW A ROW, NOT ONE A PUFF.
+    //
+    // A cloud is twenty-odd spheres of the same geometry in two materials, and
+    // it was twenty-odd separate meshes. Measured, the twenty-six clouds were
+    // 464 of the 739 draw calls that are never culled at all — more than every
+    // monument in Paris put together, and the largest single item in the
+    // headset's budget.
+    //
+    // They cost nothing to batch. updateClouds only ever moves grp.position:
+    // the puffs never move relative to one another, so a cloud is a rigid body
+    // and an InstancedMesh of it loses no animation whatever. Two per cloud,
+    // one for each material, and the group still just drifts with its children
+    // aboard — nothing else in the file has to know.
+    const puffs = { base: [], top: [] };
+    const place = (into, sx, sy, sz, px, py, pz) => into.push({ sx, sy, sz, px, py, pz });
+
     const nBase = 6 + Math.floor(rand() * 4);
     for (let k = 0; k < nBase; k++) {
-      const puff = new THREE.Mesh(puffGeo, baseMat);
       const u = k / (nBase - 1) - 0.5;
       const pr = r * (0.26 + rand() * 0.2) * (1 - Math.abs(u) * 0.45);
-      puff.scale.set(pr * 1.6, pr * 0.3, pr * 1.15);
-      puff.position.set(u * r * 1.8 + (rand() - 0.5) * r * 0.18,
+      place(puffs.base, pr * 1.6, pr * 0.3, pr * 1.15,
+        u * r * 1.8 + (rand() - 0.5) * r * 0.18,
         (rand() - 0.5) * r * 0.03, (rand() - 0.5) * r * 0.55);
-      grp.add(puff);
     }
     // cauliflower: lobes stacked in tiers, each tier smaller and higher, so
     // the silhouette bubbles instead of reading as three loose balls
@@ -3780,15 +3794,30 @@ export function makeClouds(scene, windBase, opts = {}) {
       const f = tier / tiers;
       const nT = Math.max(2, Math.round((4 - tier) + rand() * 2));
       for (let k = 0; k < nT; k++) {
-        const puff = new THREE.Mesh(puffGeo, topMat);
         const pr = r * (0.30 - f * 0.13 + rand() * 0.12);
         const spread = r * (0.95 - f * 0.6);
-        puff.scale.set(pr * 1.15, pr * (0.8 + rand() * 0.3), pr);
-        puff.position.set((rand() - 0.5) * spread * 2,
+        place(puffs.top, pr * 1.15, pr * (0.8 + rand() * 0.3), pr,
+          (rand() - 0.5) * spread * 2,
           r * (0.1 + f * (towering ? 0.85 : 0.5)) + rand() * r * 0.07,
           (rand() - 0.5) * spread);
-        grp.add(puff);
       }
+    }
+    // ...and now build the two instanced rows the puffs were collected for.
+    // The matrices are composed once, in the group's own frame, and never
+    // touched again: the cloud drifts by moving the GROUP.
+    for (const [which, mat] of [['base', baseMat], ['top', topMat]]) {
+      const list = puffs[which];
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(puffGeo, mat, list.length);
+      const mtx = new THREE.Matrix4();
+      const qq = new THREE.Quaternion();
+      const pv = new THREE.Vector3(), sv = new THREE.Vector3();
+      list.forEach((q, k) => {
+        mtx.compose(pv.set(q.px, q.py, q.pz), qq, sv.set(q.sx, q.sy, q.sz));
+        im.setMatrixAt(k, mtx);
+      });
+      if (im.instanceMatrix) im.instanceMatrix.needsUpdate = true;
+      grp.add(im);
     }
     grp.rotation.y = rand() * Math.PI * 2;
     grp.position.set(box.x0 + rand() * bw,
