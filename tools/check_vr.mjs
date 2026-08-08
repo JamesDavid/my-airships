@@ -254,22 +254,49 @@ if (renderer.shadowMap.enabled) {
   // in a headset it rode along the bottom of the slate for ever, because the
   // slate carries centerSub: "persistent roommmessage in the way" (#72).
   {
+    // THIS CHECK USED TO DEMAND THE BUG.
+    //
+    // It asserted the source read `function setCenter(big, sub, holdFor = 0)`
+    // and `centerHold = holdFor === 0 ? 0 : (holdFor || CENTRE_DWELL)` -- the
+    // exact broken text -- and passed because it found them. So the default
+    // hold was 0, every one of the thirty instructions took the verdict branch
+    // and stayed up for the whole flight, and three rounds of dutifully marking
+    // verdicts `, 0` changed nothing at all. The pilot counted: "you've said
+    // you have fixed this like 3 times!" (#103). He was right, and this check
+    // is why. A check that matches the spelling of the code cannot tell you
+    // whether the code works; it can only tell you nobody has retyped it.
+    //
+    // So RUN it. The rule is lifted out of main.js as source and evaluated,
+    // and then asked the only questions that matter: does a notice with no
+    // hold stand down, does a verdict stay, and does an empty one never hold?
     const src = await (await import('node:fs/promises')).readFile('src/main.js', 'utf8');
-    const hasHold = /function setCenter\(big, sub, holdFor = 0\)/.test(src)
-      && /if \(centerHold && performance\.now\(\) - centerSetAt > centerHold\) setCenter\('', ''\)/.test(src);
-    // EVERY notice stands down unless it is a verdict. The hold was given to
-    // the room message alone and the pilot flew straight into the next one:
-    // "the white text boxes are there and don't go away it should be up top
-    // and go away after 5s" (#99). So the default is a dwell, and a wreck, an
-    // ending or a result asks for 0 -- which means for ever, because you are
-    // meant to sit and read those.
-    const byDefault = /centerHold = holdFor === 0 \? 0 : \(holdFor \|\| CENTRE_DWELL\)/.test(src);
-    // ...and the verdicts must actually say so, or they vanish mid-sentence
+    const sig = src.match(/function setCenter\(big, sub, holdFor = ([^)]*)\)/);
+    // the ASSIGNMENT inside setCenter, not the `let centerHold = 0` that
+    // declares it — which is the first match in the file and says nothing
+    const body = [...src.matchAll(/(let\s+)?centerHold = ([^;]+);/g)]
+      .filter((m) => !m[1]).map((m) => [m[0], m[2]])[0];
+    const dwell = Number((src.match(/const CENTRE_DWELL = (\d+)/) || [])[1]);
+    const sweeps = /if \(centerHold && performance\.now\(\) - centerSetAt > centerHold\) setCenter\('', ''\)/.test(src);
+    let instruction = null, verdict = null, cleared = null;
+    if (sig && body && dwell > 0) {
+      // eslint-disable-next-line no-new-func
+      const hold = new Function('big', 'sub', 'holdFor', 'CENTRE_DWELL',
+        `if (holdFor === undefined) holdFor = ${sig[1]}; return (${body[1]});`);
+      instruction = hold('August 8th, 1901', 'Fly west and fly low.', undefined, dwell);
+      verdict = hold('Wrecked!', 'Practise landings.', 0, dwell);
+      cleared = hold('', '', undefined, dwell);
+    }
+    // the verdicts must also actually SAY 0, or they vanish mid-sentence
     const verdicts = (src.match(/setCenter\([^;]*?,\s*0\);/g) || []).length;
-    const ok = hasHold && byDefault && verdicts >= 6;
+    const ok = sweeps && dwell > 0 && verdicts >= 6
+      && instruction > 0 && verdict === 0 && cleared === 0;
     if (!ok) fails++;
-    console.log('   %s  notices stand down by themselves (%s); %d verdicts marked to stay',
-      ok ? 'ok  ' : 'FAIL', byDefault ? 'yes' : 'NO', verdicts);
+    console.log('   %s  an instruction holds %s ms, a verdict %s, an empty notice %s; %d verdicts marked to stay%s',
+      ok ? 'ok  ' : 'FAIL',
+      instruction === null ? '?' : instruction,
+      verdict === 0 ? 'for ever' : 'NOT FOR EVER',
+      cleared === 0 ? 'never' : 'FOR EVER',
+      verdicts, sweeps ? '' : ' — AND NOTHING SWEEPS THEM');
   }
 
   // NO TWO PLACARDS LIE ACROSS EACH OTHER.

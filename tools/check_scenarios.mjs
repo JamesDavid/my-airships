@@ -98,6 +98,140 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE WHITE NOTICES STAND DOWN BY THEMSELVES');
+  {
+    // #103, reported after three attempts at it: "the white messages still not
+    // going away you've said you have fixed this like 3 times!"
+    //
+    // Each time, the eight VERDICTS were marked `, 0` — a wreck or an ending is
+    // meant to stay — and each time the DEFAULT PARAMETER was 0 as well, so
+    // every instruction took the verdict branch and marked the verdicts changed
+    // nothing. Marking calls is not the check. The default is the check.
+    const fs2 = await import('node:fs/promises');
+    const mainSrc = await fs2.readFile('src/main.js', 'utf8');
+    const scenSrc = await fs2.readFile('src/scenarios.js', 'utf8');
+    const sig = mainSrc.match(/function setCenter\(big, sub, holdFor = ([^)]*)\)/);
+    const dflt = sig ? sig[1].trim() : '(none)';
+    const dwell = (mainSrc.match(/const CENTRE_DWELL = (\d+)/) || [])[1];
+    console.log('   setCenter default hold is %s; CENTRE_DWELL is %s ms', dflt, dwell || '?');
+    if (!sig || dflt === '0' || dflt === '') {
+      console.log('   FAIL a notice set without a hold stays up for the whole flight');
+      fails++;
+    } else if (dflt !== 'CENTRE_DWELL' && !(Number(dflt) > 0)) {
+      console.log('   FAIL the default hold is not a length of time'); fails++;
+    } else {
+      console.log('   ok   omit the hold and the notice takes itself away');
+    }
+    // and no scenario may pin one up for ever: a brief is read and acted on.
+    // The argument list has to be walked with balanced parentheses — a regexp
+    // that stops at the first ", 0)" runs straight out of the setCenter call
+    // and into the addMsg on the next line, and reports a fault that is not
+    // there. A check that cries wolf is worse than no check.
+    const callsIn = (src) => {
+      const out = [];
+      for (const m of src.matchAll(/setCenter\(/g)) {
+        let i = m.index + m[0].length, depth = 1;
+        while (depth && i < src.length) {
+          const ch = src[i];
+          if (ch === '(') depth++;
+          else if (ch === ')') depth--;
+          else if (ch === "'" || ch === '"' || ch === '`') {
+            const q = ch; i++;
+            while (i < src.length && (src[i] !== q || src[i - 1] === '\\')) i++;
+          }
+          i++;
+        }
+        out.push(src.slice(m.index, i));
+      }
+      return out;
+    };
+    const pinned = callsIn(scenSrc).filter((c) => /,\s*0\s*\)$/.test(c));
+    if (pinned.length) {
+      console.log('   FAIL %d scenario notices are pinned up permanently', pinned.length);
+      fails++;
+    } else {
+      console.log('   ok   no scenario pins a notice up for ever');
+    }
+  }
+
+  console.log('');
+  console.log('THE STREETS LIE ON THE GROUND, EVERY VERTEX OF THEM');
+  {
+    // The street network is a decal, laid 0.16 m over the terrain and never
+    // lifted afterwards (noLift), so it is only on the ground if it was WRITTEN
+    // on the ground. The centre of each junction cap was; its rim was written
+    // at a flat 0.16 — sea level — so all 16,818 caps were funnels 92 m deep
+    // under Montmartre and standing clear above the earth wherever Paris lies
+    // below datum. Reported three times over as potholes (#104, #105, #106).
+    // Asked for BY NAME: a check that takes "whichever mesh has the most
+    // vertices" stops measuring the thing it was written for the moment
+    // something bigger is added.
+    const roads = scene.children.find((o) => o.name === 'paris-streets');
+    if (!roads) {
+      console.log('   FAIL there is no mesh named paris-streets to measure');
+      fails++;
+    } else {
+      const a = roads.geometry.attributes.position.array;
+      let worst = 0, wx = 0, wz = 0, off = 0;
+      for (let i = 0; i < a.length; i += 3) {
+        const d = a[i + 1] - (world.groundAt(a[i], a[i + 2]) + 0.16);
+        if (Math.abs(d) > 0.5) off++;
+        if (Math.abs(d) > Math.abs(worst)) { worst = d; wx = a[i]; wz = a[i + 2]; }
+      }
+      console.log('   %d vertices; %d of them off the ground, worst %s m at (%s, %s)',
+        a.length / 3, off, worst.toFixed(1), wx.toFixed(0), wz.toFixed(0));
+      if (off) {
+        console.log('   FAIL the roads are potholed — the decal does not follow the terrain');
+        fails++;
+      } else {
+        console.log('   ok   every road vertex is 0.16 m over the earth beneath it');
+      }
+    }
+  }
+
+  console.log('');
+  console.log('THE WALL AT NEUILLY IS A WALL AND NOT A ROW OF FINS');
+  {
+    // "The wall pieces are 90 degrees off" (#102) — and exactly 90. A box laid
+    // on a circle must have its long axis TANGENT to it; rotation.y = theta
+    // sends local +X to (cos t, 0, -sin t), so the tangent at angle a wants
+    // -(a + pi/2), and writing -a stands every segment out from the wall like
+    // a fin. Measured on the built scene: the long axis against the radius.
+    const neu = placeLegacy('neuilly');
+    const yard = scene.children.find((o) => o.position
+      && Math.hypot(o.position.x - neu.x, o.position.z - neu.z) < 1
+      && o.children && o.children.length > 20);
+    if (!yard) {
+      console.log('   FAIL the walled yard at Neuilly is not in the scene');
+      fails++;
+    } else {
+      let worstDeg = 0, segs = 0;
+      for (const c of yard.children) {
+        const p = c.position;
+        const r = Math.hypot(p.x, p.z);
+        if (Math.abs(r - 95) > 6) continue;          // the wall ring only
+        segs++;
+        // the segment's long axis in world terms, and the radius under it
+        const t = c.rotation.y;
+        const ax = Math.cos(t), az = -Math.sin(t);
+        const rx = p.x / r, rz = p.z / r;
+        // a wall is perpendicular to its own radius: |axis . radius| = 0
+        const deg = Math.abs(90 - Math.acos(Math.min(1, Math.abs(ax * rx + az * rz)))
+          * 180 / Math.PI);
+        worstDeg = Math.max(worstDeg, deg);
+      }
+      console.log('   %d wall segments; worst is %s degrees off tangent', segs, worstDeg.toFixed(1));
+      if (segs < 40) {
+        console.log('   FAIL the wall has fallen down'); fails++;
+      } else if (worstDeg > 3) {
+        console.log('   FAIL the segments are not laid along the wall'); fails++;
+      } else {
+        console.log('   ok   every segment lies along the wall, tangent to it');
+      }
+    }
+  }
+
+  console.log('');
   console.log('IX. MLLE. DE ACOSTA CAN GET OVER THE WALL AND ONTO THE FIELD');
   {
     // She had had three lessons, all of them on the ground, and she still got

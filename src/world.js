@@ -369,6 +369,7 @@ export const SHED = { dx: -85, dz: 0, w: 52, d: 34, h: 15 };
 // starts inside the wall and the check that measures it read one number.
 export const NEUILLY_R = 95;
 export const NEUILLY_OUT = 2.294;         // atan2(z, x) toward Bagatelle
+export const NEUILLY_TENT = 58;           // how far back from the middle it stands
 /**
  * The turn round the Eiffel Tower, cut to the tower.
  *
@@ -787,6 +788,15 @@ export function buildWorld(scene) {
     // junction, a bend or a change of width they met at a point and left a
     // notch — reported as the roads being disjointed and broken up. The cap
     // fills the corner whatever angle the streets meet at.
+    //
+    // EVERY VERTEX OF IT ON THE GROUND, rim as well as centre. The rim used to
+    // be written at a flat 0.16 while the centre was set on the terrain, so all
+    // 16,818 caps were funnels with their apex on the road and their rim at sea
+    // level: 92 m deep under Montmartre, and 3,375 of them standing clear ABOVE
+    // the ground where Paris lies below datum. Reported three times over as
+    // "pothole things everywhere in the road" and "another one above the ground
+    // from this angle" (#104, #105, #106). The mesh is noLift, so nothing was
+    // ever going to come along and put them right.
     for (const st of STREETS) {
       const c = st.dirt ? dirt : paved;
       for (const [vx, vz] of st.pts) {
@@ -794,7 +804,8 @@ export function buildWorld(scene) {
         pos.push(vx, parisGround(vx, vz) + 0.16, vz); col.push(c.r, c.g, c.b);
         for (let k = 0; k <= N; k++) {
           const a2 = (k / N) * Math.PI * 2;
-          pos.push(vx + Math.cos(a2) * r, 0.16, vz + Math.sin(a2) * r);
+          const px = vx + Math.cos(a2) * r, pz = vz + Math.sin(a2) * r;
+          pos.push(px, parisGround(px, pz) + 0.16, pz);
           col.push(c.r, c.g, c.b);
           if (k > 0) idx.push(b, b + k, b + k + 1);
         }
@@ -810,6 +821,7 @@ export function buildWorld(scene) {
     // is coplanar with, and fighting the parks it runs through
     const roads = new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true,
       polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
+    roads.name = 'paris-streets';                 // so a check can ask for it by name
     roads.userData.noLift = true;                 // every vertex is already on the ground
     roads.receiveShadow = true;
     scene.add(roads);
@@ -1100,12 +1112,23 @@ export function buildWorld(scene) {
     const gN = parisGround(n.x, n.z);
     const sitN = (dx, dz) => parisGround(n.x + dx, n.z + dz) - gN;
 
+    // The tent stands at the BACK of the lot, so that a ship coming out of it
+    // has the whole yard in front of her and the gateway beyond that. Set in
+    // the middle it was something to be flown around before the flight could
+    // begin — "we start this mission aimed at the hangar? seems backwards"
+    // (#101), and it was: she was put down behind its blind side.
+    const tx = -Math.cos(NEUILLY_OUT) * NEUILLY_TENT;
+    const tz = -Math.sin(NEUILLY_OUT) * NEUILLY_TENT;
     const tent = makeHangar();
-    tent.position.set(0, sitN(0, 0), 0);
-    tent.rotation.y = NEUILLY_OUT;         // doors facing the way out, to the river
+    tent.position.set(tx, sitN(tx, tz), tz);
+    // doors facing the way out, to the gateway and the river. rotation.y = θ
+    // sends local +X — where makeHangar puts its doors — to (cos θ, 0, -sin θ),
+    // so the bearing NEUILLY_OUT wants θ = -NEUILLY_OUT. Written straight, the
+    // tent's doors faced across the yard instead of down it.
+    tent.rotation.y = -NEUILLY_OUT;
     tent.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     yard.add(tent);
-    buildings.push({ x: n.x, z: n.z, w: 46, d: 30, h: 15, top: 18 });
+    buildings.push({ x: n.x + tx, z: n.z + tz, w: 46, d: 30, h: 15, top: 18 });
 
     // the high stone wall round the vacant lot — a real obstacle, and the
     // thing you must climb over. Built as posts so the ground can roll under
@@ -1121,7 +1144,12 @@ export function buildWorld(scene) {
       const seg = new THREE.Mesh(
         new THREE.BoxGeometry(R * 2 * Math.PI / N * 1.08, WALL_H, 1.1), wallM);
       seg.position.set(px2, WALL_H / 2 + sitN(px2, pz2), pz2);
-      seg.rotation.y = -a;
+      // TANGENT to the circle, not radial. rotation.y = θ sends local +X to
+      // (cos θ, 0, -sin θ); the tangent at angle a is (-sin a, 0, cos a), which
+      // wants θ = -(a + π/2). Written as -a the segments stood out from the
+      // wall like fins — "the wall pieces are 90 degrees off" (#102), and
+      // exactly 90.
+      seg.rotation.y = -(a + Math.PI / 2);
       seg.castShadow = seg.receiveShadow = true;
       yard.add(seg);
     }

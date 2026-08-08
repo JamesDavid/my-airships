@@ -1,7 +1,7 @@
 import { placeLegacy } from './paris_geo.js';
 import { ROTHSCHILD } from './paris_stcloud.js';
 import { inRiver } from './paris_terrain.js';
-import { PAD_POS, NEUILLY_R, NEUILLY_OUT } from './world.js';
+import { PAD_POS, NEUILLY_R, NEUILLY_OUT, NEUILLY_TENT } from './world.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -543,10 +543,14 @@ export const SCENARIOS = [
     setup(ctx) {
       const n = placeLegacy('neuilly'), b = placeLegacy('bagatelle');
       this.n = n; this.b = b;
-      // on the grass inside the wall, pointing at the gateway
-      const back = 46;
-      ctx.place(n.x - Math.cos(NEUILLY_OUT) * back, ctx.ship.spec.keel.drop + 1.2,
-        n.z - Math.sin(NEUILLY_OUT) * back,
+      // On the grass just outside the tent doors, pointing down the yard at the
+      // gateway, with the whole lot in front of her to get up in — she starts
+      // 30 m out from the tent and has 65 m of run to the wall. She was first
+      // put down BEHIND the tent, facing its blind side, which a pilot rightly
+      // called backwards (#101).
+      const out = NEUILLY_TENT - 28;
+      ctx.place(n.x + Math.cos(NEUILLY_OUT) * out, ctx.ship.spec.keel.drop + 1.2,
+        n.z + Math.sin(NEUILLY_OUT) * out,
         Math.atan2(-(b.z - n.z), b.x - n.x));
       // "a fine, still morning" — the No. 9 is a runabout, not a racer, and
       // this was flown in the calm. A light air off the river, no more.

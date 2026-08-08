@@ -3078,7 +3078,9 @@ let centerHold = 0;
  * the bottom of the tablet for ever — "persistent roommmessage in the way"
  * (#72). Anything with a hold on it stands down by itself.
  */
-function setCenter(big, sub, holdFor = 0) {
+// long enough to read two lines twice, and no longer
+const CENTRE_DWELL = 9000;
+function setCenter(big, sub, holdFor = CENTRE_DWELL) {
   document.getElementById('centerBig').textContent = big;
   document.getElementById('centerSub').textContent = sub;
   const c = document.getElementById('center');
@@ -3093,10 +3095,20 @@ function setCenter(big, sub, holdFor = 0) {
   // not the instruction — it is the VERDICT. A wreck, an ending, a result is
   // something you have finished flying and are meant to sit and read; those ask
   // for a hold of 0, which means for ever. Everything else takes itself away.
-  centerHold = holdFor === 0 ? 0 : (holdFor || CENTRE_DWELL);
+  //
+  // AND THE DEFAULT HAS TO BE THE DWELL, WHICH IS WHY THIS KEPT COMING BACK.
+  // Three times this was called fixed, and all three times the eight verdicts
+  // were dutifully marked `, 0` — while the default parameter was ALSO 0. So
+  // every one of the thirty instructions took the same branch as the verdicts
+  // and stood there for the rest of the flight, and marking the verdicts
+  // changed nothing whatever: "the white messages still not going away you've
+  // said you have fixed this like 3 times!" (#103). He had counted right.
+  //
+  // Now the argument means what it says: omit it and the notice stands down,
+  // pass 0 and it stays. An empty notice never holds — clearing is not a
+  // message, and a hold on it would have the frame loop re-clearing for ever.
+  centerHold = (big || sub) ? holdFor : 0;
 }
-// long enough to read two lines twice, and no longer
-const CENTRE_DWELL = 9000;
 
 const seen = new Set();
 function once(key, text) { if (!seen.has(key)) { seen.add(key); addMsg(key, text, 0); } }
