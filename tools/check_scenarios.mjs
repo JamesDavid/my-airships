@@ -1281,7 +1281,10 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
         // forbidden is a heavy monument that is neither.
         let instanced = false;
         const look = (x) => {
-          if (Array.isArray(x.matrices) && x.matrices.length) instanced = true;
+          // both names: real three says isInstancedMesh, the stub keeps
+          // `matrices`. A test that knows only one of them passes here and
+          // fails in a browser, which is how the Tower was broken.
+          if (x.isInstancedMesh || (Array.isArray(x.matrices) && x.matrices.length)) instanced = true;
           if (Array.isArray(x.children)) x.children.forEach(look);
         };
         look(o);

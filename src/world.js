@@ -1527,7 +1527,16 @@ function makeFarProxy(group, sawInstanced = { hit: false }) {
     // baking it would produce a single rim, a single spoke and a single car
     // where a wheel should be. It is also already one draw, which is the thing
     // merging is for. Left alone, and the caller is told the group had one.
-    if (g && Array.isArray(o.matrices)) { sawInstanced.hit = true; return; }
+    // BOTH NAMES. Real three marks an instanced row with `isInstancedMesh`; the
+    // headless stub keeps its matrices in `matrices`. Testing only the stub's
+    // name meant the guard never fired in a BROWSER — so the Eiffel Tower's
+    // instanced lattice fell through into the merge, was baked as the single
+    // copy its geometry holds, and the detailed Tower was hidden behind the
+    // result. "You messed up the eiffel tower, its just platforms." It was.
+    if (g && (o.isInstancedMesh || Array.isArray(o.matrices))) {
+      sawInstanced.hit = true;
+      return;
+    }
     if (g && typeof g.type === 'string' && o.material) {
       let e = byMat.get(o.material);
       if (!e) { e = { mat: o.material, parts: [] }; byMat.set(o.material, e); }
