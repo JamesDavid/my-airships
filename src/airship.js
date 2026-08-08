@@ -13,6 +13,39 @@ export { windAt }; // re-export for existing importers
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+// ------------------------------------------------------- the pitch pendulum
+/**
+ * How fast a ship swings in pitch, in radians per second, from her own size.
+ *
+ * She floats, so she displaces her own mass — and that mass cancels out of the
+ * period entirely, which is why this needs no weights, only geometry:
+ *
+ *     restoring moment   M g h sin(theta),  h = metacentric height
+ *     pitch inertia      I = (1-F) M L^2/20  +  F M drop^2  +  K' M L^2/20
+ *     omega^2 = M g h / I = g F drop / [ (1 - F + K') L^2/20 + F drop^2 ]
+ *
+ * L^2/20 is the transverse radius of gyration of a slender ellipsoid squared.
+ * F is the share of the whole system hanging low — motor, keel, basket, pilot,
+ * fuel — which is also what sets h, since the gas is up in the envelope and
+ * weighs almost nothing. K' is the added-moment coefficient: a hull pitching in
+ * air has to swing a good deal of air with it.
+ *
+ * F and K' are estimates, so they were swept: over F = 0.30..0.60 and
+ * K' = 0.5..1.1 the No. 6's period runs 8.5 s to 13.7 s. The old model's 1.43 s
+ * is not within reach of any of it, which is the whole point.
+ */
+const PEND_F = 0.45;                  // share of her hanging below the gas
+const PEND_K = 0.8;                   // added moment of the air she swings
+const TRIM_HAUL = 5;                  // seconds to haul a weight the whole way
+export function pitchOmega(spec) {
+  const L = spec.envelope.length || 30;
+  const drop = (spec.keel && spec.keel.drop) || 6;
+  const w2 = (9.81 * PEND_F * drop)
+    / ((1 - PEND_F + PEND_K) * L * L / 20 + PEND_F * drop * drop);
+  return Math.sqrt(Math.max(1e-4, w2));
+}
+export const pitchPeriod = (spec) => 2 * Math.PI / pitchOmega(spec);
+
 // ---------------------------------------------------------------- dial faces
 // Engraved instrument faces, drawn once and shared by every ship. Both dials
 // are built the same way: the pilot's eye sees texture-up as up and
@@ -250,6 +283,8 @@ export class Airship {
   constructor(scene, spec) {
     this.scene = scene;
     this.spec = spec;
+    this.pitchW = pitchOmega(spec);       // her own pendulum, from her own size
+    this._airspeed = 0;
     this.buildMesh();
     scene.add(this.group);
 
@@ -315,7 +350,7 @@ export class Airship {
     this.pos.copy(pos);
     this.vel = new THREE.Vector3();
     this.yaw = yaw; this.yawVel = 0;
-    this.pitch = 0; this.pitchTarget = 0;
+    this.pitch = 0; this.pitchTarget = 0; this.pitchVel = 0;
     this.throttle = 0;
     this.gas = 100;
     this.bags = P.bags;
@@ -1599,9 +1634,50 @@ export class Airship {
     }
     this.motorOn = P.thrust > 0 && this.fuel > 0 && !this.motorDead;
     this.rudderInput = input.rudder;
-    this.pitchTarget = input.pitch * P.pitchMax;
-    // a folding hull answers the shifting weights sluggishly
-    this.pitch += (this.pitchTarget - this.pitch) * Math.min(1, 1.6 * dt * (1 - (this.fold || 0) * 0.6));
+    // THE WEIGHT IS HAULED, NOT TELEPORTED. "By means of lighter cords each of
+    // these two weights could be drawn into the basket" — a man pulling a
+    // ballast sack the length of a keel takes some seconds over it, and that
+    // slow hand is most of why these ships did not pitch about wildly. Fed the
+    // trim as an instant step, an undamped pendulum overshoots by 100 per cent
+    // by definition; fed it over five seconds, against a ten-second period, she
+    // leans into it. So the lever commands where the sack goes, and the sack
+    // takes TRIM_HAUL seconds to get there.
+    const wantTrim = input.pitch * P.pitchMax;
+    const haul = P.pitchMax / TRIM_HAUL * dt;
+    this.pitchTarget += Math.max(-haul, Math.min(haul, wantTrim - this.pitchTarget));
+    // ---- SHE IS A PENDULUM, AND SHE SWINGS (B3) ----
+    //
+    // The gas is up in the envelope and the motor, keel, basket and pilot hang
+    // metres beneath it, so hauling a sack forward does not SET an angle — it
+    // displaces a pendulum, which then swings about the new trim and takes two
+    // or three swings to settle. This used to be written as
+    //
+    //     this.pitch += (target - this.pitch) * 1.6 * dt
+    //
+    // which reached full pitch in 1.43 s, never overshot, and did it in exactly
+    // the same 1.43 s for the 370 kg No. 9 and the 1,870 kg No. 10: mass and
+    // size did not enter the model at all. The real period is pitchPeriod()'s
+    // seven to eleven seconds, so trim answered about seven times too quickly.
+    //
+    // Damping is aerodynamic, so it comes with airspeed: hanging still she
+    // swings for the best part of a minute, at cruise the hull and fins kill it
+    // in about two swings. A folding hull has lost the stiffness that restores
+    // her, so its period lengthens.
+    {
+      const w = this.pitchW * (1 - (this.fold || 0) * 0.4);
+      // even hanging still she is damped — a great bluff body of fabric moving
+      // through air, and rigging and envelope that eat the energy between them;
+      // the fins and the hull at speed add the rest
+      const z = Math.min(0.9, 0.12 + 0.22 * Math.min(1, this._airspeed / 11));
+      // semi-implicit, and substepped so a long frame cannot ring the spring
+      const n = Math.max(1, Math.ceil(dt * w * 4));
+      const h = dt / n;
+      for (let i = 0; i < n; i++) {
+        this.pitchVel += ((this.pitchTarget - this.pitch) * w * w
+          - 2 * z * w * this.pitchVel) * h;
+        this.pitch += this.pitchVel * h;
+      }
+    }
     // impact-induced rotation, decaying
     this.pitchKick = (this.pitchKick || 0) * Math.pow(0.15, dt);
     this.pitch += this.pitchKick * dt * 12;
@@ -1770,11 +1846,23 @@ export class Airship {
     if (this.groundedFrac > 0.25) vAcc -= this.vel.y * 2.2;
     acc.y += vAcc;
 
-    // B5: tangage — bob in the 25-45 km/h airspeed band, worse against the wind
+    // B5: tangage — the pitching in the 25-45 km/h band, worse against the wind
+    //
+    // This used to be a canned bob: a sine wave added straight to the vertical
+    // acceleration, so the ship rose and fell without ever changing attitude.
+    // Tangage is the hull PITCHING, and now that she is a real pendulum the
+    // honest way to make it is to push the pendulum and let the bob follow from
+    // the thrust vector — which also means it rings at HER period rather than
+    // at one rate for the whole fleet, and that the same damping that settles a
+    // weight shift settles this.
     const kmh = airspeed * 3.6;
     const band = Math.max(0, 1 - Math.abs(kmh - 33) / 18);
     const headwind = Math.max(0, -airspeedV.clone().normalize().dot(windAt(wind, this.pos.y, this.groundHere).normalize() || 0)) || 0;
-    acc.y += Math.sin(this._t * 2.1) * band * (0.25 + 0.25 * headwind);
+    // a nudge, not a pump: enough to keep two or three degrees of pitching alive
+    // in the band, not enough to stop a trim ever settling
+    this.pitchVel += Math.sin(this._t * this.pitchW * 2) * band
+      * (0.014 + 0.014 * headwind) * dt;
+    this._airspeed = airspeed;         // next frame damps the pendulum with it
 
     // integrate
     this.vel.addScaledVector(acc, dt);

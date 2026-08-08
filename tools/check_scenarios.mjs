@@ -98,6 +98,89 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('SHE PITCHES LIKE A PENDULUM, AND EACH SHIP LIKE HERSELF');
+  {
+    // "Is the pitch rate realistic when we adjust the weights?" It was not.
+    // Pitch was set kinematically -- pitch += (target - pitch) * 1.6 * dt --
+    // which reached full trim in 1.43 s with no overshoot, and did it in
+    // exactly the same 1.43 s for the 370 kg No. 9 and the 1,870 kg No. 10:
+    // mass and size were not in the model at all.
+    //
+    // She is a pendulum. The gas is up in the envelope, the motor and basket
+    // hang metres below, and hauling a sack forward displaces that pendulum.
+    // The period falls out of geometry alone (the mass cancels), and it runs
+    // seven to eleven seconds -- so trim answered about seven times too fast.
+    const { pitchPeriod } = await import('../src/airship.js');
+    const nw = { x: 0, y: 0, z: 0 };
+    const flat = { groundAt: () => 0, buildings: [], underCloud: false, inBois: false };
+    const rows = [];
+    for (const id of ['no1', 'no5', 'no6', 'no9', 'no10', 'villedeparis']) {
+      const S = SHIPS[id]; if (!S) continue;
+      const T = pitchPeriod(S), tgt = S.physics.pitchMax;
+      const s = makeShip(id);
+      s.reset({ x: 0, y: 150, z: 0 }, 0);
+      for (let k = 0; k < 50 * 30; k++) {
+        s.update(1 / 30, { throttle: 1, rudder: 0, pitch: 0, vent: 0, coax: 0 }, nw, flat);
+      }
+      let peak = 0, tpeak = 0, sick = false;
+      for (let k = 0; k < Math.round(T * 3 * 30); k++) {
+        // THE AIR PUMP FAILS AT RANDOM (dt/75 a step), the hull folds, and a
+        // folded hull really does swing further — which is modelled behaviour
+        // and not a fault in the trim. Left to chance it made this measurement
+        // non-repeatable: the No. 1 read 26% on one run and 103% on the next
+        // from the same code, and three harness rewrites went chasing it. Hold
+        // the pump good so what is measured is the pendulum.
+        s.pumpOk = true;
+        s.update(1 / 30, { throttle: 1, rudder: 0, pitch: 1, vent: 0, coax: 0 }, nw, flat);
+        // a wreck, an empty envelope or a folded hull is not a trim
+        if (s.wrecked || s.gas < 50 || (s.fold || 0) > 0.02) sick = true;
+        if (s.pitch > peak) { peak = s.pitch; tpeak = (k + 1) / 30; }
+      }
+      rows.push({ id, T, over: peak / tgt - 1, tpeak, sick });
+    }
+    for (const r of rows) {
+      console.log('   %s period %s s, first peak at %s s, overshoot %s%%%s',
+        r.id.padEnd(13), r.T.toFixed(1).padStart(5), r.tpeak.toFixed(1).padStart(5),
+        (r.over * 100).toFixed(0).padStart(4), r.sick ? '  (UNHEALTHY)' : '');
+    }
+    // 1. every ship must swing at her own rate, not one rate for the fleet
+    const spread = Math.max(...rows.map((r) => r.T)) / Math.min(...rows.map((r) => r.T));
+    // 2. the period must be the pendulum's, not a tenth of it
+    const fastest = Math.min(...rows.map((r) => r.T));
+    // 3. she must overshoot -- a pendulum that does not is not a pendulum
+    const overs = rows.map((r) => r.over);
+    if (rows.some((r) => r.sick)) {
+      console.log('   FAIL a ship wrecked during the measurement — the number is not a trim');
+      fails++;
+    } else if (spread < 1.3) {
+      console.log('   FAIL every ship trims at the same rate; size is not in the model');
+      fails++;
+    } else if (fastest < 5) {
+      console.log('   FAIL the periods are far short of the pendulum these ships are');
+      fails++;
+    } else if (Math.min(...overs) < 0.08) {
+      console.log('   FAIL she settles without a swing, which a weight-shift ship does not');
+      fails++;
+    } else if (Math.max(...overs) > 0.6) {
+      console.log('   FAIL she swings so far past the trim she would read as rearing');
+      fails++;
+    } else {
+      console.log('   ok   %s s to %s s, each from her own size; %d-%d%% overshoot',
+        Math.min(...rows.map((r) => r.T)).toFixed(1),
+        Math.max(...rows.map((r) => r.T)).toFixed(1),
+        Math.round(Math.min(...overs) * 100), Math.round(Math.max(...overs) * 100));
+    }
+    // and the swing must never be read as B8 rearing
+    const rear = rows.filter((r) => (1 + r.over) > 1.6);
+    if (rear.length) {
+      console.log('   FAIL %s overshoots past the rearing threshold', rear[0].id);
+      fails++;
+    } else {
+      console.log('   ok   no trim swing is mistaken for a gas-rush rearing');
+    }
+  }
+
+  console.log('');
   console.log('THE WHITE NOTICES STAND DOWN BY THEMSELVES');
   {
     // #103, reported after three attempts at it: "the white messages still not
