@@ -179,7 +179,10 @@ Ideas sourced from the memoir (see docs/BOOK_REFERENCE.md for passages).
 - [ ] The military test (Ch. XXIII): rail waggon to Belfort, two-hour inflation, cross the
   hostile zone above rifle range into the "besieged" town.
 - [ ] Submarine spotting over the Monaco sea (the airship sees what warships cannot).
-- [ ] The children's fête (Clarkson Potter) and the lady navigator's solo (29 June 1903).
+- [x] The lady navigator's solo (29 June 1903) — scenario IX, `no9-acosta`: Aida de
+  Acosta out of the walled yard at Neuilly St James and down on the polo ground at
+  Bagatelle, with Santos-Dumont shouting up from a bicycle until she outruns him.
+- [ ] The children's fête (Clarkson Potter).
 - [ ] The 14 July military review with the 21-shot revolver salute (partly covered by
   flavor; make it a scenario with formations below).
 - [ ] Captive balloon at the Jardin d'Acclimatation; Langley and Edison cameo visits.

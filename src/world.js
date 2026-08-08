@@ -362,6 +362,13 @@ export const START_RING = new THREE.Vector3(PAD_POS.x + 220, 55, PAD_POS.z - 40)
  * the moment either is touched. Doors face east, on to the field.
  */
 export const SHED = { dx: -85, dz: 0, w: 52, d: 34, h: 15 };
+
+// Neuilly St James: the radius of the walled lot, and the bearing of its
+// gateway — the way the tent faces and the way the ships came out, which is
+// toward Bagatelle and the river beyond it. Published so the scenario that
+// starts inside the wall and the check that measures it read one number.
+export const NEUILLY_R = 95;
+export const NEUILLY_OUT = 2.294;         // atan2(z, x) toward Bagatelle
 /**
  * The turn round the Eiffel Tower, cut to the tower.
  *
@@ -1076,6 +1083,51 @@ export function buildWorld(scene) {
     }
   }
 
+  // ---------- Neuilly St James, "the first of the world's air-ship stations" ----------
+  // A11: "a great square tent, striped red and white, set in the midst of a
+  // vacant lot surrounded by a high stone wall", housing seven inflated ships,
+  // and the way out of it is over the wall: "Mounting diagonally in the air
+  // from my own open grounds I pass over my wall, the Boulevard de la Seine,
+  // and turn when well above the river."
+  //
+  // The wall is the point. It is what makes the departure a manoeuvre instead
+  // of a takeoff, and on 29 June 1903 a nineteen-year-old who had had three
+  // lessons on the ground took the No. 9 over it alone.
+  {
+    const n = placeLegacy('neuilly');
+    const yard = new THREE.Group();
+    yard.position.set(n.x, 0, n.z);
+    const gN = parisGround(n.x, n.z);
+    const sitN = (dx, dz) => parisGround(n.x + dx, n.z + dz) - gN;
+
+    const tent = makeHangar();
+    tent.position.set(0, sitN(0, 0), 0);
+    tent.rotation.y = NEUILLY_OUT;         // doors facing the way out, to the river
+    tent.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    yard.add(tent);
+    buildings.push({ x: n.x, z: n.z, w: 46, d: 30, h: 15, top: 18 });
+
+    // the high stone wall round the vacant lot — a real obstacle, and the
+    // thing you must climb over. Built as posts so the ground can roll under
+    // it, and every one of them sits on the earth beneath ITSELF (the lesson
+    // of the buried aerodrome above).
+    const wallM = new THREE.MeshLambertMaterial({ color: 0xbdb3a0 });
+    const R = NEUILLY_R, WALL_H = 4.2, N = 64;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      // leave the gateway open on the river side, where the ships came out
+      if (Math.abs(((a - NEUILLY_OUT + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.16) continue;
+      const px2 = Math.cos(a) * R, pz2 = Math.sin(a) * R;
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(R * 2 * Math.PI / N * 1.08, WALL_H, 1.1), wallM);
+      seg.position.set(px2, WALL_H / 2 + sitN(px2, pz2), pz2);
+      seg.rotation.y = -a;
+      seg.castShadow = seg.receiveShadow = true;
+      yard.add(seg);
+    }
+    scene.add(yard);
+  }
+
   // ---------- put it all on the ground ----------
   // Everything above is placed flat, on the plain, exactly as it always was.
   // This is where Paris gets its hills. It must run BEFORE the clouds, which
@@ -1157,6 +1209,9 @@ export function buildWorld(scene) {
         clue: '“Beaten out with my Panama hat.” The island in the reach below the bridge.' },
       { id: 'stcloud', name: 'the hill of Saint-Cloud', ...LM('stcloud'), y: 170, r: 140,
         clue: 'The wooded park above the aerodrome, with its terraces and cascade.' },
+      // clear of the tent's 18 m and well over the wall
+      { id: 'neuilly', name: 'Neuilly St James', ...LM('neuilly'), y: 52, r: 70,
+        clue: '“The first of the world’s air-ship stations” — a great tent striped red and white, in a walled lot by the river.' },
     ],
     towSpots: [
       { name: 'Bagatelle, by the Bois', pos: (() => { const b = placeLegacy('bagatelle');

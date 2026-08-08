@@ -1,7 +1,7 @@
 import { placeLegacy } from './paris_geo.js';
 import { ROTHSCHILD } from './paris_stcloud.js';
 import { inRiver } from './paris_terrain.js';
-import { PAD_POS } from './world.js';
+import { PAD_POS, NEUILLY_R, NEUILLY_OUT } from './world.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -512,6 +512,157 @@ export const SCENARIOS = [
         ctx.fail('Down before the review was flown. The troops are still drawn up at Longchamps.');
       }
       if (!ctx.ship.landed) this.aloft = true;
+    },
+  },
+  {
+    id: 'no9-acosta',
+    title: 'IX. Mlle. de Acosta Goes Up Alone (June 29, 1903)',
+    sub: 'No. 9 — three lessons on the ground, and the polo at Bagatelle',
+    location: 'paris', shipId: 'no9',
+    // THIS IS THE ONE FLIGHT IN THE GAME THAT IS NOT HIS.
+    //
+    // Aida de Acosta, nineteen, of New Jersey, asked Santos-Dumont to teach her
+    // and he did — three lessons, all of them on the ground, the ship held down
+    // by his men while she worked the motor and the rudder. On the morning of
+    // 29 June 1903 she took the No. 9 out of the walled lot at Neuilly by
+    // herself and flew it to the polo ground at Bagatelle, where a match was in
+    // play. He did not go with her. He could not: the No. 9 carries one. He
+    // followed underneath on a bicycle, shouting up at her.
+    //
+    // She was the first woman to fly a powered aircraft, and the first person
+    // of any sort to fly one alone in Europe — five months before Kitty Hawk.
+    // Her family were appalled and made her promise not to let it be spoken of,
+    // and she kept the promise for most of her life; the memoir, written the
+    // next year, does not name her. Santos-Dumont kept her photograph on his
+    // wall until he died.
+    //
+    // So the player is not Santos-Dumont here, and the instructions do not come
+    // from a brief — they come up off the road, from a man on a bicycle, for
+    // exactly as long as he can keep up with you.
+    brief: 'You are Aida de Acosta, nineteen, and you have had three lessons — all of them on the ground, with the ship held down. Now the men let go. Take the No. 9 up out of the walled yard at Neuilly, over the wall, and fly her to the polo ground at Bagatelle. Santos-Dumont cannot come: she carries one. He is on a bicycle in the road below, shouting. Listen for him while he can still keep up.',
+    setup(ctx) {
+      const n = placeLegacy('neuilly'), b = placeLegacy('bagatelle');
+      this.n = n; this.b = b;
+      // on the grass inside the wall, pointing at the gateway
+      const back = 46;
+      ctx.place(n.x - Math.cos(NEUILLY_OUT) * back, ctx.ship.spec.keel.drop + 1.2,
+        n.z - Math.sin(NEUILLY_OUT) * back,
+        Math.atan2(-(b.z - n.z), b.x - n.x));
+      // "a fine, still morning" — the No. 9 is a runabout, not a racer, and
+      // this was flown in the calm. A light air off the river, no more.
+      ctx.setWind(0.9, -1.4);
+      ctx.setZone(V(b.x, 4, b.z), 150);          // the polo ground
+      ctx.setRoute([
+        V(n.x + Math.cos(NEUILLY_OUT) * (NEUILLY_R + 60), 26,
+          n.z + Math.sin(NEUILLY_OUT) * (NEUILLY_R + 60)),
+        V(n.x + (b.x - n.x) * 0.45, 34, n.z + (b.z - n.z) * 0.45),
+        V(n.x + (b.x - n.x) * 0.80, 30, n.z + (b.z - n.z) * 0.80),
+      ]);
+      ctx.setCenter('June 29th, 1903, Neuilly St James',
+        'Over the wall, and follow the road to Bagatelle. (green ring — land on the polo ground)');
+      this.said = {};
+      this.t = 0;
+      this.aloft = false;
+      this.over = false;
+      this.circled = 0;
+      this.lastAng = null;
+      this.bike = 0;                 // how far he has got, in metres of road
+      this.lost = false;
+    },
+    tick(ctx, dt) {
+      this.t += dt;
+      const p = ctx.ship.pos, n = this.n, b = this.b;
+      const say = (k, m, s) => {
+        if (this.said[k]) return;
+        this.said[k] = 1;
+        ctx.addMsg(k, m, s || 7);
+      };
+
+      if (ctx.ship.wrecked) {
+        return ctx.fail('Down hard, and a promise to her father broken twice over. Again — he is walking back for the bicycle.');
+      }
+
+      // ---- the man on the bicycle ----
+      // He can do about 22 km/h on the road, which is a shade under what the
+      // No. 9 does in still air. So he starts alongside and falls behind, and
+      // when he is more than 250 m astern he cannot make himself heard. That is
+      // the whole tutorial budget: fly slowly and you are coached the whole way;
+      // fly fast and you finish it alone, which is what she in fact did.
+      const road = Math.hypot(b.x - n.x, b.z - n.z);
+      const along = ((p.x - n.x) * (b.x - n.x) + (p.z - n.z) * (b.z - n.z)) / road;
+      if (this.aloft) this.bike = Math.min(road, this.bike + 6.1 * dt);
+      const gap = along - this.bike;
+      if (!this.lost && gap > 250 && this.aloft) {
+        this.lost = true;
+        ctx.addMsg('bike', 'The shouting stops. You have outrun the bicycle — the rest of the way is yours alone.', 7);
+      }
+      const heard = !this.lost;
+
+      if (!this.aloft && !ctx.ship.landed) {
+        this.aloft = true;
+        say('up', '“Doucement! Gently — she is not a horse.” The men have let go and you are off the grass.');
+      }
+      if (!this.aloft) return;
+
+      const clear = p.y - ctx.world.groundAt(p.x, p.z);
+      const fromYard = Math.hypot(p.x - n.x, p.z - n.z);
+
+      // ---- the wall ----
+      if (heard && fromYard < NEUILLY_R + 30 && clear < 12) {
+        say('wall', '“The wall! Up, up — mount her diagonally, do not try to turn in the yard!”');
+      }
+      if (fromYard > NEUILLY_R + 20 && !this.said.out) {
+        this.said.out = 1;
+        ctx.addMsg('out', 'Over the wall and over the Boulevard de la Seine, exactly as he does it.', 6);
+      }
+
+      // ---- coaching down the road, while he is still under you ----
+      if (heard && this.said.out) {
+        if (clear > 90) say('high', '“Not so high! You cannot see the field from up there, and the wind is worse.”');
+        if (clear < 14 && along > 200) say('low', '“Higher — the trees of the Bois are coming.”');
+        const wantYaw = Math.atan2(-(b.z - p.z), b.x - p.x);
+        let e = wantYaw - ctx.ship.yaw;
+        while (e > Math.PI) e -= 2 * Math.PI;
+        while (e < -Math.PI) e += 2 * Math.PI;
+        if (Math.abs(e) > 0.9 && along > 150) {
+          say('steer', '“The rudder — small movements! She answers slowly, so give her time to answer.”');
+        }
+      }
+
+      // ---- the polo ground ----
+      const d = ctx.zoneDist();
+      if (d < ctx.zoneR() + 90 && !this.over) {
+        this.over = true;
+        ctx.addMsg('polo', 'The polo ground, and a match in play — the ponies scatter and the players pull up to watch you come over.', 8);
+        ctx.setCenter('Bagatelle', 'Round the field once, then set her down on the grass.');
+      }
+
+      // one turn about the field, as she made, before landing
+      if (this.over && d < ctx.zoneR() + 90 && !ctx.ship.landed) {
+        const a = Math.atan2(p.z - b.z, p.x - b.x);
+        if (this.lastAng !== null) {
+          let da = a - this.lastAng;
+          while (da > Math.PI) da -= 2 * Math.PI;
+          while (da < -Math.PI) da += 2 * Math.PI;
+          this.circled += da;
+        }
+        this.lastAng = a;
+        if (!this.said.round && Math.abs(this.circled) > Math.PI * 1.85) {
+          this.said.round = 1;
+          ctx.addMsg('round', 'All the way round, with the whole field watching. Now bring her down.', 6);
+        }
+      }
+
+      // ---- the verdict ----
+      if (ctx.ship.landed && d < ctx.zoneR()) {
+        if (Math.abs(this.circled) < Math.PI * 1.85) {
+          return ctx.complete('Down on the polo ground at Bagatelle, and the players are running to you. You have flown a powered air-ship alone — the first woman anywhere to do it, five months before Kitty Hawk. (Round the field first, next time, as she did.)');
+        }
+        return ctx.complete('Down on the grass among the ponies, whole, and the match abandoned. Aida de Acosta, nineteen, three lessons — the first woman in the world to fly a powered air-ship alone. Her family made her promise never to speak of it. He kept her photograph on his wall for the rest of his life.');
+      }
+      if (ctx.ship.landed && d >= ctx.zoneR()) {
+        return ctx.fail('Down somewhere in the Bois, safely enough — but the polo ground is still waiting, and so is he, pedalling.');
+      }
     },
   },
 ];

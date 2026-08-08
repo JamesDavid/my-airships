@@ -64,6 +64,13 @@ export const PLACES = {
   autueil:     [48.84760, 2.25400],   // the Auteuil racecourse
   longchamp:   [48.85830, 2.23330],   // the Longchamps racecourse
   bagatelle:   [48.87180, 2.24550],
+  neuilly:     [48.88150, 2.25850],   // Neuilly St James — "the first of the
+                                      // world's air-ship stations", a great
+                                      // square tent striped red and white, in
+                                      // a vacant lot behind a high stone wall
+                                      // (A11). Out over the wall, over the
+                                      // Boulevard de la Seine, and turn above
+                                      // the river.
   puteaux:     [48.88300, 2.24000],   // the Île de Puteaux
   stcloud:     [48.84300, 2.22600],   // the Aéro-Club's ground in the park —
                                       // 5.3 km from the Tower, so the Deutsch

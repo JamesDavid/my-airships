@@ -98,6 +98,79 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('IX. MLLE. DE ACOSTA CAN GET OVER THE WALL AND ONTO THE FIELD');
+  {
+    // She had had three lessons, all of them on the ground, and she still got
+    // there. A scenario about a beginner must be flyable by one: this pilot
+    // climbs, points at Bagatelle, turns once round the field and comes down,
+    // and does nothing cleverer than that.
+    const acosta = SCENARIOS.find((s) => s.id === 'no9-acosta');
+    const bag = placeLegacy('bagatelle'), neu = placeLegacy('neuilly');
+    let wallClear = 99, heard = 0, sawPolo = false;
+    let phase = 'climb', circ = 0, last = null;
+    const r = play(acosta, { secs: 1200, pilot: (sh, t) => {
+      const agl = sh.pos.y - world.groundAt(sh.pos.x, sh.pos.z);
+      const fromYard = Math.hypot(sh.pos.x - neu.x, sh.pos.z - neu.z);
+      // the wall is 4.2 m and stands at NEUILLY_R: record the least clearance
+      // she has as she crosses the line of it
+      if (Math.abs(fromYard - 95) < 12) wallClear = Math.min(wallClear, agl - 4.2);
+      const d = Math.hypot(sh.pos.x - bag.x, sh.pos.z - bag.z);
+      if (d < 240) sawPolo = true;
+      // one circuit of the field, then down
+      let aimX = bag.x, aimZ = bag.z;
+      if (phase === 'climb' && agl > 34) phase = 'go';
+      if (phase === 'go' && d < 150) { phase = 'ring'; last = null; }
+      if (phase === 'ring') {
+        const a = Math.atan2(sh.pos.z - bag.z, sh.pos.x - bag.x);
+        if (last !== null) {
+          let da = a - last; while (da > Math.PI) da -= 2 * Math.PI;
+          while (da < -Math.PI) da += 2 * Math.PI;
+          circ += da;
+        }
+        last = a;
+        if (Math.abs(circ) > Math.PI * 2.0) phase = 'land';
+        else { aimX = bag.x + Math.cos(a + 0.55) * 120; aimZ = bag.z + Math.sin(a + 0.55) * 120; }
+      }
+      const want = Math.atan2(-(aimZ - sh.pos.z), aimX - sh.pos.x);
+      let e = want - sh.yaw;
+      while (e > Math.PI) e -= 2 * Math.PI;
+      while (e < -Math.PI) e += 2 * Math.PI;
+      const climbing = phase === 'climb';
+      const wantAgl = climbing ? 45 : (phase === 'land' ? 0 : 40);
+      return { throttle: phase === 'land' && d < 90 ? -1 : (sh.throttle < 0.9 ? 1 : 0),
+        rudder: Math.max(-1, Math.min(1, e * 2.2)),
+        pitch: Math.max(-1, Math.min(1, (wantAgl - agl) * 0.06)),
+        vent: (phase === 'land' && d < 110 && agl > 6) ? 1 : 0, coax: 0 };
+    } });
+    heard = r.msgs.filter((m) => /“/.test(m)).length;
+    console.log('   %s  %s', r.verdict ? (r.verdict.ok ? 'WON ' : 'lost') : 'HUNG',
+      (r.verdict ? r.verdict.msg : 'no verdict in 1200 s').slice(0, 96));
+    console.log('   least clearance over the 4.2 m wall: %s m; %d shouts from the road heard',
+      wallClear === 99 ? 'never crossed it' : wallClear.toFixed(1), heard);
+    if (!(r.verdict && r.verdict.ok)) {
+      console.log('   FAIL a beginner cannot fly the beginner scenario');
+      fails++;
+    } else if (!sawPolo) {
+      console.log('   FAIL she never reached the polo ground');
+      fails++;
+    } else {
+      console.log('   ok   out of the yard, down the road and onto the grass at Bagatelle');
+    }
+    if (wallClear !== 99 && wallClear < 0) {
+      console.log('   FAIL the wall is unclearable — she flies through the stone');
+      fails++;
+    } else {
+      console.log('   ok   the wall is a real obstacle and she gets over it');
+    }
+    if (heard < 2) {
+      console.log('   FAIL the man on the bicycle never says anything');
+      fails++;
+    } else {
+      console.log('   ok   he coaches her from the road until she outruns him');
+    }
+  }
+
+  console.log('');
   console.log('EVERY PARIS SCENARIO ENDS WHEN THE SHIP DOES');
   console.log('   A scenario that sits still is not broken — the Deutsch prize and the');
   console.log('   review are things you must go and DO. But one that never answers even');
