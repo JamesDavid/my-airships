@@ -19,7 +19,7 @@ Measured by `tools/check_scenarios.mjs`, from the St-Cloud aerodrome:
 | | |
 |---|---|
 | meshes in the Paris scene | 2,496 |
-| **drawn from the aerodrome** | **580** (was 966 before the clouds were batched) |
+| **drawn from the aerodrome** | **~412** (966 before batching; 580 after the clouds) |
 | budget | ~200 |
 
 So this world is **draw-call bound**, by about 5×. That is the answer to
@@ -75,10 +75,27 @@ scale on the basket slate, live, inside the headset.
    `BatchedMesh` for anything repeated; merge static geometry that shares a
    material. Fourteen instanced meshes exist already; the remaining calls are
    the landmarks and the ship.
-   Of the 353 draws that are still never culled, about 275 are the monuments
-   and 44 are the batched clouds. The monuments are the next prize: merging
-   leaves that share a material is unusually cheap here, because merging
-   normally trades away frustum culling and these are *already* never culled.
+0b. **DONE — the heavy monuments.** Four of the twenty-three were 184 of their
+   262 draws. Each monument of twelve draws or more now carries a copy of
+   itself merged by material — same vertices, same silhouette — and the cull
+   swaps to it past `LOD_FAR` (1,400 m), comfortably out in the haze. Measured
+   in the browser, because the headless three gives every mesh its own material
+   object and so cannot show the grouping:
+
+   | | detail | far |
+   |---|---|---|
+   | Trocadéro | 58 | **2** |
+   | Notre-Dame | 47 | **3** |
+   | Madeleine | 45 | **2** |
+   | Grande Roue | 34 | 17 |
+   | Eiffel Tower | 13 | 5 |
+   | **total** | **197** | **29** |
+
+   Merging normally trades away frustum culling; these are *already* never
+   culled, so there is nothing to give up. That is what makes it cheap here and
+   not everywhere. The detailed group is kept and swapped back in close to,
+   which also means every check that measures a monument's real size still has
+   real geometry to measure.
 
 2. **Cull by screen-space size, not distance.** The chunk cull is a distance
    test. A small object at 400 m and a large one at 400 m cost the same to

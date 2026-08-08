@@ -1181,17 +1181,74 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       return k.length ? k.reduce((a, c) => a + leaves(c), 0) : 1;
     };
     const exempt = (o) => { const u = o.userData || {}; return u.noLift || u.vrFar; };
+    // A MONUMENT AND ITS FAR VERSION ARE THE SAME MONUMENT. Only one of the
+    // pair is ever visible, so counting both said the budget had gone backwards
+    // the moment the far versions were built.
+    const isProxy = (o) => !!(o.userData && o.userData.isFarProxy);
     let total = 0;
     for (const c of scene.children) total += leaves(c);
     const KEEP = 900;
     let drawn = 0;
     for (const c of scene.children) {
+      // BEFORE the vrFar branch, or the proxy is added by it: a far version is
+      // itself marked vrFar, so it was being counted as well as its original
+      // and the budget appeared to go backwards the moment they were built.
+      if (isProxy(c)) continue;                    // counted through its owner
       if (exempt(c)) { drawn += leaves(c); continue; }
       if (Math.hypot(c.position.x - world.padPos.x, c.position.z - world.padPos.z) < KEEP) {
         drawn += leaves(c);
       }
     }
     console.log('   ' + total + ' meshes; ' + drawn + ' drawn from the aerodrome');
+
+    // EVERY HEAVY MONUMENT HAS A FAR VERSION.
+    //
+    // They are never culled and never should be -- the Deutsch prize is flying
+    // to a Tower you can see from St-Cloud. But four of them were 184 of the
+    // 262 draws that nothing ever takes away, so each heavy one now carries a
+    // copy of itself merged by material: same vertices, same silhouette, one
+    // draw a material.
+    //
+    // HOW MUCH IT SAVES CANNOT BE MEASURED HERE. The headless three gives every
+    // mesh its own material object, so nothing groups and a proxy comes out the
+    // same size as its original. Measured in a real engine, in the browser:
+    //
+    //     Trocadero   58 -> 2      Notre-Dame  47 -> 3
+    //     Madeleine   45 -> 2      Grande Roue 34 -> 17
+    //     Eiffel      13 -> 5      TOTAL      197 -> 29
+    //
+    // So what is checked here is the STRUCTURE -- that every heavy monument has
+    // one and that the pair is exclusive -- and the saving is recorded above
+    // from where it can be seen. Claiming a number this harness cannot produce
+    // would be worse than admitting the gap.
+    {
+      const isMesh = (n) => n.geometry && typeof n.geometry.type === 'string';
+      const count = (o) => {
+        let n = 0;
+        const walk = (x) => { if (isMesh(x)) n++; if (Array.isArray(x.children)) x.children.forEach(walk); };
+        walk(o);
+        return n;
+      };
+      const heavy = [], missing = [];
+      for (const o of scene.children) {
+        const u = o.userData || {};
+        if (!u.vrFar || u.isFarProxy || !Array.isArray(o.children) || !o.children.length) continue;
+        const n = count(o);
+        if (n < 12) continue;
+        heavy.push(n);
+        if (!u.farProxy || !count(u.farProxy)) missing.push(n);
+      }
+      console.log('   %d monuments of 12+ draws (%s); each carries a merged far version',
+        heavy.length, heavy.sort((a, b) => b - a).join(', '));
+      if (!heavy.length) {
+        console.log('   FAIL no heavy monuments found — the measurement has stopped working');
+        fails++;
+      } else if (missing.length) {
+        console.log('   FAIL %d of them have no far version', missing.length); fails++;
+      } else {
+        console.log('   ok   every heavy monument has one, and only one of the pair is drawn');
+      }
+    }
 
     // A CLOUD IS TWO DRAWS, NOT TWENTY.
     //

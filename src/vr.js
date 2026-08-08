@@ -376,6 +376,10 @@ const KEEP_NEAR = 900;
 // close over exactly this distance, so the chunk that stops being drawn was
 // already invisible when it did — see cityFog().
 export const CITY_NEAR = 1150;
+
+// Where a monument hands over to its merged far version. Comfortably beyond the
+// haze, so the swap happens in weather rather than in front of you.
+export const LOD_FAR = 1400;
 const SMALL = 60;             // half-extent, in metres: bigger than this is scenery you steer by
 
 let cullScene = null, cullList = null;
@@ -444,6 +448,22 @@ export function cullForVR(from, scene) {
     }
     if (o.visible !== on) o.visible = on;
     if (!on) hidden++;
+  }
+
+  // ---- and the monuments swap for their far versions ----
+  //
+  // They are never culled and never should be: the Deutsch prize is flying to a
+  // Tower you can see from St-Cloud. But a Trocadero at two kilometres does not
+  // need fifty-eight draw calls to be a Trocadero, and its far version is the
+  // same shape merged by material — one draw a material, the silhouette
+  // untouched. Close to, the detailed group comes back.
+  for (const o of cullScene.children) {
+    const p = o.userData && o.userData.farProxy;
+    if (!p) continue;
+    const dx = o.position.x - from.x, dz = o.position.z - from.z;
+    const near = dx * dx + dz * dz < LOD_FAR * LOD_FAR;
+    if (o.visible !== near) o.visible = near;
+    if (p.visible === near) p.visible = !near;
   }
   return hidden;
 }

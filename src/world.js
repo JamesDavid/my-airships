@@ -1314,6 +1314,11 @@ export function buildWorld(scene) {
   for (const c of clouds) farSeen(c.grp);
   keepOutOfReflection(seine, clouds.map((c) => c.grp));
 
+  // ...and a far version of every heavy monument, for the headset. Built last,
+  // after liftToTerrain, so the proxy is baked from the geometry where it
+  // finally stands rather than where it was drawn flat.
+  addFarProxies(scene);
+
   const LM = (id) => { const q = placeLegacy(id); return { x: q.x, z: q.z }; };
   return {
     name: 'Paris, 1901',
@@ -1481,6 +1486,132 @@ export function buildWorld(scene) {
 // takes his bearings from. src/vr.js hides the rest of the near-field scenery
 // beyond 900 m, which is what makes the city affordable at ninety hertz.
 function farSeen(o) { if (o) { o.userData = o.userData || {}; o.userData.vrFar = true; } return o; }
+
+/**
+ * A FAR VERSION OF A MONUMENT, for a headset.
+ *
+ * The monuments are marked vrFar and never culled, because the Deutsch prize is
+ * flying to a Tower you can see from St-Cloud five kilometres off. That is
+ * right, and it is expensive: measured, 262 draw calls that nothing ever takes
+ * away, of which four buildings are 184 — the Trocadero 58, Notre-Dame 47, the
+ * Madeleine 45, the Grande Roue 34.
+ *
+ * Merging normally costs you frustum culling. These are ALREADY never culled,
+ * so there is nothing to give up, which is what makes it worth doing here and
+ * not everywhere.
+ *
+ * The merge is by MATERIAL, and it keeps the silhouette exactly: every leaf's
+ * vertices are baked into the group's own frame, so a Trocadero seen from two
+ * kilometres is the same shape it always was and costs one draw a material
+ * instead of fifty-eight. The detailed group is kept and swapped back in close
+ * to — which also means every check that measures a monument's real size still
+ * has the real geometry to measure.
+ *
+ * Written by hand rather than with BufferGeometryUtils: three's merge helper is
+ * an addon, this project takes three from a CDN with no build step, and adding
+ * an import the headless stub cannot answer would blind every check that walks
+ * these meshes.
+ */
+function makeFarProxy(group) {
+  const byMat = new Map();
+  const m4 = new THREE.Matrix4();
+  const walk = (o, parent) => {
+    const local = new THREE.Matrix4().compose(
+      o.position || new THREE.Vector3(),
+      o.quaternion || new THREE.Quaternion(),
+      o.scale || new THREE.Vector3(1, 1, 1));
+    const world = new THREE.Matrix4().multiplyMatrices(parent, local);
+    const g = o.geometry;
+    if (g && typeof g.type === 'string' && o.material) {
+      let e = byMat.get(o.material);
+      if (!e) { e = { mat: o.material, parts: [] }; byMat.set(o.material, e); }
+      e.parts.push({ geom: g, at: world.clone() });
+    }
+    if (Array.isArray(o.children)) for (const c of o.children) walk(c, world);
+  };
+  for (const c of (group.children || [])) walk(c, m4.identity());
+
+  const out = [];
+  for (const { mat, parts } of byMat.values()) {
+    // ONE MESH A MATERIAL, whether or not the vertices can be read.
+    //
+    // In the headless three the geometries carry no vertex arrays, so the first
+    // version of this merged nothing and built no proxy at all — which meant no
+    // check could see the saving it exists to make, and the whole thing would
+    // have shipped unmeasured. The mesh is made from the parts list regardless;
+    // the vertex work is what is skipped. The browser gets the real silhouette,
+    // the harness gets the real DRAW COUNT, and both are true.
+    if (!parts.length) continue;
+    const pos = [], nrm = [], idx = [];
+    let base = 0;
+    for (const part of parts) {
+      const a = part.geom.attributes && part.geom.attributes.position;
+      if (!a || !a.array || !a.count) continue;          // a stub geometry
+      const nm = part.geom.attributes.normal;
+      const v = new THREE.Vector3();
+      const nrmMat = new THREE.Matrix3().getNormalMatrix(part.at);
+      for (let i = 0; i < a.count; i++) {
+        v.set(a.array[i * 3], a.array[i * 3 + 1], a.array[i * 3 + 2]).applyMatrix4(part.at);
+        pos.push(v.x, v.y, v.z);
+        if (nm && nm.array) {
+          v.set(nm.array[i * 3], nm.array[i * 3 + 1], nm.array[i * 3 + 2])
+            .applyMatrix3(nrmMat).normalize();
+          nrm.push(v.x, v.y, v.z);
+        } else nrm.push(0, 1, 0);
+      }
+      const ix = part.geom.index;
+      if (ix && ix.array) for (let i = 0; i < ix.array.length; i++) idx.push(base + ix.array[i]);
+      else for (let i = 0; i < a.count; i++) idx.push(base + i);
+      base += a.count;
+    }
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g2.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g2.setIndex(idx);
+    const mesh = new THREE.Mesh(g2, mat);
+    out.push(mesh);
+  }
+  if (!out.length) return null;
+  const proxy = new THREE.Group();
+  for (const m of out) proxy.add(m);
+  proxy.position.copy(group.position);
+  proxy.rotation.copy(group.rotation);
+  proxy.scale.copy(group.scale);
+  proxy.visible = false;
+  proxy.userData.vrFar = true;
+  proxy.userData.isFarProxy = true;
+  return proxy;
+}
+
+/**
+ * Give every heavy monument a far version, and tie the two together.
+ *
+ * Only the heavy ones: nineteen of the twenty-three cost four draws each and
+ * merging them would save nothing worth the risk of them looking different.
+ */
+export function addFarProxies(scene, minLeaves = 12) {
+  const made = [];
+  const isMesh = (n) => n.geometry && typeof n.geometry.type === 'string';
+  const count = (o) => {
+    let n = 0;
+    const walk = (x) => { if (isMesh(x)) n++; if (Array.isArray(x.children)) x.children.forEach(walk); };
+    walk(o);
+    return n;
+  };
+  for (const o of [...scene.children]) {
+    const u = o.userData || {};
+    if (!u.vrFar || u.isFarProxy || u.noLod) continue;
+    if (!Array.isArray(o.children) || !o.children.length) continue;
+    if (count(o) < minLeaves) continue;
+    const proxy = makeFarProxy(o);
+    if (!proxy) continue;
+    scene.add(proxy);
+    o.userData.farProxy = proxy;
+    proxy.userData.lodOwner = o;
+    made.push(proxy);
+  }
+  return made;
+}
 
 function liftToTerrain(scene) {
   const m = new THREE.Matrix4();
