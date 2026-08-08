@@ -1676,27 +1676,35 @@ export class Airship {
   bigPanel(on) {
     if (!this.panelMesh || this._panelBig === on) return;
     this._panelBig = on;
-    const k = on ? 2.4 : 1;
-    this.panelMesh.scale.set(k, k, 1);
-    // IT COMES UP AND IN TO BE READ, and goes back down to be flown over.
+    // THE SLATE DOES NOT MOVE. It is a fitting of the ship, screwed to the
+    // basket, and a fitting that comes at you when it has something to say is
+    // not a fitting — it is a pop-up. "Dont zoom the tablet closer to the
+    // person in vr when a roast comes just keep it where it normally is."
     //
-    // "When you make the tablet bigger move it up and closer to the user."
-    // Which was the opposite of the first answer to #68 — that pinned the top
-    // edge and grew it DOWNWARD, on the reasoning that anything above the rim
-    // is across the horizon. The reasoning was sound and the diagnosis was
-    // wrong: what actually made it a wall was that it grew for opening notices
-    // as well as endings and then never shrank, so it sat there for the whole
-    // flight. With that fixed it is big for fourteen seconds at a time, and for
-    // fourteen seconds you want it where you can read it — up at eye level and
-    // within arm's length, not down by your boots at 0.74 m.
-    this.panelMesh.position.y = this.panelHomeY + (on ? 0.17 : 0);
-    this.panelMesh.position.x = (this.panelHome || this.panelMesh.position.x)
-      - (on ? 0.17 : 0);            // nearer the eye: the pilot faces +x
+    // It used to grow 2.4x and travel 0.17 m up and 0.17 m in. That was asked
+    // for once, when a long notice was unreadable at its normal size — but the
+    // reason it was unreadable has since been fixed elsewhere: a toast takes
+    // the WHOLE slate and wraps itself across it at a size meant to be read
+    // (drawPanel, below). So the growth was solving a problem that no longer
+    // exists, and paying for it by lunging at the pilot.
+    //
+    // What is left is the only part that never moved anything: a notice worth
+    // reading makes the slate opaque instead of translucent, for as long as it
+    // is up. Same place, same size, easier to read.
+    this.panelMesh.scale.set(1, 1, 1);
+    this.panelMesh.position.y = this.panelHomeY;
+    if (this.panelHome !== undefined) this.panelMesh.position.x = this.panelHome;
     this.panelMesh.traverse((o) => {
       if (o.material && o.material.transparent !== undefined) {
         o.material.opacity = on ? 1 : (o.geometry && o.geometry.type === 'BoxGeometry' ? 0.6 : 0.72);
       }
     });
+    // published as a plain flag, because the headless three is a stub and a
+    // material's opacity does not survive it — without this, "does a notice
+    // still make the slate opaque?" is a question the harness cannot ask, and
+    // the check quietly becomes a guess. Same reason the funnel smoke publishes
+    // its own alpha.
+    this.panelOpaque = !!on;
   }
 
   /** Show or hide the panel and its frame — headset only. */

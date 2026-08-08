@@ -516,28 +516,46 @@ if (renderer.shadowMap.enabled) {
     else console.log('   ok   the slate draws readings, bearings and a toast without throwing');
   }
 
-  // THE SLATE COMES UP AND IN TO BE READ. "When you make the tablet bigger
-  // move it up and closer to the user." And it must go back EXACTLY home
-  // afterwards, or fourteen seconds at a time will walk it across the basket.
+  // THE SLATE STAYS WHERE IT IS PUT.
+  //
+  // It used to grow 2.4x and travel 0.17 m up and 0.17 m in when a long notice
+  // came, and this check demanded that it did. "Dont zoom the tablet closer to
+  // the person in vr when a roast comes just keep it where it normally is."
+  //
+  // The growth was answering a real complaint -- a long notice unreadable at
+  // the slate's normal size -- but the cause was fixed elsewhere: a toast takes
+  // the WHOLE slate and wraps across it at a readable size. So it was solving a
+  // problem that no longer existed and paying for it by lunging at the pilot.
+  // A fitting screwed to the basket does not come at you when it has something
+  // to say; a pop-up does.
+  //
+  // What must still happen is the part that never moved anything: the slate
+  // goes opaque while a notice is up, and translucent again after.
   {
     sh.bigPanel(false);
     const homeY = sh.panelMesh.position.y, homeX = sh.panelMesh.position.x;
+    const homeS = sh.panelMesh.scale.y || 1;
     sh.bigPanel(true);
-    const bigY = sh.panelMesh.position.y, bigX = sh.panelMesh.position.x;
-    const grew = (sh.panelMesh.scale.y || 1) > 1.5;
+    const movedY = Math.abs(sh.panelMesh.position.y - homeY);
+    const movedX = Math.abs(sh.panelMesh.position.x - homeX);
+    const scaled = Math.abs((sh.panelMesh.scale.y || 1) - homeS);
+    const opaque = sh.panelOpaque === true;
     sh.bigPanel(false);
-    const backY = sh.panelMesh.position.y, backX = sh.panelMesh.position.x;
-    const up = bigY > homeY + 0.05;
-    const nearer = bigX < homeX - 0.05;         // the pilot faces +x
-    const home = Math.abs(backY - homeY) < 1e-9 && Math.abs(backX - homeX) < 1e-9;
-    const ok = grew && up && nearer && home;
-    if (!ok) fails++;
-    console.log('   %s  the slate grows %s, %s, %s, and %s',
-      ok ? 'ok  ' : 'FAIL',
-      grew ? 'to 2.4x' : 'NOT AT ALL',
-      up ? `up ${(bigY - homeY).toFixed(2)} m` : 'DOES NOT RISE',
-      nearer ? `in ${(homeX - bigX).toFixed(2)} m` : 'DOES NOT COME NEARER',
-      home ? 'goes exactly home again' : 'DRIFTS');
+    const backY = Math.abs(sh.panelMesh.position.y - homeY);
+    const backX = Math.abs(sh.panelMesh.position.x - homeX);
+    const clear = sh.panelOpaque === false;      // and translucent again after
+    const still = movedY < 1e-9 && movedX < 1e-9 && scaled < 1e-9
+      && backY < 1e-9 && backX < 1e-9;
+    if (!still) {
+      console.log('   FAIL the slate moves when a notice comes: %s m up, %s m in, scale %s',
+        movedY.toFixed(3), movedX.toFixed(3), scaled.toFixed(2));
+      fails++;
+    } else if (!opaque || !clear) {
+      console.log('   FAIL a notice does not make the slate opaque and clear again');
+      fails++;
+    } else {
+      console.log('   ok   the slate never moves or grows; a notice only makes it opaque');
+    }
   }
 }
 
