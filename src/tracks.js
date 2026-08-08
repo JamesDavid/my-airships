@@ -127,7 +127,10 @@ export const TRACKS = [
         [M('republique'), 46, 34], [M('bastille'), 58, 34, 48, -13],
         // ...and off the cathedral herself, now that she is 69 m of west tower
         // and solid with it rather than two boxes and a cone
-        [P('notredame'), 52, 36, -55, 25], [P('pantheon'), 58, 36],
+        // ...and off the cathedral herself. -55, 25 was clear while she stood
+        // as two boxes and a cone placed by eye; standing on her real outline
+        // her 69 m west towers are through the ring. 120 m west and clear.
+        [P('notredame'), 52, 36, -120, 40], [P('pantheon'), 58, 36],
         [M('gareorsay'), 46, 34, -122, -146], [P('invalides'), 62, 36],
       ];
       return STOPS.filter(([p]) => p).map(([p, h, r, dx = 0, dz = 0]) => {

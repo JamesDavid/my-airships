@@ -10,6 +10,12 @@
 //   'measured'  the footprint OpenStreetMap holds, reduced to its smallest-area
 //               oriented box — and for these the outline is the 1901 outline,
 //               because they are all still standing on the same ground.
+//   'measured' now covers every one of them: tools/gen_paris_footprints.py
+//               reduces the real OSM outline to its smallest-area oriented box,
+//               and src/paris_footprints.js holds the result. The 'published'
+//               figures below were guesses from the record and several were
+//               badly wrong — the Hotel de Ville was ninety degrees to its own
+//               street and the Gare d'Orsay eighty-five metres up the quay.
 //   'published' a figure from the record, where the fetch would not give a
 //               usable outline: the Louvre and the Hôtel de Ville are mapped as
 //               courtyards and wings rather than as one building, the Petit
@@ -18,23 +24,27 @@
 //
 // `w` is across the building and `l` along it; `ry` is a three.js rotation.y.
 export const LANDMARKS = [
-  { id: 'bastille', x: 5986.6, z: 867.0, w: 18.0, l: 18.0, ry: -1.6256, h: 47, kind: 'column',
+  { id: 'bastille', x: 5986.6, z: 867.0, w: 18.0, l: 18.0, ry: -0.0548, h: 47, kind: 'column',
     src: 'measured' },   // the July Column, 1840, on the site of the Bastille
   { id: 'chatelet', x: 4311.0, z: 352.2, w: 91.5, l: 45.7, ry: -1.9545, h: 26, kind: 'theatre',
     src: 'measured' },   // the 1862 theatre on the place
-  { id: 'gareorsay', x: 2860.9, z: 89.5, w: 220.7, l: 94.1, ry: 1.1683, h: 32, kind: 'station',
+  { id: 'gareorsay', x: 2863.8, z: 111.7, w: 77.5, l: 188.5, ry: 2.7209, h: 32, kind: 'station',
     src: 'measured' },   // the Gare d'Orsay, opened 28 May 1900 — a barrel-vaulted train hall behind a hotel front
-  { id: 'grandpalais', x: 1821.7, z: -578.2, w: 159.0, l: 240.0, ry: -1.559, h: 44, kind: 'palace',
+  { id: 'ecolemil', x: 1273.4, z: 1001.0, w: 269.0, l: 469.0, ry: -2.3390, h: 26, kind: 'palace',
+    src: 'measured' },   // the École Militaire, 1760 — 469 m of Gabriel's front
+                         // closing the Champ de Mars. It was in PLACES and in
+                         // nothing else: not drawn at all, and 264 m out.
+  { id: 'grandpalais', x: 1821.7, z: -578.2, w: 159.0, l: 240.0, ry: -1.5591, h: 44, kind: 'palace',
     src: 'measured' },   // already modelled — kept here as a control
-  { id: 'hoteldeville', x: 4747, z: 488, w: 85, l: 110, ry: -0.3491, h: 48, kind: 'palace',
+  { id: 'hoteldeville', x: 4770.2, z: 504.1, w: 89.3, l: 144.3, ry: -1.9188, h: 48, kind: 'palace',
     src: 'published' },   // rebuilt 1873–1892 after the fire of 1871
-  { id: 'louvre', x: 3661, z: -1, w: 190, l: 420, ry: -0.384, h: 30, kind: 'palace',
+  { id: 'louvre', x: 3563.5, z: -5.2, w: 303.0, l: 565.5, ry: 2.7724, h: 30, kind: 'palace',
     src: 'published' },   // open at the west end: the Tuileries were demolished in 1883
   { id: 'madeleine', x: 2714.7, z: -1010.0, w: 43.3, l: 128.5, ry: -2.0173, h: 30, kind: 'temple',
     src: 'measured' },   // the Napoleonic temple, 1842 — 52 Corinthian columns all round
-  { id: 'petitpalais', x: 2002, z: -565, w: 90, l: 130, ry: -0.4363, h: 24, kind: 'palace',
+  { id: 'petitpalais', x: 2018.2, z: -564.1, w: 89.4, l: 130.4, ry: -1.6547, h: 24, kind: 'palace',
     src: 'published' },   // 1900 Exposition work, a year old in 1901
-  { id: 'republique', x: 5608.2, z: -732.2, w: 65.5, l: 224.8, ry: -0.7341, h: 0, kind: 'square',
+  { id: 'republique', x: 5597.0, z: -728.6, w: 13.4, l: 14.8, ry: 0.8314, h: 0, kind: 'square',
     src: 'measured' },   // the place, with Morice’s bronze Republic of 1883 at its centre
   { id: 'vaugirard', x: 1180, z: 2170, w: 34, l: 62, ry: -0.2094, h: 14, kind: 'works',
     src: 'published' },   // Lachambre's balloon works, where his envelopes were made

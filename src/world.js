@@ -38,6 +38,7 @@ import { STREETS, SITES, inSite, distToStreets, streetClearance } from './paris_
 import { WALL_RUNS, WALL } from './paris_wall.js';
 import { PONT, AVRE, CHURCH, PARK, LONGCHAMP as LC_REAL, AUTEUIL as AU_REAL } from './paris_stcloud.js';
 import { LANDMARKS } from './paris_landmarks.js';
+import { footprint } from './paris_footprints.js';
 import { OSM_BUILDINGS } from './paris_buildings.js';
 
 // procedural wave normal map (the three.js example texture isn't on the CDN).
@@ -229,6 +230,85 @@ export function makeShadowSun(scene, sunDir, intensity) {
   scene.add(sun);
   scene.add(sun.target);
   return sun;
+}
+
+/**
+ * Stand a hand-built monument on its real footprint.
+ *
+ * Twelve of the eighteen were built from period pictures and then placed with
+ * `g.position.set(p.x, 0, p.z)` and nothing else — no rotation, no size. So
+ * the Hôtel de Ville was the right size at sixty degrees to its own street,
+ * the Invalides was 349 m of building drawn as a 65 m dome, and the Madeleine
+ * faced thirty-seven degrees off the axis it closes.
+ *
+ * src/paris_footprints.js holds the smallest-area rectangle round each real
+ * outline. This measures what the group actually DRAWS, turns its long axis
+ * along the real long axis, and stretches it in the horizontal plane only —
+ * heights are researched separately and must not be scaled with the plan.
+ */
+function fitFootprint(g, id, opts = {}) {
+  const f = footprint(id);
+  if (!f) return null;
+  // the group's own extent, before it is turned
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  const ext = (geom) => {
+    const q = (geom && geom.parameters) || {};
+    if (q.width !== undefined) return [q.width, q.depth !== undefined ? q.depth : q.width];
+    if (q.radiusTop !== undefined || q.radiusBottom !== undefined) {
+      const r = Math.max(q.radiusTop || 0, q.radiusBottom || 0); return [2 * r, 2 * r];
+    }
+    if (q.radius !== undefined) return [2 * q.radius, 2 * q.radius];
+    return null;
+  };
+  // A CHILD'S OWN SCALE COUNTS. The Madeleine's pediment is a four-sided cone
+  // of radius L.w * 0.62 with `ped.scale.x = L.l / L.w` on it — three times as
+  // wide as it is deep, and turned forty-five degrees. Measured as an unscaled
+  // 53 m cone the temple came out 128 m long when it draws 162, so the fit
+  // scaled the wrong thing and left her thirty degrees off her own street.
+  const walk = (o, ox, oz, rot, kx, kz) => {
+    const lx = (o.position ? o.position.x : 0) * kx;
+    const lz = (o.position ? o.position.z : 0) * kz;
+    const px = ox + lx * Math.cos(rot) + lz * Math.sin(rot);
+    const pz = oz - lx * Math.sin(rot) + lz * Math.cos(rot);
+    const r2 = rot + ((o.rotation && o.rotation.y) || 0);
+    const kx2 = kx * ((o.scale && o.scale.x) || 1);
+    const kz2 = kz * ((o.scale && o.scale.z) || 1);
+    const e = o.geometry ? ext(o.geometry) : null;
+    if (e) {
+      const hw = e[0] * kx2 / 2, hd = e[1] * kz2 / 2, c = Math.cos(r2), sn = Math.sin(r2);
+      for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+        const qx = px + sx * hw * c + sz * hd * sn;
+        const qz = pz - sx * hw * sn + sz * hd * c;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
+        if (qz < z0) z0 = qz; if (qz > z1) z1 = qz;
+      }
+    }
+    if (Array.isArray(o.children)) for (const c2 of o.children) walk(c2, px, pz, r2, kx2, kz2);
+  };
+  for (const c of g.children) walk(c, 0, 0, 0, 1, 1);
+  let dx = x1 - x0, dz = z1 - z0;
+  if (!(dx > 0.01) || !(dz > 0.01)) {
+    g.position.set(f.x, 0, f.z);
+    return { x: f.x, z: f.z, ry: f.ry, sx: 1, sz: 1,
+      at: (px, pz) => ({ x: f.x + px, z: f.z + pz }) };
+  }
+  // whichever way round it was drawn, its long side goes on the real long side
+  let ry = f.ry, wantX = f.len, wantZ = f.wid;
+  if (dz > dx) { ry += Math.PI / 2; wantX = f.wid; wantZ = f.len; }
+  g.position.set(f.x, 0, f.z);
+  g.rotation.y = ry;
+  const sx = opts.scale === false ? 1 : wantX / dx;
+  const sz = opts.scale === false ? 1 : wantZ / dz;
+  if (opts.scale !== false) g.scale.set(sx, 1, sz);
+  // Hand back the transform that was applied, so a collider written in the
+  // unturned plan can be put where the stone now actually stands. A collider
+  // left behind is worse than none: the ship hits a building that is no longer
+  // there and flies through the one that is.
+  return { x: f.x, z: f.z, ry, sx, sz,
+    at: (px, pz) => ({
+      x: f.x + px * sx * Math.cos(ry) + pz * sz * Math.sin(ry),
+      z: f.z - px * sx * Math.sin(ry) + pz * sz * Math.cos(ry),
+    }) };
 }
 
 export function makeWaterSurface(geometry, sunDir, waterColor) {
@@ -840,9 +920,13 @@ export function buildWorld(scene) {
   }
   addOval(scene, arcPos.x, arcPos.z, 128, 128, 0x9a9285, 0.08);   // the Étoile
   { const c = placeLegacy('concorde'); addOval(scene, c.x, c.z, 170, 170, 0x9a9285, 0.08); }
-  scene.add(farSeen(makeArc(arcPos)));
+  { const a2 = makeArc(arcPos); fitFootprint(a2, 'etoile'); scene.add(farSeen(a2)); }
   scene.add(makeConcorde());
-  scene.add(makeMadeleine());
+  // The Madeleine is built ONCE, from the landmark table, which holds her real
+  // outline. She was built twice: a 38 m box here, hand-placed at (810, -380)
+  // and turned half a radian by eye, and the measured 128 m temple from
+  // LANDMARKS on top of it. Two churches on one site, the wrong one in front.
+  // makeMadeleine is gone; the table has her.
 
   // ---------- the city: buildings along their real street frontages ----------
   const buildings = buildCity(scene, riverPts);
@@ -1597,6 +1681,7 @@ function makeGroundTexture() {
 // distant landmarks of the 1901 skyline
 function addLandmarks(scene) {
   const lmColliders = [];
+
   const cream = new THREE.MeshLambertMaterial({ color: 0xd6cbb4 });
   const white = new THREE.MeshLambertMaterial({ color: 0xe9e4d6 });
   const gold = new THREE.MeshPhongMaterial({ color: 0xc9a437, shininess: 80, specular: 0xffe9a0 });
@@ -1608,7 +1693,7 @@ function addLandmarks(scene) {
   const invDrum = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 10, 12), cream); invDrum.position.y = 25; inv.add(invDrum);
   const invDome = new THREE.Mesh(new THREE.SphereGeometry(11, 14, 10), gold); invDome.position.y = 32; invDome.scale.y = 1.15; inv.add(invDome);
   const invSpike = new THREE.Mesh(new THREE.ConeGeometry(1.2, 12, 6), gold); invSpike.position.y = 48; inv.add(invSpike);
-  { const _p = placeLegacy('invalides'); inv.position.set(_p.x, 0, _p.z); farSeen(inv); }
+  fitFootprint(inv, 'invalides'); farSeen(inv);
   scene.add(inv);
 
   // Sacre-Coeur on the Montmartre mound (it was rising over Paris in 1901)
@@ -1628,7 +1713,7 @@ function addLandmarks(scene) {
     const d = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8), white);
     d.position.set(s * 14, 17, 0); d.scale.y = 1.4; mont.add(d);
   }
-  { const _p = placeLegacy('montmartre'); mont.position.set(_p.x, 0, _p.z); farSeen(mont); }
+  fitFootprint(mont, 'montmartre'); farSeen(mont);
   scene.add(mont);
 
   // Old Palais du Trocadero (1878): rotunda, two slim ~80 m towers, curved wings —
@@ -1889,8 +1974,13 @@ function addLandmarks(scene) {
           g.add(c);
         }
       }
-      const ped = new THREE.Mesh(new THREE.ConeGeometry(L.w * 0.62, 9, 4), roofM);
-      ped.rotation.y = Math.PI / 4;
+      // The pediment sits SQUARE on the temple. A four-sided cone turned
+      // forty-five degrees has its corners off the axes, so the roof's own
+      // footprint is a diamond and skews any fit to the building beneath it —
+      // the Madeleine measured twenty-one degrees off her own street with her
+      // walls the right length. Unturned, the four corners lie on the axes and
+      // the stretch along x makes the ridge, which is what was wanted.
+      const ped = new THREE.Mesh(new THREE.ConeGeometry(L.w * 0.5, 9, 4), roofM);
       ped.scale.x = L.l / L.w;
       ped.position.y = L.h * 0.66 + 10; g.add(ped);
     } else if (L.kind === 'station') {
@@ -1950,6 +2040,10 @@ function addLandmarks(scene) {
     // from the ground once and was therefore in the right place all along.
     g.position.set(L.x, 0, L.z);
     g.rotation.y = L.ry;
+    // ...and then stand it on the real outline. The kinds draw pavilions and
+    // porticoes that reach past L.l, so the Hôtel de Ville came out 202 m long
+    // where the building is 144 and the Petit Palais 188 where it is 130.
+    fitFootprint(g, L.id);
     g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
     scene.add(farSeen(g));      // the eleven are landmarks: seen from anywhere
     const ca = Math.abs(Math.cos(L.ry)), sa = Math.abs(Math.sin(L.ry));
@@ -1971,7 +2065,7 @@ function addLandmarks(scene) {
   // ACROSS the building, overhanging the ends by 15 m and covering half its length.
   glass.rotation.z = Math.PI / 2;
   glass.position.y = 18; glass.scale.y = 0.94; gp.add(glass);
-  { const _p = placeLegacy('grandpalais'); gp.position.set(_p.x, 0, _p.z); farSeen(gp); }
+  fitFootprint(gp, 'grandpalais'); farSeen(gp);
   gp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(gp);
 
@@ -2063,14 +2157,18 @@ function addLandmarks(scene) {
     fleche.position.set(CROSS_X, NAVE_H + 8 + 22.5, 0); nd.add(fleche);
   }
   nd.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  { const _p = placeLegacy('notredame'); nd.position.set(_p.x, 0, _p.z); farSeen(nd);
+  { const ndFit = fitFootprint(nd, 'notredame'); farSeen(nd);
     // ...and she is SOLID, which she never was: two boxes and a cone stood on
     // the Île de la Cité with nothing to hit. Two colliders — the long mass at
     // roof height, and the west towers, which are 69 m and the tallest thing on
     // the island. The flèche is left out: it is four metres across and a ship
     // that threads it has earned it.
-    lmColliders.push({ x: _p.x + 60, z: _p.z, w: 128, d: 48, h: 43, top: 45 });
-    lmColliders.push({ x: _p.x + 4, z: _p.z, w: 20, d: 43, h: 69, top: 69 });
+    { const q = ndFit.at(60, 0);
+      lmColliders.push({ x: q.x, z: q.z, w: 128 * ndFit.sx, d: 48 * ndFit.sz,
+        ry: ndFit.ry, h: 43, top: 45 }); }
+    { const q = ndFit.at(4, 0);
+      lmColliders.push({ x: q.x, z: q.z, w: 20 * ndFit.sx, d: 43 * ndFit.sz,
+        ry: ndFit.ry, h: 69, top: 69 }); }
   }
   scene.add(nd);
 
@@ -2079,13 +2177,13 @@ function addLandmarks(scene) {
   const panBase = new THREE.Mesh(new THREE.BoxGeometry(34, 20, 34), cream); panBase.position.y = 10; pan.add(panBase);
   const panDrum = new THREE.Mesh(new THREE.CylinderGeometry(10, 10, 12, 12), cream); panDrum.position.y = 26; pan.add(panDrum);
   const panDome = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 8), slate); panDome.position.y = 33; panDome.scale.y = 1.05; pan.add(panDome);
-  { const _p = placeLegacy('pantheon'); pan.position.set(_p.x, 0, _p.z); farSeen(pan); }
+  fitFootprint(pan, 'pantheon'); farSeen(pan);
   scene.add(pan);
   const opera = new THREE.Group();
   const opBase = new THREE.Mesh(new THREE.BoxGeometry(40, 22, 30), cream); opBase.position.y = 11; opera.add(opBase);
   const opDome = new THREE.Mesh(new THREE.SphereGeometry(11, 12, 8),
     new THREE.MeshPhongMaterial({ color: 0x5f7a64, shininess: 40 })); opDome.position.y = 26; opDome.scale.y = 0.7; opera.add(opDome);
-  { const _p = placeLegacy('opera'); opera.position.set(_p.x, 0, _p.z); farSeen(opera); }
+  fitFootprint(opera, 'opera'); farSeen(opera);
   scene.add(opera);
 
   // scattered church spires
@@ -3279,19 +3377,6 @@ function makeConcorde() {
 }
 
 // the Madeleine: the temple front at the head of the Rue Royale
-function makeMadeleine() {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(38, 16, 22),
-    new THREE.MeshLambertMaterial({ color: 0xd6cbb4 }));
-  body.position.y = 8; g.add(body);
-  const roofM = new THREE.Mesh(new THREE.BoxGeometry(40, 5, 12),
-    new THREE.MeshLambertMaterial({ color: 0x46505c }));
-  roofM.position.y = 18; g.add(roofM);
-  g.position.set(810, 0, -380);
-  g.rotation.y = 0.5;
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return g;
-}
 
 // ---------------------------------------------------------------- Bois
 function addTrees(scene, standing) {

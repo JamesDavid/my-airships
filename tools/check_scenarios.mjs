@@ -1205,6 +1205,103 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('EVERY MONUMENT STANDS ON ITS OWN FOOTPRINT');
+  {
+    // The full comparison against OpenStreetMap lives in
+    // tools/audit_landmarks.py, which needs the network the first time. This is
+    // the offline half of it: src/paris_footprints.js is the measured outline,
+    // checked in, and every landmark must be built to it. Twelve of the
+    // eighteen were not -- hand-built from period pictures, placed with
+    // position and nothing else, so the Hotel de Ville stood at ninety degrees
+    // to its own street and the Ecole Militaire was not drawn at all.
+    const { FOOTPRINTS } = await import('../src/paris_footprints.js');
+    const bear = (dx, dz) => ((Math.atan2(dx, -dz) * 180 / Math.PI) + 360) % 180;
+    const ext = (geom) => {
+      const q = (geom && geom.parameters) || {};
+      if (q.width !== undefined) return [q.width, q.depth !== undefined ? q.depth : q.width];
+      if (q.radiusTop !== undefined || q.radiusBottom !== undefined) {
+        const r = Math.max(q.radiusTop || 0, q.radiusBottom || 0); return [2 * r, 2 * r];
+      }
+      if (q.radius !== undefined) return [2 * q.radius, 2 * q.radius];
+      return null;
+    };
+    let worstSpan = 0, worstId = '', worstDeg = 0, worstDegId = '', missing = [];
+    for (const id of Object.keys(FOOTPRINTS)) {
+      const f = FOOTPRINTS[id];
+      if (f.len < 40) continue;                 // a column has no plan to speak of
+      const p2 = placeLegacy(id);
+      const groups = scene.children.filter((o) => o && o.position && Array.isArray(o.children)
+        && o.children.length
+        && (Math.hypot(o.position.x - f.x, o.position.z - f.z) < 70
+          || (p2 && Math.hypot(o.position.x - p2.x, o.position.z - p2.z) < 70)));
+      if (!groups.length) { missing.push(id); continue; }
+      const g = groups.reduce((a, b) => (b.children.length > a.children.length ? b : a));
+      const pts = [];
+      const walk = (o, ox, oz, rot, kx, kz) => {
+        const lx = (o.position ? o.position.x : 0) * kx;
+        const lz = (o.position ? o.position.z : 0) * kz;
+        const px = ox + lx * Math.cos(rot) + lz * Math.sin(rot);
+        const pz = oz - lx * Math.sin(rot) + lz * Math.cos(rot);
+        const r2 = rot + ((o.rotation && o.rotation.y) || 0);
+        const kx2 = kx * ((o.scale && o.scale.x) || 1);
+        const kz2 = kz * ((o.scale && o.scale.z) || 1);
+        const e = o.geometry ? ext(o.geometry) : null;
+        if (e) {
+          const hw = e[0] * kx2 / 2, hd = e[1] * kz2 / 2;
+          const c = Math.cos(r2), sn = Math.sin(r2);
+          for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+            pts.push([px + sx * hw * c + sz * hd * sn, pz - sx * hw * sn + sz * hd * c]);
+          }
+        }
+        if (Array.isArray(o.children)) for (const c2 of o.children) walk(c2, px, pz, r2, kx2, kz2);
+      };
+      for (const c of g.children) walk(c, g.position.x, g.position.z,
+        (g.rotation && g.rotation.y) || 0,
+        (g.scale && g.scale.x) || 1, (g.scale && g.scale.z) || 1);
+      if (pts.length < 4) { missing.push(id); continue; }
+      // the smallest-area rectangle round what is drawn — the same rule the
+      // footprints themselves are made with, so both sides are measured alike
+      let bA = null;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+        const c = Math.cos(-ang), sn = Math.sin(-ang);
+        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+        for (const q of pts) {
+          const u = q[0] * c - q[1] * sn, v = q[0] * sn + q[1] * c;
+          if (u < u0) u0 = u; if (u > u1) u1 = u;
+          if (v < v0) v0 = v; if (v > v1) v1 = v;
+        }
+        const area = (u1 - u0) * (v1 - v0);
+        if (!bA || area < bA.area) bA = { area, ang, du: u1 - u0, dv: v1 - v0 };
+      }
+      let ln = bA.du, ang2 = bA.ang;
+      if (bA.dv > ln) { ln = bA.dv; ang2 += Math.PI / 2; }
+      const dSpan = Math.abs(ln - f.len) / f.len;
+      if (dSpan > worstSpan) { worstSpan = dSpan; worstId = id; }
+      if (f.len / Math.max(1, f.wid) > 1.5) {
+        const want = bear(Math.cos(f.ry), -Math.sin(f.ry));
+        const got = bear(Math.cos(ang2), Math.sin(ang2));
+        let d = Math.abs(want - got); if (d > 90) d = 180 - d;
+        if (d > worstDeg) { worstDeg = d; worstDegId = id; }
+      }
+    }
+    console.log('   worst size %s%% (%s); worst bearing %s deg (%s)%s',
+      (worstSpan * 100).toFixed(0), worstId || '-', worstDeg.toFixed(0), worstDegId || '-',
+      missing.length ? '; NOT BUILT: ' + missing.join(', ') : '');
+    if (missing.length) {
+      console.log('   FAIL a landmark with a measured footprint is not built at all');
+      fails++;
+    } else if (worstSpan > 0.35) {
+      console.log('   FAIL a monument is built to the wrong size'); fails++;
+    } else if (worstDeg > 20) {
+      console.log('   FAIL a monument is turned away from its own street'); fails++;
+    } else {
+      console.log('   ok   all eighteen stand on their real outlines');
+    }
+  }
+
+  console.log('');
   console.log('THE TROCADERO FACES THE TOWER IT WAS BUILT TO LOOK AT');
   {
     // "The trocodero palace seems like it is wrong rotation" (#112). It was.

@@ -116,9 +116,37 @@ def measure(gj):
             d = (pts[i][0] - pts[j][0]) ** 2 + (pts[i][1] - pts[j][1]) ** 2
             if d > best[0]:
                 best = (d, pts[i], pts[j])
-    a, b = best[1], best[2]
-    return {'x': cx, 'z': cz, 'span': math.sqrt(best[0]),
-            'bearing': bearing(b[0] - a[0], b[1] - a[1]) % 180, 'n': len(pts)}
+    # ...and the same smallest-area rectangle for the real outline, so the two
+    # sides of the comparison are measured by one rule
+    from math import atan2, cos, sin, degrees
+    hullp = pts
+    bestbox = None
+    for i in range(len(hullp)):
+        ax, az = hullp[i]
+        bx, bz = hullp[(i + 1) % len(hullp)]
+        if ax == bx and az == bz:
+            continue
+        ang = atan2(bz - az, bx - ax)
+        c, sn = cos(-ang), sin(-ang)
+        us = [(q[0] * c - q[1] * sn, q[0] * sn + q[1] * c) for q in hullp]
+        u0 = min(u for u, v in us); u1 = max(u for u, v in us)
+        v0 = min(v for u, v in us); v1 = max(v for u, v in us)
+        area = (u1 - u0) * (v1 - v0)
+        if bestbox is None or area < bestbox[0]:
+            bestbox = (area, u1 - u0, v1 - v0, ang, (u0 + u1) / 2, (v0 + v1) / 2)
+    _, du, dv, ang, bu, bv = bestbox
+    if dv > du:
+        du, dv = dv, du
+        ang += math.pi / 2
+    # the BOX centre, not the mean of the vertices: the world is placed to the
+    # box, and a U-shaped building like the Louvre has its vertex mean well off
+    # its box centre — 67 m for the Louvre, which is not an error in the world
+    cb, sb = math.cos(ang if dv <= du else ang - math.pi / 2), math.sin(ang if dv <= du else ang - math.pi / 2)
+    cx = bu * math.cos(bestbox[3]) - bv * math.sin(bestbox[3])
+    cz = bu * math.sin(bestbox[3]) + bv * math.cos(bestbox[3])
+    brg = (math.degrees(math.atan2(math.cos(ang), math.sin(ang))) + 360) % 180
+    return {'x': cx, 'z': cz, 'span': du, 'wid': dv, 'bearing': brg,
+            'diag': math.sqrt(best[0]), 'n': len(pts)}
 
 
 def load(refresh=False):
@@ -148,6 +176,7 @@ def game_side():
 import './tools/headless.mjs';
 import { buildWorld } from './src/world.js';
 import { PLACES, place } from './src/paris_geo.js';
+import { FOOTPRINTS } from './src/paris_footprints.js';
 const scene = { children: [], add(...o) { this.children.push(...o); },
   remove() {}, traverse(f) { f(this); } };
 const w = buildWorld(scene, 'paris');
@@ -164,8 +193,13 @@ for (const id of Object.keys(PLACES)) {
   // (the Grand Palais famously carries no collider), so they measured zero and
   // the audit called them too small. Walk the meshes instead, take each one's
   // own extent from its geometry, and turn it by the group it hangs in.
+  // near its PLACE or near its real footprint centre: a monument fitted to its
+  // footprint stands on the latter, and searching only the former lost it
+  const fp = FOOTPRINTS[id];
   const groups = scene.children.filter((o) => o && o.position && Array.isArray(o.children)
-    && o.children.length && Math.hypot(o.position.x - p.x, o.position.z - p.z) < 70);
+    && o.children.length
+    && (Math.hypot(o.position.x - p.x, o.position.z - p.z) < 70
+      || (fp && Math.hypot(o.position.x - fp.x, o.position.z - fp.z) < 70)));
   const corners = [];
   const ext = (g2) => {
     const q = (g2 && g2.parameters) || {};
@@ -176,35 +210,65 @@ for (const id of Object.keys(PLACES)) {
     if (q.radius !== undefined) return [2 * q.radius, 2 * q.radius];
     return null;
   };
-  const walk = (o, ox, oz, rot) => {
-    const px = ox + (o.position ? o.position.x : 0) * Math.cos(rot)
-      + (o.position ? o.position.z : 0) * Math.sin(rot);
-    const pz = oz - (o.position ? o.position.x : 0) * Math.sin(rot)
-      + (o.position ? o.position.z : 0) * Math.cos(rot);
+  // scale counts: a group fitted to its footprint carries the stretch there,
+  // and a walker that ignores it measures the drawing rather than the building
+  const walk = (o, ox, oz, rot, kx, kz) => {
+    const lx = (o.position ? o.position.x : 0) * kx;
+    const lz = (o.position ? o.position.z : 0) * kz;
+    const px = ox + lx * Math.cos(rot) + lz * Math.sin(rot);
+    const pz = oz - lx * Math.sin(rot) + lz * Math.cos(rot);
     const r2 = rot + ((o.rotation && o.rotation.y) || 0);
+    const sx2 = kx * ((o.scale && o.scale.x) || 1);
+    const sz2 = kz * ((o.scale && o.scale.z) || 1);
     const e = o.geometry ? ext(o.geometry) : null;
     if (e) {
-      const hw = e[0] / 2, hd = e[1] / 2, c = Math.cos(r2), s2 = Math.sin(r2);
+      const hw = e[0] * sx2 / 2, hd = e[1] * sz2 / 2, c = Math.cos(r2), s2 = Math.sin(r2);
       for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
         corners.push([px + sx * hw * c + sz * hd * s2, pz - sx * hw * s2 + sz * hd * c]);
       }
     }
-    if (Array.isArray(o.children)) for (const c2 of o.children) walk(c2, px, pz, r2);
+    if (Array.isArray(o.children)) for (const c2 of o.children) walk(c2, px, pz, r2, sx2, sz2);
   };
-  for (const g2 of groups) walk(g2, 0, 0, 0);
-  if (corners.length < 2) { out[id] = { x: p.x, z: p.z, span: 0, bearing: null, n: 0 }; continue; }
-  let best = [0, null, null];
-  for (let i = 0; i < corners.length; i++) {
-    for (let j = i + 1; j < corners.length; j++) {
-      const d = Math.hypot(corners[i][0] - corners[j][0], corners[i][1] - corners[j][1]);
-      if (d > best[0]) best = [d, corners[i], corners[j]];
-    }
+  // start each walk in the GROUP's frame and descend into its children — do not
+  // hand the group to walk(), which would apply its own position a second time
+  // THE MONUMENT'S OWN GROUP, which is the biggest one standing there. Taking
+  // every group within 70 m swept in its outbuildings -- the Trocadero's
+  // cascade runs 340 m down the hill from the same point, and measured with it
+  // the palace read 339 m long at fifty degrees to itself.
+  if (!groups.length) { out[id] = { x: p.x, z: p.z, span: 0, bearing: null, n: 0 }; continue; }
+  const g2 = groups.reduce((a2, b2) => (b2.children.length > a2.children.length ? b2 : a2));
+  {
+    const rot = (g2.rotation && g2.rotation.y) || 0;
+    const kx = (g2.scale && g2.scale.x) || 1, kz = (g2.scale && g2.scale.z) || 1;
+    for (const c2 of g2.children) walk(c2, g2.position.x, g2.position.z, rot, kx, kz);
   }
+  if (corners.length < 2) { out[id] = { x: p.x, z: p.z, span: 0, bearing: null, n: 0 }; continue; }
+  // THE SMALLEST-AREA RECTANGLE, not the longest diagonal. A near-square
+  // building's longest span is a diagonal, and its bearing says nothing about
+  // which way the building faces -- judged that way the Pantheon and Sacre-Coeur
+  // read 56 and 37 degrees out when they had just been laid on their own
+  // footprints. Same rule the footprints themselves are made with.
+  let bA = null;
+  for (let i = 0; i < corners.length; i++) {
+    const a2 = corners[i], b2 = corners[(i + 1) % corners.length];
+    const ang = Math.atan2(b2[1] - a2[1], b2[0] - a2[0]);
+    const c = Math.cos(-ang), s2 = Math.sin(-ang);
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const q2 of corners) {
+      const u = q2[0] * c - q2[1] * s2, v = q2[0] * s2 + q2[1] * c;
+      if (u < u0) u0 = u; if (u > u1) u1 = u;
+      if (v < v0) v0 = v; if (v > v1) v1 = v;
+    }
+    const area = (u1 - u0) * (v1 - v0);
+    if (!bA || area < bA.area) bA = { area, ang, du: u1 - u0, dv: v1 - v0 };
+  }
+  let ln = bA.du, wd = bA.dv, ang2 = bA.ang;
+  if (wd > ln) { const t2 = ln; ln = wd; wd = t2; ang2 += Math.PI / 2; }
   const cx = corners.reduce((s3, q2) => s3 + q2[0], 0) / corners.length;
   const cz = corners.reduce((s3, q2) => s3 + q2[1], 0) / corners.length;
-  const brg = ((Math.atan2(best[2][0] - best[1][0], -(best[2][1] - best[1][1]))
-    * 180 / Math.PI) + 360) % 180;
-  out[id] = { x: cx, z: cz, span: best[0], bearing: brg, n: corners.length / 4 };
+  // the long side as a compass bearing, mod 180
+  const brg = ((Math.atan2(Math.cos(ang2), Math.sin(ang2)) * 180 / Math.PI) + 360) % 180;
+  out[id] = { x: cx, z: cz, span: ln, wid: wd, bearing: brg, n: corners.length / 4 };
 }
 console.log(JSON.stringify(out));
 '''
@@ -248,7 +312,10 @@ def main():
         dpos = math.hypot(m['x'] - g['x'], m['z'] - g['z'])
         dspan = g['span'] - m['span']
         dbear = None
-        if m['bearing'] is not None and g['bearing'] is not None and m['span'] > 25 and g['span'] > 25:
+        # a nearly-square building has no meaningful long axis: judge the angle
+        # only where the real footprint is half again as long as it is wide
+        elongated = m.get('wid', 0) > 0 and m['span'] / m['wid'] > 1.5
+        if m['bearing'] is not None and g['bearing'] is not None and elongated and m['span'] > 25:
             dbear = abs(m['bearing'] - g['bearing'])
             if dbear > 90:
                 dbear = 180 - dbear
