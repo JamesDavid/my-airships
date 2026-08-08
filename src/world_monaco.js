@@ -528,7 +528,22 @@ export function buildWorldMonaco(scene) {
              hx: (b.x - a.x) / seg, hz: (b.z - a.z) / seg };
   }
 
+  // THE ESCORT KEEPS ITS OWN CLOCK.
+  //
+  // `t` is skyTime() -- seconds since midnight UTC -- and it WRAPS. The boats'
+  // place along the lane is a pure function of it, so at the wrap they were
+  // flung from wherever 86400 s put them to wherever 0 s does: measured at
+  // 273,983 km/h for one frame, every night. check_monaco tested noon and four
+  // minutes to midnight and never looked at the one moment that breaks. The
+  // same wrap jerks the funnel smoke.
+  //
+  // Absolute sky-time is right for the clouds -- it is what lets them be in the
+  // same place whenever you arrive, and across cities. A launch running up and
+  // down a five-kilometre lane has no such duty, so she counts her own seconds
+  // and they only ever go forward.
+  let animT = 0;
   const tick = (dt, t, wind) => {
+    animT += dt;
     const wSpeed = Math.hypot(wind.x, wind.z);
     const wLen = wSpeed || 1;
     const wx = wind.x / wLen, wz = wind.z / wLen;
@@ -540,7 +555,7 @@ export function buildWorldMonaco(scene) {
     for (const b of escort) {
       const legLen = Math.max(1, LANE_LEN * b.userData.leg);   // metres, each way
       const mps = (knots + b.userData.trim) * KNOT;
-      const u = ((t * mps) / legLen + b.userData.ph) % 2;
+      const u = ((animT * mps) / legLen + b.userData.ph) % 2;
       const out = u < 1;
       const p = alongLane((out ? u : 2 - u) * legLen);          // out, then back
       b.position.set(p.x, 0.6, p.z);
@@ -550,10 +565,16 @@ export function buildWorldMonaco(scene) {
       b.rotation.z = -rel * Math.min(0.22, wSpeed * 0.03);
     }
     puffs.forEach((p, i) => {
-      const u = ((t * 0.13 + i / 7) % 1);
+      const u = ((animT * 0.13 + i / 7) % 1);
       p.position.set(smokeBase.x + wx * u * 55, smokeBase.y + u * 20, smokeBase.z + wz * u * 55);
       p.scale.setScalar(0.9 + u * 4.5);
       p.material.opacity = 0.34 * (1 - u);
+      // published as a plain number so a check can ask how visible this puff
+      // is at the moment it recycles. The headless three is a stub and cannot
+      // report a material's opacity; without this, "was it visible when it
+      // jumped?" is a question the harness cannot answer, and the honest
+      // measurement quietly turns into a guess.
+      p.userData.alpha = 0.34 * (1 - u);
     });
   };
 

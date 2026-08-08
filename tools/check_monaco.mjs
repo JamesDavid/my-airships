@@ -25,7 +25,23 @@ console.log('');
 // Every top-level object in the scene, watched across a frame. Whatever the
 // tick moves shows up here whether or not this file knows its name.
 const watched = scene.children.filter((o) => o && o.position);
-const snap = () => watched.map((o) => ({ x: o.position.x, y: o.position.y, z: o.position.z }));
+// Position AND whether you could see it there. Smoke is recycled by fading to
+// nothing at the end of its drift and reappearing at the funnel, which is a
+// teleport in the arithmetic and no such thing to a pilot. So a jump is only
+// judged if the thing was visible at BOTH ends of it. This is a rule about
+// what can be seen, not about what this file happens to be able to name --
+// anything visible on the water is still judged, whatever it is.
+const seen = (o) => {
+  if (o.visible === false) return false;
+  // a published alpha if the object has one, else a material's own opacity
+  const a = o.userData && o.userData.alpha;
+  if (typeof a === 'number') return a >= 0.02;
+  const m = o.material;
+  if (m && typeof m.opacity === 'number' && m.opacity < 0.02) return false;
+  return true;
+};
+const snap = () => watched.map((o) => ({ x: o.position.x, y: o.position.y, z: o.position.z,
+  seen: seen(o) }));
 
 const wind = { x: 2.6, y: 0, z: 1.6 };
 const DT = 1 / 30;
@@ -33,13 +49,22 @@ const DT = 1 / 30;
 // seconds since midnight UTC), not a delta, so t must advance by dt.
 let fastest = 0, fastestI = -1;
 const speeds = new Array(watched.length).fill(0);
-for (let i = 0; i < 600; i++) {
-  const t = 43200 + i * DT;                       // noon, and on from there
-  world.tick(DT, t, wind);
+// ACROSS MIDNIGHT, because that is the one moment the clock does something
+// different. skyTime() is seconds since midnight UTC and it wraps; anything
+// whose place is a pure function of it is flung the length of its run in a
+// single frame when it does. The escort was doing 273,983 km/h there, every
+// night, while this file was testing noon and four minutes to midnight and
+// reporting all clear.
+const clock = (t) => ((t % 86400) + 86400) % 86400;
+for (let i = 0; i < 900; i++) {
+  const t = 86390 + i * DT;                       // 900 frames at 1/30 s = 30 s,
+                                                  // so 86390 -> 86420: through it
+  world.tick(DT, clock(t), wind);
   const a = snap();
-  world.tick(DT, t + DT, wind);
+  world.tick(DT, clock(t + DT), wind);
   const b = snap();
   for (let k = 0; k < watched.length; k++) {
+    if (!a[k].seen || !b[k].seen) continue;        // it moved where no one could see it
     const v = Math.hypot(b[k].x - a[k].x, b[k].y - a[k].y, b[k].z - a[k].z) / DT;
     if (v > speeds[k]) speeds[k] = v;
     if (v > fastest) { fastest = v; fastestI = k; }
@@ -55,15 +80,31 @@ const nameOf = (o) => {
 const movers = [];
 for (let k = 0; k < watched.length; k++) if (speeds[k] > 0.01) movers.push([k, speeds[k]]);
 movers.sort((a, b) => b[1] - a[1]);
+// NOTHING IS EXEMPT BY ITS NAME.
+//
+// This used to read `const bad = isBoat && kmh > 16`, so only an object this
+// file had already recognised as a boat could fail. Everything else -- the
+// funnel smoke at 6,293 km/h -- was printed with an "ok" beside it and the
+// run declared all clear, four times over, while a pilot kept reporting fast
+// things on the water. A check that excuses whatever it cannot name will
+// always pass, and it is worse than no check because it reads like one.
+//
+// So: everything near the water is judged. Smoke is allowed to outrun a hull,
+// because the wind carries it -- but not to outrun the wind by a hundredfold,
+// which is a teleport and not a drift.
 for (const [k, v] of movers.slice(0, 12)) {
   const kmh = v * 3.6;
-  const isBoat = nameOf(watched[k]) === 'escort boat';
-  // Smoke is carried by the wind and may legitimately outrun a boat; a hull
-  // may not. Eight knots is 14.8 km/h, and the code aims at five to seven.
-  const bad = isBoat && kmh > 16;
+  const what = nameOf(watched[k]);
+  const isBoat = what === 'escort boat';
+  // Eight knots is 14.8 km/h, and the code aims at five to seven. Smoke gets
+  // ten times the wind, which is generous, and nothing gets a teleport.
+  const windKmh = Math.hypot(wind.x, wind.z) * 3.6;
+  const limit = isBoat ? 16 : Math.max(40, windKmh * 10);
+  const bad = kmh > limit;
   if (bad) fails++;
-  console.log('   %s  %s  %s km/h', bad ? 'FAIL' : 'ok  ',
-    nameOf(watched[k]).padEnd(12), kmh.toFixed(1).padStart(7));
+  console.log('   %s  %s  %s km/h%s', bad ? 'FAIL' : 'ok  ',
+    what.padEnd(12), kmh.toFixed(1).padStart(7),
+    bad ? '   — over its limit of ' + limit.toFixed(0) : '');
 }
 if (!movers.length) { console.log('   FAIL nothing in Monaco moves at all'); fails++; }
 
