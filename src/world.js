@@ -957,6 +957,12 @@ export function buildWorld(scene) {
   // ---------- landmarks ----------
   const lm = addLandmarks(scene);
   buildings.push(...lm.lmColliders);
+  // Kept apart as well as pushed, so a measurement can ask for a landmark's own
+  // stone. tools/audit_landmarks.py first took "every collider within 320 m
+  // that is tall or large", which collects the neighbourhood: every landmark
+  // came out about 600 m across, which is twice the search radius, and the
+  // audit condemned all eighteen of them. A monument is its own pieces.
+  const landmarkStone = lm.lmColliders;
   // the places the memoir names, and the 1900 maps put on the ground
   const bookPlaces = addBookPlaces(scene, buildings);
 
@@ -1223,6 +1229,7 @@ export function buildWorld(scene) {
     // the ground is no longer a plane: the ship, the guide rope and every
     // spawn measure their height from here
     groundAt: parisGround,
+    landmarkStone,                   // the monuments' own colliders, for measuring
     riverY: RIVER_Y,                 // the one level the Seine is drawn at
     flags: [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag],
     buildings, clouds, riverPts, trees,
