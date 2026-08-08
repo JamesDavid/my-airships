@@ -54,7 +54,7 @@ export const SHIPS = {
     keel: { type: 'basket-long', length: 4, drop: 11 },
     prop: 'stern', rudderScale: 0.8,
     physics: {
-      thrust: 3.2, dragQ: 0.05, dragL: 0.05, yawRate: 0.5, pitchMax: 0.3,
+      thrust: 3.2, dragQ: 0.05, dragL: 0.05, yawRate: 0.2, pitchMax: 0.3,
       gasLift: 3.15, weightBase: 1.5, bagLift: 0.15, bags: 8, fuel: 1580, ventRate: 2.5,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.08, speedPressure: 0,
       foldResist: 0.05, partitions: false,   // the pocket-knife fold
@@ -70,7 +70,7 @@ export const SHIPS = {
     keel: { type: 'basket-long', length: 4, drop: 10 },
     prop: 'stern', rudderScale: 0.8,
     physics: {
-      thrust: 3.2, dragQ: 0.05, dragL: 0.05, yawRate: 0.5, pitchMax: 0.3,
+      thrust: 3.2, dragQ: 0.05, dragL: 0.05, yawRate: 0.2, pitchMax: 0.3,
       gasLift: 3.2, weightBase: 1.52, bagLift: 0.15, bags: 9, fuel: 1580, ventRate: 2.5,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.1, speedPressure: 0,
       foldResist: 0.25, partitions: false,
@@ -86,7 +86,7 @@ export const SHIPS = {
     keel: { type: 'pole', length: 10, drop: 6.5 },
     prop: 'stern', rudderScale: 0.9,
     physics: {
-      thrust: 3.4, dragQ: 0.07, dragL: 0.06, yawRate: 0.42, pitchMax: 0.3,
+      thrust: 3.4, dragQ: 0.07, dragL: 0.06, yawRate: 0.2, pitchMax: 0.3,
       gasLift: 3.2, weightBase: 1.6, bagLift: 0.14, bags: 10, fuel: 1810, ventRate: 2.8,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.2, speedPressure: 0,
       foldResist: 1, partitions: true,
@@ -102,7 +102,7 @@ export const SHIPS = {
     keel: { type: 'saddle', length: 14, drop: 7.5 },
     prop: 'bow', rudderScale: 0.9,
     physics: {
-      thrust: 4.4, dragQ: 0.045, dragL: 0.05, yawRate: 0.6, pitchMax: 0.34,
+      thrust: 4.4, dragQ: 0.045, dragL: 0.05, yawRate: 0.22, pitchMax: 0.34,
       gasLift: 3.25, weightBase: 1.55, bagLift: 0.15, bags: 8, fuel: 1270, ventRate: 2.8,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.12, speedPressure: 0,
       foldResist: 0.45, partitions: false,
@@ -119,7 +119,7 @@ export const SHIPS = {
     keel: { type: 'truss', length: 18, drop: 8.5 },
     prop: 'stern', rudderScale: 0.95,
     physics: {
-      thrust: 5.0, dragQ: 0.042, dragL: 0.05, yawRate: 0.55, pitchMax: 0.32,
+      thrust: 5.0, dragQ: 0.042, dragL: 0.05, yawRate: 0.25, pitchMax: 0.32,
       gasLift: 3.25, weightBase: 1.55, bagLift: 0.15, bags: 9, fuel: 1150, ventRate: 3.2,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.06, speedPressure: 0,
       foldResist: 0.4, partitions: false,
@@ -135,7 +135,7 @@ export const SHIPS = {
     keel: { type: 'truss', length: 18, drop: 8.5 },
     prop: 'stern', rudderScale: 1.0,
     physics: {
-      thrust: 5.2, dragQ: 0.040, dragL: 0.05, yawRate: 0.55, pitchMax: 0.32,
+      thrust: 5.2, dragQ: 0.040, dragL: 0.05, yawRate: 0.25, pitchMax: 0.32,
       gasLift: 3.25, weightBase: 1.55, bagLift: 0.15, bags: 10, fuel: 1100, ventRate: 3.0,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.13, speedPressure: 0,
       foldResist: 0.45, partitions: false,
@@ -151,7 +151,7 @@ export const SHIPS = {
     keel: { type: 'truss', length: 22, drop: 8.0 },
     prop: 'both', rudderScale: 0.9,
     physics: {
-      thrust: 11.0, dragQ: 0.032, dragL: 0.05, yawRate: 0.38, pitchMax: 0.26,
+      thrust: 11.0, dragQ: 0.032, dragL: 0.05, yawRate: 0.2, pitchMax: 0.26,
       gasLift: 3.4, weightBase: 1.70, bagLift: 0.15, bags: 8, fuel: 670, ventRate: 3.5,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 1.25, speedPressure: 0.10,
       foldResist: 0.7, partitions: false,
@@ -167,7 +167,7 @@ export const SHIPS = {
     keel: { type: 'minimal', length: 5.5, drop: 4.2 },
     prop: 'stern', rudderScale: 0.8,
     physics: {
-      thrust: 2.7, dragQ: 0.055, dragL: 0.06, yawRate: 0.85, pitchMax: 0.35,
+      thrust: 2.7, dragQ: 0.055, dragL: 0.06, yawRate: 0.27, pitchMax: 0.35,
       gasLift: 3.1, weightBase: 1.62, bagLift: 0.12, bags: 8, fuel: 1820, ventRate: 2.2,
       ropeLen: 40, ropeLift: 0.45, pressureLimit: 1.18, speedPressure: 0,
       foldResist: 1.0, partitions: true,
@@ -183,7 +183,7 @@ export const SHIPS = {
     keel: { type: 'double', length: 20, drop: 8.5 },
     prop: 'stern', rudderScale: 1.1,
     physics: {
-      thrust: 5.2, dragQ: 0.06, dragL: 0.06, yawRate: 0.3, pitchMax: 0.24,
+      thrust: 5.2, dragQ: 0.06, dragL: 0.06, yawRate: 0.17, pitchMax: 0.24,
       gasLift: 3.5, weightBase: 1.6, bagLift: 0.12, bags: 14, fuel: 1350, ventRate: 3.2,
       ropeLen: 70, ropeLift: 0.55, pressureLimit: 1.18, speedPressure: 0,
       foldResist: 0.8, partitions: true,
@@ -200,7 +200,7 @@ export const SHIPS = {
     keel: { type: 'truss', length: 18, drop: 8.5 },
     prop: 'stern', rudderScale: 1.0,
     physics: {
-      thrust: 5.0, dragQ: 0.040, dragL: 0.05, yawRate: 0.5, pitchMax: 0.3,
+      thrust: 5.0, dragQ: 0.040, dragL: 0.05, yawRate: 0.22, pitchMax: 0.3,
       gasLift: 3.25, weightBase: 1.55, bagLift: 0.15, bags: 10, fuel: 900, ventRate: 3.0,
       ropeLen: 60, ropeLift: 0.5, pressureLimit: 2.0, speedPressure: 0,
       foldResist: 1.0, partitions: true,   // AI-friendly: no death spirals

@@ -144,7 +144,22 @@ export const TRACKS = [
     })(),
   },
   {
-    id: 'basin', location: 'stlouis', laps: 2, v: 3,
+    // v4: RE-CUT FOR A SHIP THAT TURNS LIKE AN AIRSHIP.
+    //
+    // The order was wheel, Pike, Plaza, Basin, Festival Hall, lagoon — a
+    // slalom, and it was flyable only because the No. 7 used to pivot inside
+    // her own length. Once she turned in five lengths (168 m at racing speed)
+    // it could not be flown at all: the run from the Basin to Festival Hall is
+    // 200 m and ends in a 112 degree corner, which needs 250 m of approach to
+    // set up, and the last corner at the wheel is 148 degrees — very nearly a
+    // reversal.
+    //
+    // Same six places, visited in the order that suits a turning circle. Found
+    // by working every cyclic order of them and taking the one whose tightest
+    // leg has the most room to spare: every corner now has at least 159 m in
+    // hand. The rings are four metres wider too, because a ship arriving off a
+    // long sweep does not arrive as precisely as one that can pivot.
+    id: 'basin', location: 'stlouis', laps: 2, v: 4,
     // v3: re-cut onto the surveyed fairground. The whole of St. Louis was
     // re-georeferenced off the 1904 ground plan (docs/STLOUIS_PLAT.md steps
     // 3–5), so every one of these gates moved — the old ones now stand over
@@ -152,12 +167,12 @@ export const TRACKS = [
     name: 'The Basin Sprint',
     sub: 'the wheel, The Pike’s midway, the lagoon avenue — 2 laps',
     gates: [
-      { x: 426, y: 40, z: 660, r: 15 },   // skirt the great wheel's rim
-      { x: -370, y: 14, z: 543, r: 13 },  // down The Pike's midway canyon
-      { x: -330, y: 16, z: 60, r: 16 },   // the Plaza of St. Louis
-      { x: 140, y: 16, z: 0, r: 14 },     // skim the Grand Basin (mind the water!)
-      { x: 316, y: 50, z: 95, r: 18 },    // round Festival Hall, up on its terrace
-      { x: 35, y: 18, z: 330, r: 15 },    // up the lagoon avenue
+      { x: 426, y: 40, z: 660, r: 19 },   // skirt the great wheel's rim
+      { x: 316, y: 50, z: 95, r: 22 },    // round Festival Hall, up on its terrace
+      { x: -370, y: 14, z: 543, r: 17 },  // down The Pike's midway canyon
+      { x: -330, y: 16, z: 60, r: 20 },   // the Plaza of St. Louis
+      { x: 140, y: 16, z: 0, r: 18 },     // skim the Grand Basin (mind the water!)
+      { x: 35, y: 18, z: 330, r: 19 },    // up the lagoon avenue
     ],
   },
 ];

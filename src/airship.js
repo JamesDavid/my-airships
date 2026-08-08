@@ -1779,11 +1779,39 @@ export class Airship {
 
     // yaw — the rudder works on the airflow over the tail: sternway REVERSES
     // the helm, and only a stern propeller's slipstream steers you at rest
+    // AN AIRSHIP TURNS IN HULL LENGTHS, NOT IN DEGREES A SECOND.
+    //
+    // This used to add a fixed yaw acceleration and let an exponential decay
+    // find the balance, which gave the No. 6 a steady turn of 24 deg/s and a
+    // radius of 21 m — two thirds of her own 33 m length. That is not a turn,
+    // it is a pivot: the hull would have to slide sideways through the air to
+    // do it. Measured across the fleet, every ship but the racer turned inside
+    // its own length.
+    //
+    // What resists the turn is the envelope's side area and the mass of air it
+    // has to shove aside, and what drives it is one small rudder in the flow
+    // over the tail. BOTH scale with that flow, so the steady turning RADIUS is
+    // a property of the hull and hardly of the speed at all — which is why a
+    // real dirigible's turning circle is quoted in hull lengths, three to five
+    // of them for a small non-rigid. He describes it himself at Cap Martin:
+    // "the air-ship swung round like a boat."
+    //
+    // So P.yawRate is now turns-per-hull-length: 0.25 means a radius of four
+    // lengths. The rudder commands a rate, the hull takes several seconds to
+    // settle into it, and sternway still reverses the helm because `flow` goes
+    // negative with the ship.
+    // The slipstream over the tail belongs to the motor that makes it. A flat
+    // four metres a second was most of the No. 1's whole airflow — she has a
+    // 3.5 hp Dion-Bouton — and it turned her inside three lengths while the
+    // racer with three times the engine got no more out of it.
     const wash = this.motorOn && (this.spec.prop === 'stern' || this.spec.prop === 'both')
-      ? this.throttle * this.motorHealth * 4 : 0;
-    const steerAuth = clamp((vf + wash) / 9, -1, 1) * (1 - this.fold * 0.55);
-    this.yawVel += input.rudder * P.yawRate * steerAuth * dt * 1.1;
-    this.yawVel *= Math.pow(0.25, dt);
+      ? this.throttle * this.motorHealth * Math.min(4, P.thrust * 0.55) : 0;
+    const flow = vf + wash;                        // the airflow over the tail
+    const hull = this.spec.envelope.length || 30;
+    const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55);
+    // she leans into it over about three seconds — a hull this size does not
+    // change its mind quickly, and neither does the air around it
+    this.yawVel += (want - this.yawVel) * Math.min(1, dt / 3);
     this.yaw += this.yawVel * dt;
 
     // broadphase: buildings near the ship, for the rope's rooftop draping and
