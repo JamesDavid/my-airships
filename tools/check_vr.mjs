@@ -253,48 +253,75 @@ if (renderer.shadowMap.enabled) {
   //
   // "In vr small pilots cant see over the basket." The rim stands a metre over
   // the floor because that is where it stood, so what moves is a loose slatted
-  // board laid ON the weave — raised a notch a press by two buttons on the
-  // starboard boards. The whole point is that ONLY the inside changes: the
-  // basket, its walls and its rim must not move, or the ship grows to fit the
-  // man in it and every outside view is a lie.
+  // board laid ON the weave, snapped between notches by two buttons on the
+  // starboard boards. Each notch is cut for a pilot's HEIGHT, so it is judged
+  // against that pilot and not against a number: a rail that reaches a
+  // six-footer's hip is over a three-footer's head, and one that clears a
+  // three-footer is at a six-footer's knee.
+  //
+  // Three things have to hold at every rung, and only the first is obvious:
+  //   the pilot it is cut for must see over the rim;
+  //   the rim must still reach his hip, or it is not a rail;
+  //   and the BASKET must not move at all, or the ship is growing to fit the
+  //   man in it and every view from outside is a lie.
   {
-    const { Airship, DECK_LIFT_MAX } = await import('../src/airship.js');
+    const { Airship, DECK_NOTCHES } = await import('../src/airship.js');
     const { SHIPS } = await import('../src/ships.js');
     const noScene = { add() {}, remove() {} };
     const env2 = { groundAt: () => 0, buildings: [], underCloud: false, inBois: false };
     const nw2 = { x: 0, y: 0, z: 0 };
-    let worstBasket = 0, lift = 0, rimLeft = 9, n2 = 0, hasButtons = true;
+    const EYE = 0.93, HIP = 0.45;
+    let worstBasket = 0, n2 = 0, hasButtons = true, bad = null;
+    let ladderOk = true;
+    for (let i = 1; i < DECK_NOTCHES.length; i++) {
+      if (DECK_NOTCHES[i].lift < DECK_NOTCHES[i - 1].lift
+        || DECK_NOTCHES[i].stature > DECK_NOTCHES[i - 1].stature) ladderOk = false;
+    }
     for (const id of Object.keys(SHIPS)) {
       const sh = new Airship(noScene, SHIPS[id]);
       if (!sh.deckBoard) continue;                 // a saddle ship has no basket
       n2++;
+      if (!sh.pullCords.some((c) => c.id === 'push_deckup')
+        || !sh.pullCords.some((c) => c.id === 'push_deckdn')) hasButtons = false;
       const step = () => sh.update(1 / 30,
         { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 }, nw2, env2);
       sh.deckLift = 0; step();
-      const lo = sh.deckPoint.position.y, bLo = sh.basketMesh.position.y;
-      sh.deckLift = DECK_LIFT_MAX; step();
-      const hi = sh.deckPoint.position.y, bHi = sh.basketMesh.position.y;
-      worstBasket = Math.max(worstBasket, Math.abs(bHi - bLo));
-      lift = hi - lo;
-      rimLeft = Math.min(rimLeft, -sh.spec.keel.drop + 0.05 - hi);
-      if (!sh.pullCords.some((c) => c.id === 'push_deckup')
-        || !sh.pullCords.some((c) => c.id === 'push_deckdn')) hasButtons = false;
+      const bare = sh.deckPoint.position.y, basket0 = sh.basketMesh.position.y;
+      const rimY = -sh.spec.keel.drop + 0.05;
+      for (const notch of DECK_NOTCHES) {
+        sh.deckLift = notch.lift; step();
+        const deck = sh.deckPoint.position.y;
+        worstBasket = Math.max(worstBasket, Math.abs(sh.basketMesh.position.y - basket0));
+        const rimOver = rimY - deck;               // rail height over his feet
+        const eyeOver = notch.stature * EYE - rimOver;
+        if (Math.abs((deck - bare) - notch.lift) > 0.002) {
+          bad = bad || id + ' ' + notch.label + ': the board does not move to its notch';
+        }
+        if (eyeOver < 0.10) {
+          bad = bad || id + ' ' + notch.label + ': his eye is only ' + eyeOver.toFixed(2)
+            + ' m over the rim';
+        }
+        if (rimOver < notch.stature * HIP) {
+          bad = bad || id + ' ' + notch.label + ': the rim is ' + rimOver.toFixed(2)
+            + ' m, below the hip of a ' + notch.label + ' pilot';
+        }
+      }
     }
-    console.log('   %d baskets: the deck rises %s m, the basket moves %s m,'
-      + ' and %s m of rim is left over the raised deck',
-      n2, lift.toFixed(2), worstBasket.toFixed(3), rimLeft.toFixed(2));
+    const last = DECK_NOTCHES[DECK_NOTCHES.length - 1];
+    console.log('   %d baskets, %d notches from %s to %s; deepest lifts %s m and leaves %s m of rim',
+      n2, DECK_NOTCHES.length, DECK_NOTCHES[0].label, last.label, last.lift.toFixed(2),
+      (1.05 - last.lift).toFixed(2));
     if (!n2) { console.log('   FAIL no ship has a duckboard at all'); fails++; }
     else if (!hasButtons) {
       console.log('   FAIL a basket has no PLANCHER buttons to work it'); fails++;
-    } else if (lift < 0.2) {
-      console.log('   FAIL the board hardly lifts the pilot at all'); fails++;
+    } else if (!ladderOk) {
+      console.log('   FAIL the notches do not run tallest pilot to shortest'); fails++;
     } else if (worstBasket > 0.001) {
-      console.log('   FAIL the BASKET moves — the ship is growing to fit the pilot');
-      fails++;
-    } else if (rimLeft < 0.55) {
-      console.log('   FAIL the rim is below the pilot hip at full lift'); fails++;
+      console.log('   FAIL the BASKET moves — the ship is growing to fit the pilot'); fails++;
+    } else if (bad) {
+      console.log('   FAIL ' + bad); fails++;
     } else {
-      console.log('   ok   only the inside of the basket changes, and the rim is still a rail');
+      console.log('   ok   every notch clears its own pilot’s eye and still reaches his hip');
     }
   }
 

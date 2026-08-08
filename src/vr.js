@@ -15,7 +15,7 @@
 // browser reports a headset; on a desktop or a phone nothing here runs at all,
 // beyond one feature test at boot.
 import * as THREE from 'three';
-import { DECK_LIFT_MAX, DECK_LIFT_STEP } from './airship.js';
+import { DECK_NOTCHES } from './airship.js';
 
 // ---------------------------------------------------------------- the seat
 // The XR camera's pose comes from the headset and is expressed in the local
@@ -852,10 +852,15 @@ export function pollVR(ship) {
     // PLANCHER: a notch a press, and the ship remembers it. Handled here and
     // not through VR_ACTIONS because it is the ship's own furniture — nothing
     // outside the basket knows or needs to know that the duckboard has moved.
+    // PLANCHER: the board SNAPS between notches, one to a press, and each notch
+    // is a pilot's height rather than a number of centimetres. Up raises the
+    // floor, which is to say it walks DOWN the ladder toward the shorter pilot.
     else if (ship && (sawPush === 'deckup' || sawPush === 'deckdn')) {
-      const d = sawPush === 'deckup' ? DECK_LIFT_STEP : -DECK_LIFT_STEP;
-      ship.deckLift = Math.max(0, Math.min(DECK_LIFT_MAX, (ship.deckLift || 0) + d));
-      try { localStorage.setItem('myairships_deck', String(ship.deckLift)); } catch { /* private mode */ }
+      const step = sawPush === 'deckup' ? 1 : -1;
+      ship.deckNotch = Math.max(0, Math.min(DECK_NOTCHES.length - 1,
+        (ship.deckNotch || 0) + step));
+      ship.deckLift = DECK_NOTCHES[ship.deckNotch].lift;
+      try { localStorage.setItem('myairships_deck', String(ship.deckNotch)); } catch { /* private mode */ }
     }
   }
   pushEdge = sawPush;

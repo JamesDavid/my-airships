@@ -22,11 +22,44 @@ const VANE = 0.35;
 // a third of the keel ahead of her middle and so pulls her head round.
 const ROPE_VANE = 0.6;
 
-// How far the duckboard can be raised off the basket floor, and by how much a
-// press. At the top the rim still stands 0.7 m over the pilot's feet — hip high
-// on a small pilot, which is a rail and not a trip hazard.
-export const DECK_LIFT_MAX = 0.34;
-export const DECK_LIFT_STEP = 0.085;
+/**
+ * THE PLANCHER NOTCHES, by the pilot each one suits.
+ *
+ * A floor is not a slider — you set it once, for your own height, and forget
+ * it. So the buttons walk a ladder with a name against every rung.
+ *
+ * The rim stands 1.05 m over the bare floor, and a six-footer's eye is 1.70 m
+ * up (eye height is about 93% of stature), so he looks over it by 0.65 m. Each
+ * notch is the lift that gives a shorter pilot the SAME 0.65 m — which works
+ * exactly down to four foot six.
+ *
+ * Below that the basket itself runs out: a three-footer would need 0.85 m, and
+ * a duckboard 0.85 m up in a basket 1.1 m deep leaves 0.20 m of rim, which is
+ * an ankle rail and not a rail at all. So the last two rungs are as high as the
+ * basket allows — 0.49 m of rim left, which is above the waist of a three-foot
+ * pilot — and they still put his eye 0.38 m clear of it. Said plainly here
+ * rather than pretended away: the shortest pilots get a good view, not the
+ * same view.
+ *
+ * The last two rungs were cut back 3 cm from what the arithmetic wanted,
+ * because the baskets are not all the same depth and the No. 3's is the
+ * shallowest: at 0.50 m her rim came 9 mm under the hip of the four-foot pilot
+ * that notch is cut for. The ladder has to be safe in the tightest basket, not
+ * the nominal one.
+ *
+ * 5 ft is in the ladder though it was not asked for: with 5 ft 6 and 4 ft 6
+ * both there it is the obvious gap, and a ladder with a hole in it is one the
+ * pilot has to think about.
+ */
+export const DECK_NOTCHES = [
+  { label: '6 ft',   stature: 1.83, lift: 0.00 },
+  { label: '5 ft 6', stature: 1.68, lift: 0.14 },
+  { label: '5 ft',   stature: 1.52, lift: 0.28 },
+  { label: '4 ft 6', stature: 1.37, lift: 0.42 },
+  { label: '4 ft',   stature: 1.22, lift: 0.47 },
+  { label: '3 ft',   stature: 0.91, lift: 0.56 },
+];
+export const DECK_LIFT_MAX = DECK_NOTCHES[DECK_NOTCHES.length - 1].lift;
 
 // ------------------------------------------------------- the pitch pendulum
 /**
@@ -653,14 +686,37 @@ export class Airship {
         });
         placard(this.pitchGroup, 'PLANCHER', bx + 0.30, -drop - 0.40, 0.425,
           Math.PI, 0.155);
+
+        // A SCALE, so you can see which notch you are on without counting
+        // presses. Six ticks up the wall and a brass slider against them —
+        // an instrument rather than a readout, which is what everything else
+        // in this basket is. It is the one thing a set of discrete notches
+        // needs and a slider did not.
+        const tickM = new THREE.MeshLambertMaterial({ color: 0x6f5a3a });
+        const SCX = bx + 0.30 + 0.145, SC0 = -drop - 0.44, SCH = 0.24;
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, SCH, 5), tickM);
+        rod.position.set(SCX, SC0 + SCH / 2, 0.392);
+        this.pitchGroup.add(rod);
+        DECK_NOTCHES.forEach((_n, i) => {
+          const t = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.006, 0.006), tickM);
+          t.position.set(SCX, SC0 + (i / (DECK_NOTCHES.length - 1)) * SCH, 0.392);
+          this.pitchGroup.add(t);
+        });
+        const slide = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.014, 0.014),
+          new THREE.MeshPhongMaterial({ color: 0xc9a437, shininess: 90 }));
+        this.pitchGroup.add(slide);
+        this.deckPointer = slide;
+        this.deckScale = { x: SCX, y0: SC0, h: SCH, z: 0.392 };
       }
       this.deckPointRest = cy - H / 2 + T;
       // Remembered: a pilot's height does not change between ships, and being
       // made to find the buttons again on every one of them is the fault the
-      // buttons were added to fix.
+      // buttons were added to fix. The NOTCH is stored, not the height, so a
+      // ladder that is ever re-cut carries a pilot's choice with it.
       let saved = 0;
-      try { saved = parseFloat(localStorage.getItem('myairships_deck')) || 0; } catch { saved = 0; }
-      this.deckLift = Math.max(0, Math.min(DECK_LIFT_MAX, saved));
+      try { saved = parseInt(localStorage.getItem('myairships_deck'), 10) || 0; } catch { saved = 0; }
+      this.deckNotch = Math.max(0, Math.min(DECK_NOTCHES.length - 1, saved));
+      this.deckLift = DECK_NOTCHES[this.deckNotch].lift;
       // ...and the box the weave encloses, published so a check can ask what
       // has been run through the cabin rather than working the numbers out
       // again for itself and testing its own copy of them.
@@ -1724,6 +1780,13 @@ export class Airship {
     if (this.deckBoard) {
       this.deckBoard.position.y = this.deckBoardRest + this.deckLift;
       if (this.deckPoint) this.deckPoint.position.y = this.deckPointRest + this.deckLift;
+      // the slider stands against the notch she is set to — UP the scale as the
+      // floor comes up, which is down the ladder toward the shorter pilot
+      if (this.deckPointer && this.deckScale) {
+        const f = (this.deckNotch || 0) / (DECK_NOTCHES.length - 1);
+        this.deckPointer.position.set(this.deckScale.x,
+          this.deckScale.y0 + f * this.deckScale.h, this.deckScale.z);
+      }
     }
     this.rudderInput = input.rudder;
     // THE WEIGHT IS HAULED, NOT TELEPORTED. "By means of lighter cords each of
