@@ -862,6 +862,53 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('THE CALM AIR IS ON THE GROUND, NOT AT SEA LEVEL');
+  {
+    // "Fly WEST, and fly LOW — the wind is thinner near the ground" is the whole
+    // instruction of scenario II, and for a long time Paris would not keep it.
+    // windAt() took the gradient from datum, so the calm bottom of it lay
+    // INSIDE the hills: over the Passy plateau the flight home crosses, a pilot
+    // holding a steady height above the roofs felt the wind RISE as he flew,
+    // and over Montmartre the streets blew at the full strength of the sky.
+    // Two pilots reported the same scenario impossible (#97, #100).
+    const { windAt: wa } = await import('../src/world.js');
+    const W = { x: 7, y: 0, z: 0 };
+    const mag = (y, g) => { const v = wa(W, y, g); return Math.hypot(v.x, v.z); };
+    const t3 = placeLegacy('trocadero'), e3 = placeLegacy('eiffel');
+    const ux3 = (e3.x - t3.x), uz3 = (e3.z - t3.z);
+    const L3 = Math.hypot(ux3, uz3) || 1;
+
+    // 1. the same height above the ground is the same wind, wherever you are
+    let worst = 0, at = '';
+    for (let a = 300; a >= -700; a -= 50) {
+      const x = t3.x + (ux3 / L3) * a, z = t3.z + (uz3 / L3) * a;
+      const g = world.groundAt(x, z);
+      const d = Math.abs(mag(g + 40, g) - mag(40, 0));
+      if (d > worst) { worst = d; at = a + ' m along the line, ground ' + g.toFixed(0) + ' m'; }
+    }
+    console.log('   flying home 40 m over the roofs, the wind varies by %s m/s (%s)',
+      worst.toFixed(2), worst > 0.05 ? at : 'flat all the way');
+    if (worst > 0.05) {
+      console.log('   FAIL the gradient is pinned to the sea, so the hills blow harder');
+      fails++;
+    } else {
+      console.log('   ok   a steady height over the roofs is a steady wind');
+    }
+
+    // 2. and going lower still pays, even standing on a hill
+    const gP = world.groundAt(t3.x - (ux3 / L3) * 400, t3.z - (uz3 / L3) * 400);
+    const low = mag(gP + 15, gP), high = mag(gP + 120, gP);
+    console.log('   over Passy (ground %s m): %s m/s at 15 m up, %s m/s at 120 m',
+      gP.toFixed(0), low.toFixed(2), high.toFixed(2));
+    if (low > high * 0.75) {
+      console.log('   FAIL there is no relief to be had by going down');
+      fails++;
+    } else {
+      console.log('   ok   the brief is telling the truth — down is calmer');
+    }
+  }
+
+  console.log('');
   console.log('NO SCENARIO TELLS A WATER SHIP TO SPEND ITS SAND');
   {
     const src2 = await (await import('node:fs/promises')).readFile('src/scenarios.js', 'utf8');

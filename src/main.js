@@ -3376,7 +3376,7 @@ function updateHUD() {
   el('alt').textContent = Math.max(0, Math.round(ship.pos.y - ship.spec.keel.drop - 1));
   el('spd').textContent = Math.round(ship.vel.length() * 3.6);
   el('thr').textContent = Math.round(ship.throttle * 100);
-  const w = windAt(wind, ship.pos.y);
+  const w = windAt(wind, ship.pos.y, ship.groundHere || 0);
   // compass name of where the wind is FROM, at YOUR altitude (currents veer aloft)
   const fromBearing = ((Math.atan2(-w.x, w.z) * 180 / Math.PI) + 360) % 360;
   const dirName = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(fromBearing / 45) % 8];

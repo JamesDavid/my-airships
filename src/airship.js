@@ -1563,6 +1563,9 @@ export class Airship {
   update(dt, input, wind, env) {
     const P = this.spec.physics;
     this._env = env;
+    // The wind gradient is reckoned from the ground below us, not from the sea,
+    // so the whole frame shares one heightfield lookup for it.
+    this.groundHere = this.groundUnder(this.pos.x, this.pos.z);
     this._t += dt;
     if (this.wrecked) {
       // the gas escapes and the bag dies — "losing the remains of its gas
@@ -1607,7 +1610,7 @@ export class Airship {
     //  where fullness is known)
 
     // the pennant reads the apparent wind (true wind minus our own motion)
-    const appWind = windAt(wind, this.pos.y).sub(this.vel);
+    const appWind = windAt(wind, this.pos.y, this.groundHere).sub(this.vel);
     this._pennantAng = Math.atan2(-appWind.z, appWind.x);
 
     // heat: cloud shadow and forest cooling (A2, A4)
@@ -1645,7 +1648,7 @@ export class Airship {
     }
 
     // pressure (B6): fullness x heat x altitude expansion, + tail suction with speed
-    const airspeedV = this.vel.clone().sub(windAt(wind, this.pos.y));
+    const airspeedV = this.vel.clone().sub(windAt(wind, this.pos.y, this.groundHere));
     // the air rises and settles as well as blowing: subtracting it here means
     // every vertical force below — drag, the dive exchange — is reckoned against
     // the moving air, so a column lifts the ship whatever the valve is doing
@@ -1770,7 +1773,7 @@ export class Airship {
     // B5: tangage — bob in the 25-45 km/h airspeed band, worse against the wind
     const kmh = airspeed * 3.6;
     const band = Math.max(0, 1 - Math.abs(kmh - 33) / 18);
-    const headwind = Math.max(0, -airspeedV.clone().normalize().dot(windAt(wind, this.pos.y).normalize() || 0)) || 0;
+    const headwind = Math.max(0, -airspeedV.clone().normalize().dot(windAt(wind, this.pos.y, this.groundHere).normalize() || 0)) || 0;
     acc.y += Math.sin(this._t * 2.1) * band * (0.25 + 0.25 * headwind);
 
     // integrate

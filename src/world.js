@@ -99,10 +99,22 @@ function makeWaterNormals(size = 512) {
 // deck to full at 120 m, with a slight veer); above ~180 m a DIFFERENT
 // river of air takes over — rotated well off the surface wind and stronger.
 // Clouds ride the upper current; smoke and flags show the surface one.
-export function windAt(wind, y) {
-  const f = 0.42 + 0.58 * Math.min(Math.max(y / 120, 0), 1);
+// The gradient is a BOUNDARY LAYER: it is set by the ground the air is
+// scraping over, so it must be reckoned from that ground and not from the sea.
+// Measuring it from datum put the calm bottom of it inside the hills — over the
+// Passy plateau (ground +30 m) a pilot ten metres above the roofs already sat
+// at 64% of the free wind with nowhere lower to go, and over Montmartre
+// (+130 m) the whole gradient was underground and the streets blew full
+// strength. That is what made "fly LOW, the wind is thinner near the ground"
+// a promise the world would not keep (#97, #100).
+//
+// The upper current stays on absolute height — a different river of air at
+// 180-320 m is a fact about the altitude, not about the roof below it.
+export function windAt(wind, y, ground = 0) {
+  const agl = Math.max(0, y - ground);
+  const f = 0.42 + 0.58 * Math.min(Math.max(agl / 120, 0), 1);
   // slight surface veer as the gradient wind comes in
-  const lowAng = 0.17 * Math.min(Math.max(y / 120, 0), 1);
+  const lowAng = 0.17 * Math.min(Math.max(agl / 120, 0), 1);
   // the upper current: blends in from 180 m to 320 m
   const t = Math.min(Math.max((y - 180) / 140, 0), 1);
   const ang = lowAng + 1.0 * t;         // up to ~67° off the surface wind aloft
