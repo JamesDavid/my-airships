@@ -114,7 +114,14 @@ export const TRACKS = [
       const _d = Math.hypot(_e.x - _t.x, _e.z - _t.z) || 1;
       const _ex = ((_e.x - _t.x) / _d) * 130, _ez = ((_e.z - _t.z) / _d) * 130;
       const STOPS = [
-        [P('eiffel'), 120, 46, _ex, _ez], [P('trocadero'), 58, 38, -66, 24],
+        // The Trocadéro ring goes DOWN THE GARDENS, not beside the palace.
+        // It used to sit 66 m west of the rotunda, which was open ground while
+        // the palace was 115 m across; at its true 426 m the galleries sweep
+        // through it — a 61 m roof through a 48 m rim. So it is struck 150 m
+        // along the axis toward the Tower, over the cascade the wings hold
+        // between them, which is where a gymkhana would thread it anyway.
+        [P('eiffel'), 120, 46, _ex, _ez],
+        [P('trocadero'), 58, 38, (_ex / 130) * 150, (_ez / 130) * 150],
         [P('etoile'), 62, 36], [M('madeleine'), 52, 34, 98, -69],
         [P('opera'), 58, 34], [P('montmartre'), 46, 40],
         [M('republique'), 46, 34], [M('bastille'), 58, 34, 48, -13],

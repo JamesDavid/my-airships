@@ -42,7 +42,8 @@ export function xz(lat, lon) { const p = geo(lat, lon); return [Math.round(p.x),
 export const PLACES = {
   eiffel:      [48.85826, 2.29450],
   etoile:      [48.87378, 2.29503],   // the Arc de Triomphe
-  trocadero:   [48.86212, 2.28751],   // the 1878 palace, on the Chaillot hill
+  trocadero:   [48.86230, 2.28743],   // the apex of the arc, where the rotunda
+                                      // stood — taken off the Chaillot footprint
   invalides:   [48.85661, 2.31250],
   grandpalais: [48.86609, 2.31251],
   petitpalais: [48.86603, 2.31474],

@@ -1247,7 +1247,7 @@ export function buildWorld(scene) {
       // now where they reached 84 — and a gem at 86 hung inside one of them.
       // The same hand-written clearance the Grande Roue needs, for the same
       // reason: a gem is placed by its landmark's height, not by collision.
-      { id: 'trocadero', name: 'the Trocadéro', ...LM('trocadero'), y: 106, r: 55,
+      { id: 'trocadero', name: 'the Trocadéro', ...LM('trocadero'), y: 132, r: 55,
         clue: '“The No. 5 came down on its roof.” A rotunda and two slim towers across the water from the Tower.' },
       { id: 'invalides', name: 'the Invalides', ...LM('invalides'), y: 70, r: 45,
         clue: 'A gilded dome over the soldiers’ hospital.' },
@@ -1648,6 +1648,18 @@ function addLandmarks(scene) {
   // Trocadéro's own substructure and keeps its wings. Its wing tips are 426 m
   // apart on a chord bearing 42 degrees, and the Tower lies at 135 — square to
   // that chord. So the palace faces the Tower dead on, and this turns it to.
+  // The palace, off the map. OSM relation 6826569 (building=palace) is the
+  // Palais de Chaillot, which stands on the Trocadéro's substructure and keeps
+  // its wings: 426 m from wing tip to wing tip, the apex 117 m back from that
+  // chord, the galleries 29 m deep. An arc of chord c and sagitta s has radius
+  // (c^2/4 + s^2)/2s and subtends 2*asin(c/2R).
+  const TROC_R = 252;                     // radius of the galleries' arc
+  const TROC_HALF = Math.asin(213 / TROC_R);   // 58 deg each side of the rotunda
+  const TROC_IN = 0.14;                   // where the gallery starts, clear of the drum
+  const TROC_D = 29;                      // how deep the galleries are
+  const TROC_H = 22;                      // and how tall
+  const TROC_TOWER = 82;                  // the two towers, which really were 82 m
+  const TROC_FLANK = 0.20;                // where they stand on the arc
   const _te0 = placeLegacy('eiffel');
   const TROC_FACE = Math.atan2(-(_te0.z - _tp.z), _te0.x - _tp.x);
   // a point of the unrotated plan, in world terms — the colliders are pushed
@@ -1657,45 +1669,69 @@ function addLandmarks(scene) {
     z: _tp.z - px * Math.sin(TROC_FACE) + pz * Math.cos(TROC_FACE),
   });
   const troc = new THREE.Group();
-  const trocC = new THREE.Mesh(new THREE.CylinderGeometry(17, 18, 30, 14), cream); trocC.position.y = 15; troc.add(trocC);
-  lmColliders.push({ x: _tp.x, z: _tp.z, w: 34, d: 34, h: 30, top: 30 });
-  const trocDome = new THREE.Mesh(new THREE.SphereGeometry(15, 12, 8), slate); trocDome.position.y = 32; trocDome.scale.y = 0.65; troc.add(trocDome);
+  // The rotunda: the great circular concert hall, 50 m across, standing on the
+  // apex of the arc — not, as it was, a 34 m drum at the centre of the circle.
+  const trocC = new THREE.Mesh(new THREE.CylinderGeometry(25, 26, 34, 18), cream);
+  trocC.position.y = 17; troc.add(trocC);
+  lmColliders.push({ x: _tp.x, z: _tp.z, w: 52, d: 52, h: 34, top: 34 });
+  const trocDome = new THREE.Mesh(new THREE.SphereGeometry(23, 14, 9), slate);
+  trocDome.position.y = 36; trocDome.scale.y = 0.62; troc.add(trocDome);
   for (const s of [-1, 1]) {
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3, 62, 8), cream);
-    tower.position.set(0, 31, s * 21); troc.add(tower);
-    { const q = trocAt(0, s * 21);
-      lmColliders.push({ x: q.x, z: q.z, w: 6, d: 6, h: 62, top: 70 }); }  // the 70 m towers
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(3.4, 8, 8), slate);
-    cap.position.set(0, 66, s * 21); troc.add(cap);
-    // The curved galleries. These used to be six detached boxes stepped round an
-    // approximate arc, and from the street they read as blocks left lying about
-    // rather than as a building — a pilot asked what they were. They follow a
-    // true arc now, each bay meeting the next, with a cornice over them.
-    const R = 58, A0 = 0.42, A1 = 1.72, BAYS = 11;
+    // The two towers, 82 m, flanking the rotunda on the arc itself — that is
+    // where they stood, and they are the tallest thing on the hill.
+    const tz = s * Math.sin(TROC_FLANK) * TROC_R;
+    const tx = TROC_R - Math.cos(TROC_FLANK) * TROC_R;
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 6, TROC_TOWER, 10), cream);
+    tower.position.set(tx, TROC_TOWER / 2, tz); troc.add(tower);
+    { const q = trocAt(tx, tz);
+      lmColliders.push({ x: q.x, z: q.z, w: 12, d: 12,
+        h: TROC_TOWER, top: TROC_TOWER + 10 }); }      // the 82 m towers
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(6.8, 11, 10), slate);
+    cap.position.set(tx, TROC_TOWER + 5, tz); troc.add(cap);
+    // THE GALLERIES, AT THE SIZE THEY WERE.
+    //
+    // These were an arc of radius 58 m about the rotunda: 115 m from wing tip
+    // to wing tip, where the palace was 426. A scale model of itself at rather
+    // better than a third size, and the rotunda sat at the CENTRE of the circle
+    // instead of standing on the arc.
+    //
+    // Off the map (OSM relation 6826569, Chaillot on the Trocadéro's own
+    // substructure): tip to tip 426 m, and the apex stands 117 m back from that
+    // chord. A chord c with a sagitta s is an arc of radius (c^2/4 + s^2)/2s,
+    // which is TROC_R = 252 m, subtending 2*asin(c/2R) = 115 degrees. The
+    // rotunda stands ON that arc at its apex and the wings run away from it
+    // either side, curving forward, so the palace holds the gardens between its
+    // arms and looks down them at the Tower.
+    const CC = TROC_R;                                 // centre of curvature, +X of the rotunda
+    const A0 = TROC_IN, A1 = TROC_HALF, BAYS = 11;
     const step = (A1 - A0) / BAYS;
-    const chord = 2 * R * Math.sin(step / 2) + 0.4;    // so consecutive bays touch
+    const chord = 2 * CC * Math.sin(step / 2) + 0.4;   // so consecutive bays touch
     for (let w = 0; w < BAYS; w++) {
       const a = A0 + step * (w + 0.5);
-      const px = Math.cos(a) * R, pz = s * Math.sin(a) * R;
-      const bay = new THREE.Mesh(new THREE.BoxGeometry(chord, 15, 13), cream);
-      bay.position.set(px, 7.5, pz);
-      bay.rotation.y = s * (a - Math.PI / 2) * -1;     // tangent to the arc
+      // on the arc about (CC, 0), measured out from the apex at the origin
+      const px = CC - Math.cos(a) * CC, pz = s * Math.sin(a) * CC;
+      const bay = new THREE.Mesh(new THREE.BoxGeometry(chord, TROC_H, TROC_D), cream);
+      bay.position.set(px, TROC_H / 2, pz);
+      bay.rotation.y = s * a;                          // tangent to the arc
       troc.add(bay);
-      const corn = new THREE.Mesh(new THREE.BoxGeometry(chord, 1.6, 15), slate);
-      corn.position.set(px, 15.6, pz);
+      const corn = new THREE.Mesh(new THREE.BoxGeometry(chord, 1.9, TROC_D + 2.4), slate);
+      corn.position.set(px, TROC_H + 0.95, pz);
       corn.rotation.y = bay.rotation.y;
       troc.add(corn);
       { const q = trocAt(px, pz);
-        lmColliders.push({ x: q.x, z: q.z, w: chord, d: 13,
-          ry: bay.rotation.y + TROC_FACE, h: 15, top: 16.4 }); }
+        lmColliders.push({ x: q.x, z: q.z, w: chord, d: TROC_D,
+          ry: bay.rotation.y + TROC_FACE, h: TROC_H, top: TROC_H + 2.4 }); }
       // a pavilion where the gallery meets the rotunda, and again at its end
       if (w === 0 || w === BAYS - 1) {
-        const pav = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 7, 21, 10), cream);
-        pav.position.set(px, 10.5, pz);
+        const pav = new THREE.Mesh(new THREE.CylinderGeometry(10, 11, TROC_H + 10, 10), cream);
+        pav.position.set(px, (TROC_H + 10) / 2, pz);
         troc.add(pav);
-        const cap = new THREE.Mesh(new THREE.ConeGeometry(7.6, 6, 10), slate);
-        cap.position.set(px, 24, pz);
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(12, 9, 10), slate);
+        cap.position.set(px, TROC_H + 14, pz);
         troc.add(cap);
+        { const q = trocAt(px, pz);
+          lmColliders.push({ x: q.x, z: q.z, w: 22, d: 22,
+            h: TROC_H + 10, top: TROC_H + 12 }); }
       }
     }
   }
@@ -1717,7 +1753,11 @@ function addLandmarks(scene) {
     const casc = new THREE.Group();
     const stone = new THREE.MeshLambertMaterial({ color: 0xcfc6ae });
     const water = new THREE.MeshPhongMaterial({ color: 0x6f93a6, shininess: 90 });
-    for (let a = 34; a < 210; a += 22) {
+    // BEYOND THE PALACE, not through it. The cascade began at 34 m from the
+    // rotunda, which was clear of a palace 58 m across and is buried in one
+    // 426 m across: the galleries now reach 109 m down the axis. It starts
+    // below the terrace the wings hold, and runs on to the quay.
+    for (let a = 132; a < 340; a += 22) {
       const px = cux * a, pz = cuz * a;
       const gy = parisGround(_tp.x + px, _tp.z + pz) - base;
       const sill = new THREE.Mesh(new THREE.BoxGeometry(34, 2.2, 20), stone);
