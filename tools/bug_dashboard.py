@@ -124,6 +124,83 @@ def write_note(rid, note, png, marks, meta):
     return os.path.basename(md)
 
 
+# ------------------------------------------------------- the model queue
+#
+# Notes left on a model in the Models tab. NOT filed into bug_reports: that table
+# is what pilots write to, and it is read as "somebody out there hit this". A
+# note that the Trocadero wants instancing is a different kind of thing and would
+# only muddy the count of what players are actually finding.
+#
+# So it is its own queue, in the same shape as the report notes and in the same
+# folder, with one index a reader can take in at a glance.
+MODELS = os.path.join(NOTES, 'models')
+
+
+def model_note_path(key):
+    safe = re.sub(r'[^a-z0-9_-]', '', str(key).lower())[:60] or 'model'
+    return os.path.join(MODELS, safe + '.md')
+
+
+def read_model_notes():
+    out = {}
+    if not os.path.isdir(MODELS):
+        return out
+    for f in sorted(os.listdir(MODELS)):
+        if not f.endswith('.md'):
+            continue
+        txt = open(os.path.join(MODELS, f), encoding='utf-8').read()
+        m = re.search(r'\n---\n\n(.*)$', txt, re.S)
+        done = '\nstatus: done' in txt
+        out[f[:-3]] = {'note': (m.group(1) if m else txt).strip(), 'done': done}
+    return out
+
+
+def write_model_note(key, name, note, stats, done):
+    os.makedirs(MODELS, exist_ok=True)
+    path = model_note_path(key)
+    if not (note or '').strip() and not done:
+        if os.path.exists(path):
+            os.remove(path)
+        reindex_models()
+        return None
+    body = ['# ' + (name or key)]
+    for k in ('place', 'copies', 'drawsEach', 'drawsTotal', 'triangles', 'materials', 'parts'):
+        if stats.get(k) not in (None, ''):
+            body.append('%-14s %s' % (k + ':', stats[k]))
+    if done:
+        body.append('status: done')
+    body += ['', '---', '', note.strip() or '(no words)', '']
+    open(path, 'w', encoding='utf-8').write('\n'.join(body))
+    reindex_models()
+    return os.path.basename(path)
+
+
+def reindex_models():
+    """One page listing everything asked for, worst first."""
+    notes = read_model_notes()
+    rows = []
+    for key, v in notes.items():
+        first = (v['note'].splitlines() or [''])[0]
+        rows.append((key, first, v['done']))
+    rows.sort(key=lambda r: (r[2], r[0]))
+    out = ['# The model queue', '',
+           'Left on models in the Models tab of tools/bug_dashboard.py. One .md',
+           'per model in this folder; this is the index.', '']
+    todo = [r for r in rows if not r[2]]
+    done = [r for r in rows if r[2]]
+    out.append('## To do (%d)' % len(todo))
+    out.append('')
+    for key, first, _ in todo:
+        out.append('- **%s** — %s  ·  [note](models/%s.md)' % (key, first[:150], key))
+    if done:
+        out += ['', '## Done (%d)' % len(done), '']
+        for key, first, _ in done:
+            out.append('- ~~%s~~ — %s' % (key, first[:120]))
+    out.append('')
+    os.makedirs(NOTES, exist_ok=True)
+    open(os.path.join(NOTES, 'MODELS.md'), 'w', encoding='utf-8').write('\n'.join(out))
+
+
 def reindex():
     """One file the works can read to see every note at once."""
     rows = []
@@ -353,6 +430,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, page, 'text/html; charset=utf-8')
             if self.path.startswith('/api/reports'):
                 return self.send(200, load())
+            if self.path.startswith('/api/modelnotes'):
+                return self.send(200, read_model_notes())
             if self.path.startswith('/api/usage'):
                 return self.send(200, usage())
             m = re.fullmatch(r'/api/shot/(\d+)', self.path)
@@ -386,6 +465,11 @@ class Handler(BaseHTTPRequestHandler):
                     ids.discard(i)
                 save_ours(ids)
                 return self.send(200, {'ok': True, 'ours': sorted(ids)})
+            if self.path == '/api/modelnote':
+                f = write_model_note(req.get('key'), req.get('name'), req.get('note') or '',
+                                     req.get('stats') or {}, bool(req.get('done')))
+                print('  model queue: %s' % (f or 'cleared'))
+                return self.send(200, {'ok': True, 'file': f, 'notes': read_model_notes()})
             if self.path == '/api/course':
                 # A course laid out in the Level tab. Written beside the notes as
                 # JSON and never into tracks.js: the courses are hand-written with

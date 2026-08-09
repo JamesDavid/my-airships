@@ -753,7 +753,11 @@ function drawUsage() {
 // tools/ gives every mesh its own material object and so cannot answer the one
 // question being asked: which parts share a material.
 
-let THREE = null, builtWorld = null, models = [], pickedModel = null;
+let THREE = null, builtWorld = null, models = [], pickedModel = null, modelNotes = {};
+
+/** A stable name for a model across runs: what it is made of, and how many. */
+const modelKey = (m) => (($('#whichWorld').value) + '-' + m.copies + 'x-'
+  + m.fingerprint.replace(/[^A-Za-z0-9]+/g, '-')).slice(0, 60).toLowerCase();
 let pv = null;                      // the preview renderer, made once
 
 async function three() {
@@ -888,6 +892,7 @@ async function loadModels() {
   let built;
   try { built = await getWorld(); }
   catch (e) { list.innerHTML = '<div class="empty">could not build it: ' + esc(e.message) + '</div>'; return; }
+  try { modelNotes = await (await fetch('/api/modelnotes')).json(); } catch (e) { modelNotes = {}; }
   const lm = (built.world && built.world.landmarks) || [];
   const each = built.scene.children
     .filter((o) => o.type !== 'DirectionalLight' && o.type !== 'AmbientLight'
@@ -924,9 +929,11 @@ function drawModelList() {
     const el = document.createElement('div');
     el.className = 'm' + (m === pickedModel ? ' on' : '');
     const fleet = m.draws * m.copies;
+    const note = modelNotes[modelKey(m)];
     el.innerHTML = `<span class="d">${fleet}</span><span class="n">`
       + (m.copies > 1 ? `<b style="color:var(--hot)">×${m.copies}</b> ` : '')
-      + `${esc(m.name)}</span>`;
+      + `${esc(m.name)}</span>`
+      + (note ? `<span class="tag ${note.done ? 'done' : 'note'}">${note.done ? 'done' : 'queued'}</span>` : '');
     el.onclick = () => pickModel(i);
     list.appendChild(el);
   });
@@ -998,7 +1005,44 @@ async function pickModel(i) {
     { h: 'instanced', n: 1, f: (r) => r.inst || '' },
     { h: 'animates', n: 1, f: (r) => r.anim || '' },
   ]));
+  // ---- and somewhere to say what should be done about it ----
+  //
+  // The tool can say what a thing costs and what the rules suggest; it cannot
+  // know whether this particular tree is worth an afternoon. That is a judgement
+  // and it belongs in words, next to the numbers that prompted it, where the
+  // person who does the work will read it.
+  const key = modelKey(m), have = modelNotes[key] || { note: '', done: false };
+  H.push(`<h2 style="font-size:14px;color:var(--hot);margin:18px 0 4px">What to do about it</h2>
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <textarea id="mnote" style="flex:1;min-height:74px;resize:vertical;font:inherit;font-size:13px;
+        color:var(--ink);background:#17120d;border:1px solid var(--edge);border-radius:4px;padding:6px 8px"
+        placeholder="e.g. one material and per-instance colour would collect the 1,004 draws — worth it, this is the whole city">${esc(have.note)}</textarea>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button id="msave" class="go">Add to the queue</button>
+        <button id="mdone" class="${have.done ? 'on' : ''}">${have.done ? 'done' : 'mark done'}</button>
+      </div>
+    </div>
+    <p class="note" style="color:var(--dim);font-size:12px">Kept in bug-notes/models/, indexed in
+      bug-notes/MODELS.md. Not filed as a bug report — that queue is what pilots write to.</p>`);
+
   $('#parts').innerHTML = H.join('');
+  const send = async (done) => {
+    const res = await (await fetch('/api/modelnote', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, name: m.name, note: $('#mnote').value, done, stats: {
+        place: $('#whichWorld').value, copies: m.copies, drawsEach: m.draws,
+        drawsTotal: m.draws * m.copies, triangles: m.tris,
+        materials: (m.mats && m.mats.size) || 1, parts: m.groups.length } }) })).json();
+    modelNotes = res.notes || modelNotes;
+    say(res.file ? 'queued — bug-notes/models/' + res.file : 'taken off the queue');
+    // RE-DRAW THE PANE, not just the list. `have` was read when the model was
+    // picked, so leaving it be made "mark done" a one-way door: the second press
+    // sent done:true again, because the stale copy still said false.
+    drawModelList();
+    pickModel(models.indexOf(m));
+  };
+  $('#msave').onclick = () => send(!!have.done);
+  $('#mdone').onclick = () => send(!have.done);
   showPreview(m);
 }
 
@@ -1071,6 +1115,13 @@ let plan = null, courses = [], course = null, dragging = null;
 
 async function loadLevel() {
   const bar = $('#planBar');
+  // the ground under the course, so a gate can be seen to be over water or into
+  // a hillside — asked of the same world the game builds
+  if (!builtWorld) {
+    $('#plan').innerHTML = '<div class="empty">building the world…</div>';
+    try { await getWorld(); } catch (e) { /* the plan still works without it */ }
+    plan = null;
+  }
   if (!courses.length) {
     try {
       const t = await import('/src/tracks.js');
@@ -1167,6 +1218,82 @@ function toScreen(x, z) {
   return { px: (x - v.x0) * v.k, py: (z - v.z0) * v.k };
 }
 
+/**
+ * THE GROUND UNDER THE COURSE.
+ *
+ * A course is judged by its corners, and the corners are only half of it: a gate
+ * can have all the room in the world and still be over the Seine, or buried in
+ * the hill of Saint-Cloud. Both have happened here -- "a ring in the bay that is
+ * too close to a mountain", and the ring beside Notre-Dame that was clear while
+ * she was two boxes and a cone.
+ *
+ * Sampled from world.groundAt and world.isWater, which is what the ship itself
+ * flies against, so what is drawn is what is there. Rendered ONCE per view to an
+ * offscreen canvas and then blitted: a gate being dragged redraws sixty times a
+ * second, and thirty thousand terrain lookups a frame is a slideshow.
+ */
+function makeMap(v, W, H) {
+  const world = builtWorld && builtWorld.world;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#0d0a07';
+  c.fillRect(0, 0, W, H);
+  if (!world || !world.groundAt) return cv;
+
+  const STEP = 3;                                  // pixels per sample
+  const nx = Math.ceil(W / STEP), nz = Math.ceil(H / STEP);
+  const h = new Float32Array(nx * nz);
+  const wet = new Uint8Array(nx * nz);
+  let lo = Infinity, hi = -Infinity;
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const x = v.x0 + (i * STEP) / v.k, z = v.z0 + (j * STEP) / v.k;
+      const g = world.groundAt(x, z) || 0;
+      h[j * nx + i] = g;
+      wet[j * nx + i] = world.isWater && world.isWater(x, z) ? 1 : 0;
+      if (g < lo) lo = g;
+      if (g > hi) hi = g;
+    }
+  }
+  const span = Math.max(1, hi - lo);
+  const img = c.createImageData(W, H);
+  for (let py = 0; py < H; py++) {
+    const j = Math.min(nz - 1, (py / STEP) | 0);
+    for (let px = 0; px < W; px++) {
+      const i = Math.min(nx - 1, (px / STEP) | 0);
+      const k = j * nx + i;
+      const t = (h[k] - lo) / span;
+      // a little relief: the slope towards the north-west, as on a survey sheet
+      const hx = h[j * nx + Math.max(0, i - 1)] - h[j * nx + Math.min(nx - 1, i + 1)];
+      const hz = h[Math.max(0, j - 1) * nx + i] - h[Math.min(nz - 1, j + 1) * nx + i];
+      const shade = Math.max(-1, Math.min(1, (hx + hz) / 14));
+      let r, g, b;
+      if (wet[k]) { r = 26; g = 52; b = 74; }
+      else {
+        r = 44 + t * 66 + shade * 22;
+        g = 50 + t * 60 + shade * 22;
+        b = 34 + t * 40 + shade * 18;
+      }
+      const o = (py * W + px) * 4;
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+  }
+  c.putImageData(img, 0, 0);
+
+  // and the places, because a course is described by them
+  c.font = '11px Georgia, serif';
+  for (const L of world.landmarks || []) {
+    const px = (L.x - v.x0) * v.k, py = (L.z - v.z0) * v.k;
+    if (px < -60 || py < -60 || px > W + 60 || py > H + 60) continue;
+    c.fillStyle = '#9c8a68';
+    c.beginPath(); c.arc(px, py, 3, 0, 7); c.fill();
+    c.fillStyle = '#bfae8a';
+    c.fillText(L.name || L.id || '', px + 6, py + 4);
+  }
+  return cv;
+}
+
 function drawPlan() {
   const { cv, ctx } = plan;
   const host = $('#plan');
@@ -1184,7 +1311,12 @@ function drawPlan() {
   const k = Math.min(W / (x1 - x0), H / (z1 - z0));
   planView = { x0, z0, k };
 
-  ctx.fillStyle = '#0d0a07'; ctx.fillRect(0, 0, W, H);
+  // the map, made once for this view and kept
+  const stamp = `${W}x${H}|${x0.toFixed(0)},${z0.toFixed(0)},${k.toFixed(5)}|${builtWorld && builtWorld.place}`;
+  if (plan.stamp !== stamp) { plan.map = makeMap(planView, W, H); plan.stamp = stamp; }
+  ctx.drawImage(plan.map, 0, 0);
+  ctx.fillStyle = 'rgba(13,10,7,0.18)';            // let the course sit on top of it
+  ctx.fillRect(0, 0, W, H);
   // a scale bar, because every judgement here is in metres
   const barM = 500, b0 = toScreen(x0 + 60, z1 - 120), b1 = toScreen(x0 + 60 + barM, z1 - 120);
   ctx.strokeStyle = '#4a3c2c'; ctx.lineWidth = 2;
