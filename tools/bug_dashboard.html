@@ -167,6 +167,7 @@
       <option value="paris">Paris, 1901</option>
       <option value="monaco">Monaco, 1902</option>
       <option value="stlouis">St. Louis, 1904</option>
+      <option value="ships">The air-ships (every one)</option>
     </select>
   </div>
   <div id="usage"></div>
@@ -759,6 +760,7 @@ function drawUsage() {
 // question being asked: which parts share a material.
 
 let THREE = null, builtWorld = null, models = [], pickedModel = null, modelNotes = {};
+let sortBy = 'fleet';        // fleet draws | draws each | triangles | copies
 let foldBySize = false;      // by SHAPE by default: that is the instancing question
 let showAllCopies = true;    // and show the whole fleet where it stands
 let pickedPart = null;              // one piece of it, chosen in the preview
@@ -799,6 +801,32 @@ async function getWorld() {
   worldPendingFor = place;
   worldPending = (async () => {
     const T = await three();
+    // THE SHIPS ARE NOT IN ANY WORLD, which is why they were nowhere in this
+    // tab: a world is built by buildWorld, and a ship is built beside it by
+    // `new Airship(scene, spec)` whenever one is spawned. They are also the
+    // objects that matter most here -- the ship is the one thing a pilot
+    // inspects from half a metre, she was 132 draws, and the attempt to merge
+    // her had to be reverted whole. So the shed is a place like any other.
+    if (place === 'ships') {
+      const { Airship } = await import('/src/airship.js');
+      const { SHIPS, SHIP_KEYS } = await import('/src/ships.js');
+      const scene = new T.Scene();
+      const ids = [...new Set(Object.values(SHIP_KEYS))];
+      const marks = [];
+      let x = 0;
+      for (const id of ids) {
+        const spec = SHIPS[id];
+        if (!spec) continue;
+        const a = new Airship(scene, spec);
+        a.reset(new T.Vector3(x, ((spec.keel && spec.keel.drop) || 6) + 4, 0), 0);
+        a.group.name = spec.name || id;
+        marks.push({ x, z: 0, name: spec.name || id });
+        x += 90;                       // far enough apart to be told apart
+      }
+      const made = { scene, world: { landmarks: marks }, place };
+      if ($('#whichWorld').value === place) builtWorld = made;
+      return made;
+    }
     const mod = place === 'monaco' ? await import('/src/world_monaco.js')
       : place === 'stlouis' ? await import('/src/world_stlouis.js')
       : await import('/src/world.js');
@@ -967,8 +995,26 @@ async function loadModels() {
   }
   models = [...byShape.values()];
   for (const m of models) m.name = label(m, lm);
-  models.sort((a, b) => (b.draws * b.copies) - (a.draws * a.copies));
+  sortModels();
   drawModelList();
+}
+
+/**
+ * WHICH NUMBER IS THE BIG ONE depends on what you are about to do.
+ *
+ * Sorted by what the whole fleet costs, a thing drawn once but drawn expensively
+ * hides under four hundred cheap ones -- and it is the expensive single model
+ * that wants a cheaper far version, where the four hundred want instancing.
+ * Both questions are asked in this tab, so both orders are offered.
+ */
+function sortModels() {
+  const key = {
+    fleet: (m) => m.draws * m.copies,
+    each: (m) => m.draws,
+    tris: (m) => m.tris * m.copies,
+    copies: (m) => m.copies,
+  }[sortBy] || ((m) => m.draws * m.copies);
+  models.sort((a, b) => key(b) - key(a));
 }
 
 function drawModelList() {
@@ -984,11 +1030,20 @@ function drawModelList() {
         <button class="chip ${foldBySize ? '' : 'on'}" id="foldShape">by shape</button>
         <button class="chip ${foldBySize ? 'on' : ''}" id="foldSize">by exact size</button>
         <button class="chip ${showAllCopies ? 'on' : ''}" id="allCopies">show them together</button>
+      </div>
+      <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
+        <span style="color:var(--dim);font-size:11px;align-self:center">sort:</span>
+        <button class="chip ${sortBy === 'fleet' ? 'on' : ''}" data-sort="fleet">draws in all</button>
+        <button class="chip ${sortBy === 'each' ? 'on' : ''}" data-sort="each">draws each</button>
+        <button class="chip ${sortBy === 'tris' ? 'on' : ''}" data-sort="tris">triangles</button>
+        <button class="chip ${sortBy === 'copies' ? 'on' : ''}" data-sort="copies">how many</button>
       </div></div>`;
   models.forEach((m, i) => {
     const el = document.createElement('div');
     el.className = 'm' + (m === pickedModel ? ' on' : '');
-    const fleet = m.draws * m.copies;
+    const fleet = sortBy === 'each' ? m.draws
+      : sortBy === 'tris' ? Math.round((m.tris * m.copies) / 1000) + 'k'
+      : sortBy === 'copies' ? m.copies : m.draws * m.copies;
     const note = modelNotes[modelKey(m)];
     el.innerHTML = `<span class="d">${fleet}</span><span class="n">`
       + (m.copies > 1 ? `<b style="color:var(--hot)">×${m.copies}</b> ` : '')
@@ -1000,6 +1055,9 @@ function drawModelList() {
   $('#foldShape').onclick = () => { if (foldBySize) { foldBySize = false; models = []; pickedModel = null; loadModels(); } };
   $('#foldSize').onclick = () => { if (!foldBySize) { foldBySize = true; models = []; pickedModel = null; loadModels(); } };
   $('#allCopies').onclick = () => { showAllCopies = !showAllCopies; drawModelList(); if (pickedModel) showPreview(pickedModel); };
+  for (const b of document.querySelectorAll('#modelList [data-sort]')) {
+    b.onclick = () => { sortBy = b.dataset.sort; sortModels(); drawModelList(); };
+  }
   if (!pickedModel && models.length) pickModel(0);
 }
 
@@ -1353,6 +1411,8 @@ let levelSeq = 0;
 async function loadLevel() {
   const seq = ++levelSeq;
   const bar = $('#planBar');
+  // the shed is not a place: no ground to draw and no course to fly over it
+  if ($('#whichWorld').value === 'ships') $('#whichWorld').value = 'paris';
   // the ground under the course, so a gate can be seen to be over water or into
   // a hillside — asked of the same world the game builds
   if (!builtWorld || builtWorld.place !== $('#whichWorld').value) {
