@@ -825,3 +825,36 @@ export const SCENARIOS = [
     },
   },
 ];
+
+/**
+ * EVERY ATTEMPT STARTS EMPTY.
+ *
+ * A scenario keeps its working-out on itself — `this.aloft`, `this.dead`,
+ * `this.warned`, `this.fouled` — and setup() was expected to clear each one by
+ * hand. Scenario III forgot `aloft`, and the effect was not subtle: the FIRST
+ * attempt played correctly and every attempt after it ended on the pad, in its
+ * first tick, before the pilot had touched anything. (Six scenarios appeared to
+ * have it until the check was made faithful; five of those were the harness
+ * forcing `landed` on scenarios that legitimately begin in the air. One real
+ * one, and it is the one the log had already convicted.)
+ *
+ * The flight log is what found it, and it is worth quoting because it is the
+ * whole argument for having a log at all. Scenario III: nineteen flights, six
+ * pilots, NEVER completed, median flight ONE SECOND. VII the same, VI two
+ * seconds. Nobody could beat them because nobody was being allowed to try, and
+ * it had been reported — "it said not this time I'm already on the ground",
+ * #54 — and patched at the symptom, on the first attempt only.
+ *
+ * So it is no longer left to each setup() to remember. The keys a scenario is
+ * DECLARED with are noted here, once, at load; anything a tick hangs on it
+ * afterwards is working-out and is thrown away before the next attempt begins.
+ * A scenario that invents a new latch tomorrow is covered without being touched.
+ */
+const DECLARED = new WeakMap();
+for (const def of SCENARIOS) DECLARED.set(def, new Set(Object.keys(def)));
+
+export function freshAttempt(def) {
+  const declared = DECLARED.get(def);
+  if (!declared) return;                 // not one of ours; leave it alone
+  for (const k of Object.keys(def)) if (!declared.has(k)) delete def[k];
+}

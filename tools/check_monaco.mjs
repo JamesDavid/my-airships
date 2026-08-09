@@ -375,6 +375,49 @@ console.log('THE SUBMARINE HUNT');
   else if (missed) { console.log('   FAIL she can be signalled from 520 m, where she is not visible'); fails++; }
   else console.log('   ok   held at 120 m she is signalled; from 520 m she never is');
 
+  // The search areas: one ring per boat, big enough that she is certainly inside
+  // it, and out the moment she is reported — so what is still drawn on the water
+  // is exactly what is still to find. Without them the bay is five kilometres of
+  // identical sea and the hunt is an hour of mowing the lawn.
+  {
+    const withArea = fleet.subs.filter((s) => s.area);
+    let tooTight = 0;
+    for (const s of withArea) {
+      const R = s.leg.len / 2 + 140;
+      // every point of her leg must lie inside her own ring
+      for (const [x, z] of [[s.leg.ax, s.leg.az], [s.leg.bx, s.leg.bz]]) {
+        if (Math.hypot(x - s.area.position.x, z - s.area.position.z) > R) tooTight++;
+      }
+    }
+    fleet.tick(1 / 30, { x: fleet.subs[0].x, y: 120, z: fleet.subs[0].z });
+    const lit = fleet.subs.filter((s) => s.area && s.area.visible).length;
+    if (withArea.length !== fleet.total) {
+      console.log('   FAIL only %d of %d boats have a search area', withArea.length, fleet.total);
+      fails++;
+    } else if (tooTight) {
+      console.log('   FAIL %d leg ends fall outside their own search ring', tooTight);
+      fails++;
+    } else if (lit !== fleet.total) {
+      console.log('   FAIL %d rings are lit but none has been signalled yet', lit);
+      fails++;
+    } else {
+      console.log('   ok   %d search rings, each holding the whole of its own leg', withArea.length);
+    }
+
+    // ...and one goes out when its boat is reported
+    const s0 = fleet.subs[0];
+    for (let i = 0; i < 400; i++) fleet.tick(1 / 30, { x: s0.x, y: 120, z: s0.z });
+    if (!s0.signalled) {
+      console.log('   FAIL could not signal a boat to test her ring going out');
+      fails++;
+    } else if (s0.area.visible) {
+      console.log('   FAIL a signalled boat still has her search ring lit');
+      fails++;
+    } else {
+      console.log('   ok   a ring goes out when its boat is signalled');
+    }
+  }
+
   fleet.dispose();
 }
 

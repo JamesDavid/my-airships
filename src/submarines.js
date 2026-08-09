@@ -150,6 +150,31 @@ function makeHull(colour) {
 }
 
 /**
+ * The water a boat is somewhere in.
+ *
+ * The bay is five kilometres across and a boat reads at two hundred metres, so
+ * quartering it blind is an hour of mowing the lawn — which is not the skill the
+ * chapter is about. The skill is the LOOKING: low, steep, and patient. So the
+ * search is given away and the finding is not.
+ *
+ * A ring lies flat on the water round the whole of one boat's patrol leg, so she
+ * is certainly inside it and certainly moving. It is drawn faintly and it goes
+ * out the moment she is signalled, which also makes it the tally: what is left
+ * on the water is what is left to find.
+ */
+function makeArea(leg) {
+  const R = leg.len / 2 + 140;
+  const g = new THREE.Mesh(
+    new THREE.RingGeometry(R - 26, R, 96),
+    new THREE.MeshBasicMaterial({ color: 0xe8c66a, transparent: true, opacity: 0.22,
+      depthWrite: false, side: THREE.DoubleSide, fog: true }));
+  g.rotation.x = -Math.PI / 2;                 // flat, on the sea
+  g.position.set((leg.ax + leg.bx) / 2, 0.15, (leg.az + leg.bz) / 2);
+  g.renderOrder = 2;                           // under the boats, over the water
+  return g;
+}
+
+/**
  * Lay a straight patrol leg that is water from end to end.
  *
  * Walked outwards in both directions from a seed point until the sea runs out,
@@ -197,8 +222,10 @@ export function makeSubmarineFleet(scene, sea, box, rng, n = 5) {
     if (!leg) continue;
     const g = makeHull(0x14323a);
     scene.add(g);
+    const area = makeArea(leg);
+    scene.add(area);
     subs.push({
-      mesh: g, leg,
+      mesh: g, area, leg,
       depth: 4.5 + rng() * 6.5,                      // 4.5 to 11 m
       mps: (5 + rng() * 3.5) * 0.5144,               // 5 to 8.5 knots
       phase: rng() * 2,
@@ -232,6 +259,7 @@ export function makeSubmarineFleet(scene, sea, box, rng, n = 5) {
       s.mesh.rotation.y = -(u < 1 ? head : head + Math.PI);
 
       if (!eye) { s.mesh.userData.mat.opacity = 0; continue; }
+
       const flat = Math.hypot(eye.x - x, eye.z - z);
       const v = legibility(eye.y - waterY, flat, s.depth);
       s.legible = v;
@@ -241,6 +269,16 @@ export function makeSubmarineFleet(scene, sea, box, rng, n = 5) {
       // hiding her again would only make the player fly the same water twice.
       s.mesh.userData.mat.opacity = s.signalled ? Math.max(v, 0.55) : v;
       s.mesh.userData.mat.color.setHex(s.signalled ? 0x2f6d4a : 0x14323a);
+      // the ring goes out when she is reported, so the water still marked is
+      // exactly the water still to search
+      if (s.area) {
+        s.area.visible = !s.signalled;
+        // and it brightens as you come into it, which is the only encouragement
+        // there is out here: no gem, no arrow, just warmer or colder
+        const d = Math.hypot(eye.x - s.area.position.x, eye.z - s.area.position.z);
+        const R = s.leg.len / 2 + 140;
+        s.area.material.opacity = d < R ? 0.34 : 0.2;
+      }
 
       if (!s.signalled && v >= SEEN && flat <= SIGNAL_R) {
         if (s.held === 0) news.sighted = s;
@@ -266,6 +304,11 @@ export function makeSubmarineFleet(scene, sea, box, rng, n = 5) {
     dispose() {
       for (const s of subs) {
         scene.remove(s.mesh);
+        if (s.area) {
+          scene.remove(s.area);
+          s.area.geometry.dispose();
+          s.area.material.dispose();
+        }
         s.mesh.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
         s.mesh.userData.mat.dispose();
       }

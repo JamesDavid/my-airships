@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { buildWorld } from '../src/world.js';
 import { buildWorldMonaco } from '../src/world_monaco.js';
 import { buildWorldStLouis } from '../src/world_stlouis.js';
-import { SCENARIOS } from '../src/scenarios.js';
+import { SCENARIOS, freshAttempt } from '../src/scenarios.js';
 import { makeShip, fly } from './sim.mjs';
 import { SHIPS } from '../src/ships.js';
 import { TRACKS } from '../src/tracks.js';
@@ -1895,6 +1895,75 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     } else {
       console.log('   ok   the helm turns the pilot instead, and all %d views hold where he puts them',
         springs.length);
+    }
+  }
+
+  // ----------------------------------------- A SECOND ATTEMPT IS A NEW ATTEMPT
+  //
+  // From the flight log, and this is the whole argument for having one:
+  // scenario III has been flown nineteen times by six pilots, has NEVER been
+  // completed, and its median flight is ONE SECOND. VII the same, VI two.
+  // They are not hard. They are over before they start.
+  //
+  // A scenario keeps its working-out on itself -- this.aloft, this.dead,
+  // this.warned -- and setup() was expected to clear each by hand. Miss one and
+  // the FIRST attempt plays correctly while every attempt after it ends on the
+  // pad, in its first tick, before the pilot has touched anything. It was
+  // reported ("it said not this time I'm already on the ground", #54) and
+  // patched at the symptom, on the first attempt only.
+  //
+  // This flies each scenario twice the way the menu does: a fresh ship at the
+  // pad, freshAttempt(), setup(), and then a second of ticking. Nothing may end
+  // in that second. THE HARNESS MUST BE FAITHFUL OR IT LIES BOTH WAYS -- the
+  // first version of this forced `landed` true after setup, which fails six
+  // scenarios that legitimately begin in the air, and it took the fix failing
+  // to notice the check was wrong rather than the game.
+  {
+    console.log('');
+    console.log('A SECOND ATTEMPT IS A NEW ATTEMPT');
+    for (const def of SCENARIOS) {
+      let ended = null, zone = null, ship = null;
+      const ctx = {
+        get ship() { return ship; },
+        world: worldFor(def.location), wind: { x: 0, y: 0, z: 0 },
+        // as main.js does it: y is height ABOVE GROUND, and a ship put more than
+        // a metre or so up is flying
+        place: (x, y, z, yaw) => { ship.reset({ x, y, z }, yaw); ship.landed = y <= 1.5; },
+        setWind: () => {}, setZone: (v, r) => { zone = { v, r }; }, clearZone: () => { zone = null; },
+        zoneDist: () => (zone ? Math.hypot(ship.pos.x - zone.v.x, ship.pos.z - zone.v.z) : 1e9),
+        zoneR: () => (zone ? zone.r : 0),
+        setCenter: () => {}, addMsg: () => {}, setRoute: () => {}, raceResult: () => null,
+        complete: (m) => { ended = { how: 'complete', m }; },
+        fail: (m) => { ended = { how: 'fail', m }; },
+      };
+
+      // spawnShip: a new ship, at rest on the pad, exactly as starting one does
+      const begin = () => {
+        ship = makeShip(def.shipId);
+        ship.landed = true; ship.wrecked = false;
+        ended = null;
+        freshAttempt(def);
+        def.setup(ctx);
+      };
+
+      // ---- one whole attempt, flown and then put down again
+      begin();
+      ship.landed = false;
+      for (let i = 0; i < 90; i++) def.tick(ctx, 1 / 30);
+      ship.landed = true;
+      for (let i = 0; i < 90; i++) def.tick(ctx, 1 / 30);
+
+      // ---- and now she is convoked again
+      begin();
+      for (let i = 0; i < 30; i++) def.tick(ctx, 1 / 30);   // the first second
+
+      if (ended) {
+        console.log('   FAIL %s ends in its first second on a second attempt: "%s"',
+          def.id.padEnd(15), String(ended.m).slice(0, 62));
+        fails++;
+      } else {
+        console.log('   ok   %s survives being flown twice', def.id);
+      }
     }
   }
 

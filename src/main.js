@@ -11,7 +11,7 @@ import { buildWorldMonaco } from './world_monaco.js';
 import { buildWorldStLouis } from './world_stlouis.js';
 import { Airship } from './airship.js';
 import { SHIPS, SHIP_KEYS } from './ships.js';
-import { SCENARIOS, Rival } from './scenarios.js';
+import { SCENARIOS, Rival, freshAttempt } from './scenarios.js';
 import * as vr from './vr.js';
 import { gateOffset, TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 import * as net from './net.js';
@@ -2961,6 +2961,8 @@ function startScenario(def) {
   seen.clear();
   spawnShip(def.shipId);
   scenario = def;
+  // wipe whatever the last attempt hung on it — see freshAttempt()
+  freshAttempt(def);
   def._failed = false;
   // Back to today's sky FIRST. A scenario may reconstruct its own afternoon
   // with ctx.setWind — VII does — and loadWorld only runs when the location
