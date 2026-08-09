@@ -32,6 +32,17 @@
   .row .meta { color: var(--dim); font-size: 11.5px; }
   .row .snip { color: #d6c7a6; font-size: 12px; margin-top: 2px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #filters { padding: 7px 10px 8px; border-bottom: 1px solid var(--edge); background: #221b13; }
+  #filters .row2 { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+  #filters .row2:first-child { margin-top: 0; }
+  .chip { font: inherit; font-size: 11.5px; padding: 2px 8px; border-radius: 10px;
+    border: 1px solid var(--edge); background: #2f2519; color: var(--dim); cursor: pointer; }
+  .chip:hover { background: #3a2f22; color: var(--ink); }
+  .chip.on { background: var(--hot); border-color: var(--hot); color: #241b10; font-weight: 700; }
+  .chip .n { opacity: .65; margin-left: 3px; }
+  #nothing { position: absolute; inset: 0; display: none; align-items: center;
+    justify-content: center; text-align: center; color: var(--dim); padding: 30px; }
+  #nothing.show { display: flex; }
   .tag { font-size: 10.5px; padding: 0 5px; border-radius: 8px; margin-left: 5px;
     background: #4a3c2c; color: var(--ink); }
   .tag.done { background: #2f4a2c; }
@@ -76,6 +87,10 @@
     <h1>What is wrong in the picture</h1>
     <div class="sub" id="count">loading…</div>
   </header>
+  <div id="filters">
+    <div class="row2" id="fStatus"></div>
+    <div class="row2" id="fKind"></div>
+  </div>
   <div id="list"></div>
 </aside>
 
@@ -106,6 +121,7 @@
       <canvas id="ink"></canvas>
       <input id="typing" spellcheck="false">
     </div>
+    <div id="nothing"></div>
   </div>
 
   <div id="foot">
@@ -119,7 +135,15 @@
 <script>
 const $ = (s) => document.querySelector(s);
 const list = $('#list'), img = $('#shot'), ink = $('#ink'), ctx = ink.getContext('2d');
-let reports = [], cur = null, marks = [], tool = 'arrow', colour = '#ff3b30', drawing = null;
+let reports = [], shown = [], cur = null, marks = [], tool = 'arrow', colour = '#ff3b30', drawing = null;
+
+// What the list is showing. Everything is held in the page and filtered here —
+// the server sends all of them once, and asking it again to see what has been
+// dealt with would make a round trip out of a question we can already answer.
+const filter = { status: 'open', kind: 'all' };
+const STATUS = [['open', 'Open'], ['handled', 'Handled'], ['all', 'All']];
+const KINDS = [['all', 'Everything'], ['headset', 'Headset'],
+               ['phone', 'Phone'], ['desktop', 'Desktop']];
 
 const say = (m) => { const e = $('#say'); e.textContent = m; e.classList.add('show');
   clearTimeout(say._t); say._t = setTimeout(() => e.classList.remove('show'), 1800); };
@@ -128,16 +152,59 @@ const say = (m) => { const e = $('#say'); e.textContent = m; e.classList.add('sh
 async function boot() {
   reports = await (await fetch('/api/reports')).json();
   $('#count').textContent = reports.length + ' report' + (reports.length === 1 ? '' : 's')
-    + ' · ' + reports.filter(r => r.note).length + ' already written up';
+    + ' · ' + reports.filter(r => !r.handled).length + ' open'
+    + ' · ' + reports.filter(r => r.note).length + ' written up';
+  chips();
+  draw_list();
+}
+
+const passes = (r) => (filter.status === 'all' || (filter.status === 'handled') === !!r.handled)
+  && (filter.kind === 'all' || r.kind === filter.kind);
+
+/** The chips, each carrying how many it would show — an empty filter is not a
+ *  mystery if it tells you it is empty before you press it. */
+function chips() {
+  for (const [host, defs, key] of [[$('#fStatus'), STATUS, 'status'], [$('#fKind'), KINDS, 'kind']]) {
+    host.innerHTML = '';
+    for (const [val, label] of defs) {
+      const was = filter[key];
+      filter[key] = val;
+      const n = reports.filter(passes).length;
+      filter[key] = was;
+      const b = document.createElement('button');
+      b.className = 'chip' + (filter[key] === val ? ' on' : '');
+      b.innerHTML = esc(label) + '<span class="n">' + n + '</span>';
+      b.onclick = () => { filter[key] = val; chips(); draw_list(); };
+      host.appendChild(b);
+    }
+  }
+}
+
+function draw_list() {
+  shown = reports.filter(passes);
   list.innerHTML = '';
-  if (!reports.length) { list.innerHTML = '<div class="empty">Nothing open. Well done.</div>'; return; }
-  reports.forEach((r, i) => {
+  if (!shown.length) {
+    // ...and clear the stage with it. Leaving the last report standing there
+    // under an empty list reads as "here is the one that matched", which is the
+    // opposite of what happened.
+    list.innerHTML = '<div class="empty">Nothing under this filter.</div>';
+    cur = null;
+    img.removeAttribute('src');
+    marks = []; redraw();
+    $('#note').value = '';
+    $('#state').textContent = '';
+    blank('Nothing matches these filters. Widen them on the left.');
+    markHandledLabel();
+    return;
+  }
+  shown.forEach((r, i) => {
     const st = r.state || {}, sh = st.ship || {};
     const el = document.createElement('div');
-    el.className = 'row'; el.dataset.i = i;
+    el.className = 'row' + (r === cur ? ' on' : ''); el.dataset.i = i;
     el.innerHTML = `<div><span class="id">#${r.id}</span>
         <span class="meta">${(r.created_at || '').slice(0, 16).replace('T', ' ')}
         · ${esc(r.pilot || 'no name')}</span>
+        <span class="tag">${esc(r.kind || '?')}</span>
         ${r.handled ? '<span class="tag done">handled</span>' : ''}
         ${r.note ? '<span class="tag note">written up</span>' : ''}</div>
       <div class="meta">${esc(sh.place || st.location || '—')}${sh.id ? ' · ' + esc(sh.id) : ''}${st.scenario ? ' · ' + esc(st.scenario) : ''}</div>
@@ -145,24 +212,45 @@ async function boot() {
     el.onclick = () => show(i);
     list.appendChild(el);
   });
-  show(0);
+  show(Math.max(0, shown.indexOf(cur)));
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[<&>]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 
 // ---------------------------------------------------------------- one report
 async function show(i) {
-  if (i < 0 || i >= reports.length) return;
-  cur = reports[i];
+  if (i < 0 || i >= shown.length) return;
+  cur = shown[i];
   [...list.children].forEach((c, n) => c.classList.toggle('on', n === i));
   list.children[i] && list.children[i].scrollIntoView({ block: 'nearest' });
   marks = [];
   $('#note').value = cur.note || '';
   $('#state').textContent = stateLines(cur);
+  markHandledLabel();
   img.removeAttribute('src'); redraw();
-  const r = await (await fetch('/api/shot/' + cur.id)).json();
-  if (cur !== reports[i]) return;                       // a faster click won
-  if (r.shot) { img.src = r.shot; } else { img.removeAttribute('src'); say('no picture on this one'); }
+  // WHY THIS SAYS SOMETHING INSTEAD OF SHOWING AN EMPTY BOX. An <img> with no
+  // src, or one whose fetch failed, is a blank rectangle the same colour as the
+  // pane — indistinguishable from a report whose picture is a dark sky, which
+  // is exactly the fault most often filed here. It has to say which.
+  const mine = cur;
+  let r;
+  try { r = await (await fetch('/api/shot/' + cur.id)).json(); }
+  catch (e) { r = { error: 'the dashboard server is not answering — has it stopped?' }; }
+  if (cur !== mine) return;                             // a faster click won
+  if (r.shot) { img.src = r.shot; blank(''); }
+  else blank(r.error || 'No picture was filed with this report. The state is below, '
+    + 'and the words the pilot left are in the list.');
 }
+
+/** Put a plain sentence where the picture would be, or take it away again. */
+function blank(msg) {
+  const n = $('#nothing');
+  n.textContent = msg;
+  n.classList.toggle('show', !!msg);
+  $('#wrap').style.visibility = msg ? 'hidden' : 'visible';
+}
+
+img.onerror = () => blank('That picture could not be decoded — it may have been '
+  + 'truncated on the way in.');
 
 img.onload = () => { fit(); redraw(); };
 addEventListener('resize', () => { fit(); redraw(); });
@@ -315,7 +403,7 @@ async function save() {
       at: sh.x !== undefined ? `x ${sh.x} y ${sh.y} z ${sh.z} yaw ${sh.yaw}` : null } }) })).json();
   if (!res.ok) return say('could not write it: ' + (res.error || '?'));
   cur.note = note;
-  const row = [...list.children].find(c => reports[+c.dataset.i] === cur);
+  const row = [...list.children].find(c => shown[+c.dataset.i] === cur);
   if (row && !row.querySelector('.tag.note')) {
     row.querySelector('div').insertAdjacentHTML('beforeend', '<span class="tag note">written up</span>');
   }
@@ -323,16 +411,26 @@ async function save() {
 }
 
 $('#save').onclick = save;
+// Handled and back again. Closing one under the Open filter drops it out of the
+// list, so the next report takes its place and the triage goes on without a
+// click — which is the whole shape of the job: look, mark, next.
 $('#close').onclick = async () => {
   if (!cur) return;
-  await fetch('/api/close', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: [cur.id] }) });
-  cur.handled = true; say('#' + cur.id + ' marked handled');
-  const row = [...list.children].find(c => reports[+c.dataset.i] === cur);
-  if (row && !row.querySelector('.tag.done')) {
-    row.querySelector('div').insertAdjacentHTML('beforeend', '<span class="tag done">handled</span>');
-  }
+  const was = cur, i = shown.indexOf(was), to = was.handled ? 'reopen' : 'close';
+  await fetch('/api/' + to, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: [was.id] }) });
+  was.handled = !was.handled;
+  say('#' + was.id + (was.handled ? ' marked handled' : ' opened again'));
+  chips();
+  if (!passes(was)) cur = shown[Math.min(i + 1, shown.length - 1)] || null;
+  draw_list();
+  markHandledLabel();
 };
+
+/** The button says what pressing it will do, which is not always the same thing. */
+function markHandledLabel() {
+  $('#close').textContent = cur && cur.handled ? 'Open it again' : 'Mark handled';
+}
 $('#undo').onclick = () => { marks.pop(); redraw(); };
 $('#clear').onclick = () => { marks = []; redraw(); };
 document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
@@ -346,7 +444,7 @@ addEventListener('keydown', (e) => {
     if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
     return;
   }
-  const i = reports.indexOf(cur);
+  const i = shown.indexOf(cur);
   if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); show(i + 1); }
   if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); show(i - 1); }
   if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); marks.pop(); redraw(); }

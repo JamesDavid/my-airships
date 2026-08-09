@@ -8,8 +8,8 @@
 # full size, you draw an arrow at the thing that is wrong, write a line about
 # it, and it is saved where the works can read it.
 #
-#   python tools/bug_dashboard.py            open ones, browser opens itself
-#   python tools/bug_dashboard.py --all      handled ones too
+#   python tools/bug_dashboard.py            browser opens itself
+#   filter in the page: open / handled / all, and headset / phone / desktop
 #   python tools/bug_dashboard.py --port 8123
 #
 # WHY THIS IS A SERVER AND NOT A FILE. The reports are readable only with the
@@ -42,20 +42,44 @@ NOTES = os.path.join(ROOT, 'bug-notes')
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def load(show_all):
-    """Every report, newest first — but WITHOUT the pictures.
+# What filed it. Derived here rather than in the page because it is a judgement
+# about the data and it belongs beside the data — and because the page must be
+# able to say "headset only" without knowing what a Quest's user agent looks
+# like. A report from a headset is the one that most needs a picture drawn on:
+# the pilot could not type when they filed it.
+HEADSET = re.compile(r'OculusBrowser|Quest|Pico Browser|Wolvic|SteamVR', re.I)
+HANDHELD = re.compile(r'Android|iPhone|iPad|Mobile', re.I)
 
-    A shot is 200-900 KB of base64 and there are thirty-odd reports; sent all at
-    once the page waits half a minute on a blank screen before it can show a
-    list. The list arrives immediately and each picture is fetched when its
-    report is opened.
+
+def kind_of(r):
+    st = r.get('state') or {}
+    page = st.get('page') or {}
+    ua = page.get('ua') or ''
+    if 'from the headset' in (r.get('body') or '') or HEADSET.search(ua):
+        return 'headset'
+    if page.get('touch') or HANDHELD.search(ua):
+        return 'phone'
+    return 'desktop'
+
+
+def load():
+    """EVERY report, newest first — but WITHOUT the pictures.
+
+    All of them, always, handled or not: the filtering is the page's business
+    now, and asking the server again every time you want to see what has already
+    been dealt with makes a round trip out of a question the browser can answer
+    from what it is holding.
+
+    The pictures are the reason for the split. A shot is 200-900 KB of base64
+    and there are thirty-odd reports; sent all at once the page waits half a
+    minute on a blank screen before it can show a list. The list arrives at
+    once, and each picture is fetched when its report is opened.
     """
-    q = 'select=id,created_at,pilot,client_version,handled,body,state&order=created_at.desc&limit=300'
-    if not show_all:
-        q += '&handled=eq.false'
-    rows = call('/rest/v1/bug_reports?' + q)
+    rows = call('/rest/v1/bug_reports?select=id,created_at,pilot,client_version,'
+                'handled,body,state&order=created_at.desc&limit=500')
     for r in rows:
         r['note'] = read_note(r['id'])
+        r['kind'] = kind_of(r)
     return rows
 
 
@@ -125,7 +149,6 @@ def reindex():
 
 
 class Handler(BaseHTTPRequestHandler):
-    show_all = False
 
     def log_message(self, *a):
         pass                                    # the console is for the notes
@@ -148,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                 page = open(os.path.join(HERE, 'bug_dashboard.html'), encoding='utf-8').read()
                 return self.send(200, page, 'text/html; charset=utf-8')
             if self.path.startswith('/api/reports'):
-                return self.send(200, load(Handler.show_all))
+                return self.send(200, load())
             m = re.fullmatch(r'/api/shot/(\d+)', self.path)
             if m:
                 rows = call('/rest/v1/bug_reports?select=shot&id=eq.' + m.group(1))
@@ -186,15 +209,14 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--all', action='store_true', help='handled reports too')
     ap.add_argument('--port', type=int, default=8123)
     ap.add_argument('--no-open', action='store_true')
     a = ap.parse_args()
-    Handler.show_all = a.all
 
-    rows = load(a.all)                          # fail loudly here, not in the page
-    print('%d report%s. Dashboard on http://127.0.0.1:%d/'
-          % (len(rows), '' if len(rows) == 1 else 's', a.port))
+    rows = load()                               # fail loudly here, not in the page
+    open_n = sum(1 for r in rows if not r.get('handled'))
+    print('%d report%s, %d still open. Dashboard on http://127.0.0.1:%d/'
+          % (len(rows), '' if len(rows) == 1 else 's', open_n, a.port))
     print('Notes are written to bug-notes/ — nothing is sent back to Supabase')
     print('except closing a report. Ctrl-C to stop.')
     srv = ThreadingHTTPServer(('127.0.0.1', a.port), Handler)
