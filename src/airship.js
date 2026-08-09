@@ -608,11 +608,26 @@ export class Airship {
     }
     if (K.type === 'saddle') {
       // No. 4: no basket at all — a bicycle saddle amid the spider web
+      // WHERE A MAN'S SADDLE IS, WHICH IS UNDER HIM.
+      //
+      // "bicycle seat too high? should be down lower" -- and measured, the
+      // saddle sat at -drop+0.55, which is EXACTLY where the eyePoint sits. The
+      // two numbers were written in different places and happened to be the
+      // same one, so the pilot was seated with his eyes level with the saddle he
+      // was sitting on. "its way to high for the pilots butt", precisely.
+      //
+      // A seated man's eye is about 0.72 m above his saddle, so the saddle is
+      // struck off the eye rather than guessed at, and the post bridges whatever
+      // gap that leaves up to the keel line -- so she can never drift again.
+      const EYE_Y = -drop + 0.55;              // the same number eyePoint uses
+      const SIT = 0.72;                        // eye above saddle, seated
+      const SADDLE_Y = EYE_Y - SIT;
       const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.35), dark);
-      saddle.position.set(bx, -drop + 0.55, 0);
+      saddle.position.set(bx, SADDLE_Y, 0);
       this.pitchGroup.add(saddle);
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.55, 5), dark);
-      post.position.set(bx, -drop + 0.28, 0);
+      const stemH = Math.max(0.12, -drop - SADDLE_Y);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, stemH, 5), dark);
+      post.position.set(bx, SADDLE_Y + stemH / 2, 0);
       this.pitchGroup.add(post);
       this.basketMesh = saddle;
       // The No. 4 has no basket at all — a bicycle saddle amid the spider web.
@@ -621,7 +636,7 @@ export class Airship {
       // hip height, where a man sitting a bicycle finds it, and his head comes
       // a torso above it rather than a whole standing height.
       this.deckPoint = new THREE.Object3D();
-      this.deckPoint.position.set(bx, -drop + 0.55 - 0.80, 0);
+      this.deckPoint.position.set(bx, SADDLE_Y - 0.80, 0);
       this.pitchGroup.add(this.deckPoint);
     } else {
       // A BASKET YOU CAN STAND IN. This was one solid BoxGeometry, which is
@@ -874,10 +889,24 @@ export class Airship {
       this.pitchGroup.add(this.tillerCords);
     }
 
-    // each dial stands on its own small post at the fore rim
-    for (const pz of [-0.2, 0.2]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.28, 5), dark);
-      post.position.set(bx + 0.5, -drop + 0.14, pz);
+    // EACH DIAL STANDS ON ITS OWN POST -- and now it actually does.
+    //
+    // "these two pieces of the basket. unnecessary right?" They were: measured,
+    // the posts stood at x = bx+0.50, z = +/-0.20 while the dials they are for
+    // are at x = bx+0.74, z = +/-0.24, and the post's top came 5.5 cm short of
+    // the underside of the drum. So they were 24 cm behind their dial, 4 cm
+    // inboard of it, and not touching it -- two rods holding nothing, on every
+    // ship in the shed.
+    //
+    // Both are struck off ONE place now. The dial's seat is the number, and the
+    // post is however long it takes to reach it from the rim, so neither can
+    // drift from the other again.
+    const DIAL_X = bx + 0.74, DIAL_Y = -drop + 0.44, DIAL_Z = 0.24;
+    const DRUM_R = 0.105;                       // the dial's own radius
+    const POST_H = (DIAL_Y - DRUM_R) - (-drop); // rim to the underside of the drum
+    for (const pz of [-DIAL_Z, DIAL_Z]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, POST_H, 5), dark);
+      post.position.set(DIAL_X, -drop + POST_H / 2, pz);
       this.pitchGroup.add(post);
     }
 
@@ -901,7 +930,7 @@ export class Airship {
     // sat at +0.64 — six centimetres, with the compass at z +0.24 against the
     // lever's own +0.26. They are at +0.74 now, level with the tiller's pivot
     // and 0.16 m clear of the lever at full throttle.
-    baro.position.set(bx + 0.74, -drop + 0.44, -0.24);
+    baro.position.set(DIAL_X, DIAL_Y, -DIAL_Z);
     baro.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(baro);
 
@@ -931,7 +960,7 @@ export class Airship {
     this.compassNeedle.geometry.translate(0, 0.064, 0);
     this.compassNeedle.position.x = -0.04;
     compass.add(this.compassNeedle);
-    compass.position.set(bx + 0.74, -drop + 0.44, 0.24);
+    compass.position.set(DIAL_X, DIAL_Y, DIAL_Z);
     compass.rotation.z = -0.55; // face tilted up toward the pilot's eye
     this.pitchGroup.add(compass);
 

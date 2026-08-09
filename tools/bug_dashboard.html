@@ -1097,11 +1097,23 @@ function drawModelList() {
     const fleet = sortBy === 'each' ? m.draws
       : sortBy === 'tris' ? Math.round((m.tris * m.copies) / 1000) + 'k'
       : sortBy === 'copies' ? m.copies : m.draws * m.copies;
-    const note = modelNotes[modelKey(m)];
+    // EVERY note on this model, including the ones left on its PIECES.
+    //
+    // The badge used to look up the model's own key alone, so a note about two
+    // pieces of the No. 9's basket lit nothing at all -- "no queued marking
+    // tho?" -- and the list said the model was untouched while the queue said
+    // otherwise. A piece's key is the model's key with a suffix, so the model's
+    // own note and all its pieces' notes are the keys that begin with it.
+    const mine = Object.entries(modelNotes)
+      .filter(([k]) => k === modelKey(m) || k.startsWith(modelKey(m) + '--'))
+      .map(([, v]) => v);
+    const open = mine.filter((v) => !v.done).length;
     el.innerHTML = `<span class="d">${fleet}</span><span class="n">`
       + (m.copies > 1 ? `<b style="color:var(--hot)">×${m.copies}</b> ` : '')
       + `${esc(m.name)}</span>`
-      + (note ? `<span class="tag ${note.done ? 'done' : 'note'}">${note.done ? 'done' : 'queued'}</span>` : '');
+      + (mine.length
+        ? `<span class="tag ${open ? 'note' : 'done'}">${open ? 'queued' + (mine.length > 1 ? ' ' + open : '') : 'done'}</span>`
+        : '');
     el.onclick = () => pickModel(i);
     list.appendChild(el);
   });
