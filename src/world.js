@@ -1642,12 +1642,17 @@ export function mergeStaticInto(root, live) {
 
   let made = 0;
   for (const { mat, parts } of byMat.values()) {
-    const pos = [], nrm = [], idx = [];
+    // UVs TOO. The first version of this carried position and normal and
+    // nothing else, so every textured surface it merged sampled one texel:
+    // "the dials on the airship broke", and the placards with them. A merge
+    // that drops an attribute silently changes what the material reads.
+    const pos = [], nrm = [], uvs = [], idx = [];
     let base = 0;
     for (const part of parts) {
       const a = part.geom.attributes && part.geom.attributes.position;
       if (!a || !a.array || !a.count) continue;        // a stub geometry
       const nm = part.geom.attributes.normal;
+      const uv = part.geom.attributes.uv;
       const v = new THREE.Vector3();
       const nMat = new THREE.Matrix3().getNormalMatrix(part.at);
       for (let i = 0; i < a.count; i++) {
@@ -1658,6 +1663,10 @@ export function mergeStaticInto(root, live) {
             .applyMatrix3(nMat).normalize();
           nrm.push(v.x, v.y, v.z);
         } else nrm.push(0, 1, 0);
+        // a surface with no UVs of its own still needs a pair, or the whole
+        // buffer runs out of step and every later part reads the wrong texel
+        if (uv && uv.array) uvs.push(uv.array[i * 2], uv.array[i * 2 + 1]);
+        else uvs.push(0, 0);
       }
       const ix = part.geom.index;
       if (ix && ix.array) for (let i = 0; i < ix.array.length; i++) idx.push(base + ix.array[i]);
@@ -1667,6 +1676,7 @@ export function mergeStaticInto(root, live) {
     const g2 = new THREE.BufferGeometry();
     g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g2.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g2.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     g2.setIndex(idx);
     const m = new THREE.Mesh(g2, mat);
     m.castShadow = true;
@@ -1760,12 +1770,13 @@ function makeFarProxy(group, sawInstanced = { hit: false }, merged = [], live = 
     // the vertex work is what is skipped. The browser gets the real silhouette,
     // the harness gets the real DRAW COUNT, and both are true.
     if (!parts.length) continue;
-    const pos = [], nrm = [], idx = [];
+    const pos = [], nrm = [], uvs = [], idx = [];
     let base = 0;
     for (const part of parts) {
       const a = part.geom.attributes && part.geom.attributes.position;
       if (!a || !a.array || !a.count) continue;          // a stub geometry
       const nm = part.geom.attributes.normal;
+      const uv = part.geom.attributes.uv;                // ...and its UVs
       const v = new THREE.Vector3();
       const nrmMat = new THREE.Matrix3().getNormalMatrix(part.at);
       for (let i = 0; i < a.count; i++) {
@@ -1776,6 +1787,10 @@ function makeFarProxy(group, sawInstanced = { hit: false }, merged = [], live = 
             .applyMatrix3(nrmMat).normalize();
           nrm.push(v.x, v.y, v.z);
         } else nrm.push(0, 1, 0);
+        // a surface with no UVs of its own still needs a pair, or the whole
+        // buffer runs out of step and every later part reads the wrong texel
+        if (uv && uv.array) uvs.push(uv.array[i * 2], uv.array[i * 2 + 1]);
+        else uvs.push(0, 0);
       }
       const ix = part.geom.index;
       if (ix && ix.array) for (let i = 0; i < ix.array.length; i++) idx.push(base + ix.array[i]);
@@ -1785,6 +1800,7 @@ function makeFarProxy(group, sawInstanced = { hit: false }, merged = [], live = 
     const g2 = new THREE.BufferGeometry();
     g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g2.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g2.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     g2.setIndex(idx);
     const mesh = new THREE.Mesh(g2, mat);
     out.push(mesh);
