@@ -763,7 +763,21 @@ let THREE = null, builtWorld = null, models = [], pickedModel = null, modelNotes
 let sortBy = 'fleet';        // fleet draws | draws each | triangles | copies
 let foldBySize = false;      // by SHAPE by default: that is the instancing question
 let showAllCopies = true;    // and show the whole fleet where it stands
-let pickedPart = null;              // one piece of it, chosen in the preview
+// A SET, not a piece. One bar through the pilot's chest is one note; a whole
+// assembly that ought to be instanced is one note about eight pieces, and
+// writing it eight times is how a queue stops being read.
+let pickedParts = [];               // pieces of it, chosen in the preview
+
+/** A stable name for a SET of pieces. */
+function partsKey(m, parts) {
+  if (parts.length === 1) return partKey(m, parts[0]);
+  const idx = parts.map((x) => m.parts.indexOf(x)).sort((a, b) => a - b);
+  // first, last, how many, and a sum -- short enough for a filename and
+  // specific enough that two different sets do not land on the same one
+  const sum = idx.reduce((a, b) => (a + b * 31) % 99991, 7);
+  return (modelKey(m) + `--parts-${idx.length}-${idx[0]}-${idx[idx.length - 1]}-${sum}`)
+    .slice(0, 78).toLowerCase();
+}
 
 /** A stable name for one PIECE of a model: what it is, and which of them. */
 function partKey(m, part) {
@@ -1133,7 +1147,7 @@ async function pickModel(i) {
   // clicking a row of the table selects that piece in the picture too
   for (const r of document.querySelectorAll('#parts tr[data-part]')) {
     r.style.cursor = 'pointer';
-    r.onclick = () => choosePart(m.parts[+r.dataset.part]);
+    r.onclick = (e) => choosePart(m.parts[+r.dataset.part], e.ctrlKey || e.metaKey);
   }
   choosePart(null);
   showPreview(m);
@@ -1157,16 +1171,22 @@ function drawNoteBox() {
   if (!m) return;
   const box = $('#noteBox');
   if (!box) return;
-  const part = pickedPart;
-  const key = part ? partKey(m, part) : modelKey(m);
+  const parts = pickedParts;
+  const part = parts.length === 1 ? parts[0] : null;
+  const key = parts.length ? partsKey(m, parts) : modelKey(m);
   const have = modelNotes[key] || { note: '', done: false };
-  const name = part ? `${m.name} — ${part.name || part.o.type}` : m.name;
+  const name = parts.length === 1 ? `${m.name} — ${part.name || part.o.type}`
+    : parts.length ? `${m.name} — ${parts.length} pieces` : m.name;
   const about = part
     ? `<b>${esc(part.name || part.o.type)}</b> — ${esc(part.sig.shape.slice(0, 70))},
        ${part.tris.toLocaleString()} triangles${part.instanced ? ', instanced' : ''}${part.animates ? ', animates' : ''}
        &nbsp;<button id="mall" class="mark">note the whole model instead</button>`
-    : `the whole model &nbsp;<span style="color:var(--dim)">— click a piece in the picture, or a row
-       above, to talk about just that one</span>`;
+    : parts.length
+      ? `<b>${parts.length} pieces</b> — ${parts.reduce((a, x) => a + x.tris, 0).toLocaleString()}
+         triangles between them: ${esc([...new Set(parts.map((x) => x.name || x.o.type))].join(', ').slice(0, 80))}
+         &nbsp;<button id="mall" class="mark">note the whole model instead</button>`
+      : `the whole model &nbsp;<span style="color:var(--dim)">— click a piece in the picture, or a row
+         above, to talk about just that one · <b>ctrl-click</b> to take several</span>`;
   box.innerHTML = `<h2 style="font-size:14px;color:var(--hot);margin:18px 0 4px">What to do about it</h2>
     <p class="note" style="margin:0 0 6px">${about}</p>
     <div style="display:flex;gap:10px;align-items:flex-start">
@@ -1183,10 +1203,13 @@ function drawNoteBox() {
     <p class="note" style="color:var(--dim);font-size:12px">Kept in bug-notes/models/, indexed in
       bug-notes/MODELS.md. Not filed as a bug report — that queue is what pilots write to.</p>`;
   const send = async (done) => {
-    const stats = part
+    const stats = parts.length
       ? { place: $('#whichWorld').value, partOf: m.name, copiesOfModel: m.copies,
-          geometry: part.sig.shape, triangles: part.tris,
-          instanced: part.instanced, animates: part.animates }
+          pieces: parts.length,
+          geometry: [...new Set(parts.map((x) => x.sig.shape))].join(' + ').slice(0, 220),
+          triangles: parts.reduce((a, x) => a + x.tris, 0),
+          instanced: parts.filter((x) => x.instanced).length,
+          animates: parts.filter((x) => x.animates).length }
       : { place: $('#whichWorld').value, copies: m.copies, drawsEach: m.draws,
           drawsTotal: m.draws * m.copies, triangles: m.tris,
           materials: (m.mats && m.mats.size) || 1, parts: m.groups.length };
@@ -1201,19 +1224,49 @@ function drawNoteBox() {
   $('#msave').onclick = () => send(!!have.done);
   $('#mdone').onclick = () => send(!have.done);
   if ($('#mall')) $('#mall').onclick = () => choosePart(null);
+  // and the placeholder should suit what is actually selected
+  if (parts.length > 1 && $('#mnote') && !$('#mnote').value) {
+    $('#mnote').placeholder = 'e.g. these eight are one assembly and never move — merge them, '
+      + 'or instance the bay and repeat it';
+  }
 }
 
-/** Select one piece — from the picture, or from a row of the table. */
-function choosePart(part) {
-  pickedPart = part;
-  if (pv && pv.marker) {
-    if (part) { pv.marker.setFromObject(part.o); pv.marker.visible = true; }
-    else pv.marker.visible = false;
+/**
+ * Select a piece — from the picture, or from a row of the table.
+ *
+ * `add` is ctrl (or cmd) held: the piece joins the selection, or leaves it if it
+ * was already in. Without it the selection becomes just that piece, which is
+ * what a plain click has always meant everywhere.
+ */
+function choosePart(part, add) {
+  if (!part) pickedParts = [];
+  else if (!add) pickedParts = [part];
+  else {
+    const i = pickedParts.indexOf(part);
+    if (i >= 0) pickedParts.splice(i, 1); else pickedParts.push(part);
   }
+  drawMarkers();
   drawNoteBox();
+  const chosen = new Set(pickedParts.map((x) => pickedModel.parts.indexOf(x)));
   for (const r of document.querySelectorAll('#parts tr[data-part]')) {
-    r.classList.toggle('us', part && +r.dataset.part === pickedModel.parts.indexOf(part));
+    r.classList.toggle('us', chosen.has(+r.dataset.part));
   }
+}
+
+/** One box round each chosen piece. Pooled: a model may have a hundred parts. */
+async function drawMarkers() {
+  if (!pv) return;
+  const T = await three();
+  pv.markers = pv.markers || [];
+  while (pv.markers.length < pickedParts.length) {
+    const h = new T.BoxHelper(new T.Object3D(), 0xffd60a);
+    pv.markers.push(h);
+    pv.scene.add(h);
+  }
+  pv.markers.forEach((h, i) => {
+    const part = pickedParts[i];
+    if (part) { h.setFromObject(part.o); h.visible = true; } else h.visible = false;
+  });
 }
 
 /** The model on its own, turning, so you can see what you are being told about. */
@@ -1307,7 +1360,7 @@ async function showPreview(m) {
           if (part) break;
         }
       }
-      choosePart(part);
+      choosePart(part, e.ctrlKey || e.metaKey);
     });
 
     const tick = () => {
@@ -1360,15 +1413,10 @@ async function showPreview(m) {
   for (const r of roots) { pv.holder.add(r); r.position.sub(c); }
   pv.r = Math.max(1, sz.length() / 2);
   if (pv.spin) { pv.spin.auto = true; pv.spin.zoom = 1; pv.spin.target.set(0, 0, 0); }
-  if (!pv.marker) {
-    // a box round whatever is chosen. NOT a change of material: materials here
-    // are shared between hundreds of parts, so tinting one would tint them all
-    // and the picture would start lying.
-    pv.marker = new T2.BoxHelper(new T2.Object3D(), 0xffd60a);
-    pv.marker.visible = false;
-    pv.scene.add(pv.marker);
-  }
-  pv.marker.visible = false;
+  // the boxes round whatever is chosen are pooled and hidden here; they are NOT
+  // a change of material, because materials are shared between hundreds of parts
+  // and tinting one would tint them all and the picture would start lying.
+  for (const h of pv.markers || []) h.visible = false;
   const hint = box.querySelector('.hint') || (() => {
     const el = document.createElement('div');
     el.className = 'lbl hint';
