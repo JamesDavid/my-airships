@@ -1810,57 +1810,77 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
 
   // -------------------------------------- the free balloon cannot be steered
   //
-  // The "Brazil" is a sphere with no motor, no rudder and no tail, and she goes
-  // WITH the wind, so she has no airspeed to be turned by either. She therefore
-  // cannot be steered at all, and does not weathercock — not even on the guide
-  // rope, because a boat rides to her anchor by being longer than she is wide
-  // and a sphere is not.
+  // She turns, and nobody can stop her — that is what the accounts of ballooning
+  // describe and it is now in the flight model. What must NOT be true is that
+  // any of it answers the pilot. Those two are easy to confuse and this check
+  // has already been wrong once in each direction: first it asserted she turned
+  // AND HELD IT, which made her steerable; then it asserted she never turned at
+  // all, which made her a fixed post in the sky.
   //
-  // This check was briefly the opposite of itself. The first attempt at "the
-  // view snaps back in the balloon" gave her a helm — a slow one, but a helm —
-  // and it passed, because it tested that she TURNED and held it. She should do
-  // neither. The pilot turns; she does not. So both halves are asserted: she
-  // never answers a helm, and a ship that has one still rides to her rope, in
-  // case the next fix for this is "switch the weathercock off everywhere".
+  // So the test is not "does she turn". It is: fly the same balloon twice, once
+  // with the helm hard over the whole way and once with the pilot's hands in his
+  // pockets, and the two must come out IDENTICAL. Anything the helm does shows
+  // up as a difference, however small, and no amount of wandering can hide it.
   {
     const deg = (r) => (r * 180) / Math.PI;
     const env = { groundAt: () => 0, isWater: () => false };
-    const flown = (id) => {
-      const s = makeShip(id);
-      s.reset(new THREE.Vector3(0, 40, 0), 0);
-      const wind = new THREE.Vector3(6, 0, 0);
-      const start = s.yaw;
-      fly(s, { wind, env, secs: 20, pilot: () => ({ throttle: 0, rudder: 1, pitch: 0, vent: 0, coax: 0 }) });
-      const onHelm = Math.abs(deg(s.yaw - start));
-      fly(s, { wind, env, secs: 120 });                 // and now hands off
-      return { onHelm, adrift: Math.abs(deg(s.yaw - start)) };
+    const wind = new THREE.Vector3(6, 0, 0);
+    const HELM = { throttle: 0, rudder: 1, pitch: 0, vent: 0, coax: 0 };
+
+    const twin = () => {                                 // two of her, same wander
+      const a = makeShip('brazil'), b = makeShip('brazil');
+      a.reset(new THREE.Vector3(0, 120, 0), 0);
+      b.reset(new THREE.Vector3(0, 120, 0), 0);
+      b._spin = a._spin.slice();
+      return [a, b];
     };
-    const b = flown('brazil'), p = flown('no6');
-    if (b.onHelm > 1) {
-      console.log('   FAIL the Brazil answers her helm: %s deg of it. She has no rudder.',
-        b.onHelm.toFixed(1));
+    const [hands, helm] = twin();
+    let peak = 0, swing = 0, prev = hands.yaw;
+    for (let i = 0; i < 300 * 30; i++) {
+      hands.update(1 / 30, { throttle: 0, rudder: 0, pitch: 0, vent: 0, coax: 0 }, wind, env);
+      helm.update(1 / 30, HELM, wind, env);
+      const rate = Math.abs(deg(hands.yaw - prev)) * 30;
+      if (rate > peak) peak = rate;
+      swing += Math.abs(deg(hands.yaw - prev));
+      prev = hands.yaw;
+    }
+    const answered = Math.abs(deg(helm.yaw - hands.yaw));
+
+    if (answered > 1e-9) {
+      console.log('   FAIL the Brazil answers her helm: %s deg apart after five minutes of it. '
+        + 'She has no rudder.', answered.toFixed(3));
       fails++;
-    } else if (b.adrift > 1) {
-      console.log('   FAIL the Brazil is turned by the wind: %s deg. A sphere has no head to hold.',
-        b.adrift.toFixed(1));
+    } else if (swing < 30) {
+      console.log('   FAIL the Brazil does not turn at all: %s deg of swing in five minutes. '
+        + 'A real basket never stops.', swing.toFixed(1));
+      fails++;
+    } else if (peak > 6) {
+      console.log('   FAIL the Brazil spins: %s deg a second. That is a fairground ride.',
+        peak.toFixed(1));
       fails++;
     } else {
-      console.log('   ok   the Brazil cannot be steered and is not weathercocked (%s deg in all)',
-        b.adrift.toFixed(1));
+      console.log('   ok   the Brazil wanders %s deg in five minutes, peak %s deg/s, '
+        + 'and the helm changes nothing', swing.toFixed(0), peak.toFixed(1));
     }
-    if (p.adrift < 15) {
-      console.log('   FAIL the No. 6 no longer answers or rides to her rope: %s deg in all',
-        p.adrift.toFixed(1));
+
+    // ...and a ship that HAS a rudder and a tail still rides to her rope.
+    const p = makeShip('no6');
+    p.reset(new THREE.Vector3(0, 40, 0), 0);
+    fly(p, { wind, env, secs: 140 });
+    if (Math.abs(deg(p.yaw)) < 15) {
+      console.log('   FAIL the No. 6 no longer comes round: %s deg', deg(p.yaw).toFixed(1));
       fails++;
     } else {
       console.log('   ok   and a ship with a rudder and a tail still comes round (%s deg)',
-        p.adrift.toFixed(0));
+        deg(p.yaw).toFixed(0));
     }
 
-    // ...and the pilot turns instead, and STAYS turned. That lives in main.js
-    // with the view rather than in the flight model, so it is read there: the
-    // helm must be taken off the ship, and the spring-back that returns every
-    // other view to dead ahead must not run in her.
+    // The view is fixed to the BASKET, not to the world: a pilot standing in it
+    // is carried round by the wander like anybody standing on a turning thing,
+    // and where he has turned to look stays put relative to the woodwork. Both
+    // halves live in main.js — the helm must be taken off the ship and given to
+    // the view, and the spring-back that returns every other view to dead ahead
+    // must not run in her.
     const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
     const turnsPilot = /noHelm\(\)\s*&&\s*input\.rudder[\s\S]{0,320}?input\.rudder = 0;/.test(src);
     const springs = [...src.matchAll(/if \(!dragging(?: && !noHelm\(\))?\) \{ orbitYaw/g)];

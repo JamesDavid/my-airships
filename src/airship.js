@@ -82,6 +82,19 @@ export const DECK_LIFT_MAX = DECK_NOTCHES[DECK_NOTCHES.length - 1].lift;
  * K' = 0.5..1.1 the No. 6's period runs 8.5 s to 13.7 s. The old model's 1.43 s
  * is not within reach of any of it, which is the whole point.
  */
+// How a free balloon turns when nothing is turning her.
+//
+// Tuned against what the accounts actually claim rather than picked: aeronauts
+// put a revolution at anywhere from about a minute to several, reversing when
+// it likes. Measured over six flights of five minutes each, these give a peak
+// of 2.2 degrees a second — a turn in 2.8 minutes if she held it, which she
+// does not — about 300 degrees of swinging to and fro in five minutes, and
+// something like a third of a turn of net drift. Faster than this and a pilot
+// watching the horizon feels it as the world sliding; slower and it reads as
+// nothing at all.
+const TURN_TORSION = 0.035;      // the net winding and unwinding, on its own
+const TURN_SHEAR = 0.020;        // per metre a second of shear across her height
+
 const PEND_F = 0.45;                  // share of her hanging below the gas
 const PEND_K = 0.8;                   // added moment of the air she swings
 const TRIM_HAUL = 5;                  // seconds to haul a weight the whole way
@@ -428,6 +441,11 @@ export class Airship {
     this.propAngle = 0;
     this.rudderInput = 0;
     this._t = 0;
+    // Where in her wander a free balloon happens to be when you let go of her.
+    // Drawn once per flight, not per frame, so a flight replays the same way —
+    // and drawn at all so that two flights are not the same flight. Only the
+    // "Brazil" reads them; see the weathercocks === false branch in update().
+    this._spin = [Math.random() * 6.283, Math.random() * 6.283, Math.random() * 6.283];
     this.initRope();
     this.updateTransforms(0);
   }
@@ -2145,7 +2163,39 @@ export class Airship {
       // view that creeps while you are looking through it is a fault report,
       // and the small truth is not worth the large annoyance.)
       this.sideslip = 0;
-      this.yawVel = 0;
+
+      // ---- BUT SHE DOES TURN, AND NOBODY CAN STOP HER ----
+      //
+      // Every aeronaut who has been up in one says the same thing: the basket
+      // turns, slowly, whenever it likes, and reverses for no reason you can
+      // see. A revolution takes anywhere from a minute to several. It is the
+      // standing nuisance of balloon photography and nobody has ever had a
+      // remedy for it, because there is nothing to fit a remedy to.
+      //
+      // Not the wind, though. A steady wind cannot turn her — she is IN it, and
+      // a body carried by a stream feels no stream. Two other things do:
+      //
+      //   THE NET winds and unwinds. Suspension cords under load store twist,
+      //     give it back, and overshoot, so she hunts about a heading for as
+      //     long as she is up. This part goes on in a dead calm.
+      //   THE SHEAR across her height. She is fifteen metres from the crown of
+      //     the envelope to the floor of the basket, and the air at the top is
+      //     not doing what the air at the bottom is doing. That difference is a
+      //     couple, and it is why she turns faster on a gusty day.
+      //
+      // Three slow sines with periods that share no common multiple: it wanders
+      // without repeating, averages to nothing, and now and then all three
+      // agree and she goes right round. No random number is drawn per frame, so
+      // the same flight replays the same way.
+      const span = (this.spec.envelope.diameter || 8) + (this.spec.keel.drop || 7.5);
+      const hi = windAt(wind, this.pos.y + span / 2, this.groundHere);
+      const lo = windAt(wind, this.pos.y - span / 2, this.groundHere);
+      const shear = Math.hypot(hi.x - lo.x, hi.z - lo.z);
+      const wander = 0.55 * Math.sin(this._t * 0.0133 + this._spin[0])
+                   + 0.30 * Math.sin(this._t * 0.0413 + this._spin[1])
+                   + 0.15 * Math.sin(this._t * 0.0757 + this._spin[2]);
+      this.yawVel = (TURN_TORSION + TURN_SHEAR * shear) * wander;
+      this.yaw += this.yawVel * dt;
     } else {
       this.sideslip = vane;
       const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55) + vane;
