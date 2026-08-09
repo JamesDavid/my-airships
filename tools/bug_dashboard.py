@@ -253,8 +253,24 @@ def summarise(rows):
                       'first': p['first'], 'last': p['last'], 'idle': p['idle']})
     plist.sort(key=lambda x: -x['secs'])
 
+    # A NAMELESS PILOT IS A BROWSER THAT CANNOT REMEMBER ANYTHING.
+    #
+    # ensurePilotName() runs at boot, before anybody flies, and writes the name
+    # to localStorage. So a flight with no name on it can only have come from a
+    # browser where that write did nothing -- private mode, blocked storage, an
+    # in-app webview. net.js swallows the failure by design, which is right for
+    # the pilot and awkward here: pilotId() cannot persist either, so such a
+    # browser mints a FRESH UUID ON EVERY PAGE LOAD.
+    #
+    # That means each of these rows is one SESSION, not one person, and counting
+    # them as pilots inflates the number. They are separated rather than dropped:
+    # they are real flying by real people, we simply cannot tell how many.
+    nameless = [p for p in plist if p['name'] == 'a pilot unknown']
     return {
         'pilots': len(pilots), 'flights': len(rows),
+        'named': len(plist) - len(nameless),
+        'namelessSessions': len(nameless),
+        'namelessFlights': sum(p['flights'] for p in nameless),
         'secs': round(sum(r.get('secs') or 0 for r in rows)),
         'secsTrimmed': round(sum(min(r.get('secs') or 0, IDLE_CUT) for r in rows)),
         'completed': sum(1 for r in rows if r.get('outcome') in DONE),

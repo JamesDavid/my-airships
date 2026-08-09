@@ -532,9 +532,15 @@ function drawUsage() {
     already happened${usage.nameClashes.length ? ' \u2014 ' + usage.nameClashes.length
       + ' name' + (usage.nameClashes.length === 1 ? '' : 's') + ' cover more than one browser' : ''}.
     <b>Time is wall-clock</b> from take-off to whatever ended the flight, so a tab left open
-    counts; the trimmed figure caps any single flight at ${hhmm(usage.idleCut)}.</p>`);
+    counts; the trimmed figure caps any single flight at ${hhmm(usage.idleCut)}.
+    <b>A nameless pilot is a browser that cannot remember anything</b> \u2014 the register runs
+    at boot, so no name means storage is blocked, which means a fresh id every page load.
+    Those ${u.namelessSessions} are counted as sessions rather than people
+    (${u.namelessFlights} flights); the real number of people behind them is smaller,
+    and unknowable.</p>`);
   H.push(`<div class="big">
-    <div><b>${u.pilots}</b><span>pilots</span></div>
+    <div><b>${u.named}</b><span>pilots</span></div>
+    <div><b>${u.namelessSessions}</b><span>sessions, no storage</span></div>
     <div><b>${u.flights}</b><span>flights</span></div>
     <div><b>${hhmm(u.secs)}</b><span>logged</span></div>
     <div><b>${hhmm(u.secsTrimmed)}</b><span>trimmed</span></div>
@@ -594,7 +600,10 @@ function drawUsage() {
   const pl = usage.all.pilotList.map(p => ({ ...p, _us: ours.has(p.id) }));
   H.push(table(pl, [
     { h: '', f: r => `<button class="mark ${r._us ? 'on' : ''}" data-id="${r.id}">${r._us ? 'us' : 'mark'}</button>` },
-    { h: 'pilot', f: r => esc(r.name) + (r.otherNames.length ? ' <span style="opacity:.6">(also ' + esc(r.otherNames.join(', ')) + ')</span>' : '') },
+    { h: 'pilot', f: r => (r.name === 'a pilot unknown'
+        ? '<span style="opacity:.6">' + esc(r.name) + ' <i>\u2014 storage blocked, one session</i></span>'
+        : esc(r.name))
+      + (r.otherNames.length ? ' <span style="opacity:.6">(also ' + esc(r.otherNames.join(', ')) + ')</span>' : '') },
     { h: 'flights', n: 1, f: r => r.flights },
     { h: 'time', n: 1, f: r => hhmm(r.secs) },
     { h: 'done', n: 1, f: r => r.completed },
