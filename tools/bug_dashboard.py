@@ -148,6 +148,141 @@ def reindex():
     open(os.path.join(NOTES, 'NOTES.md'), 'w', encoding='utf-8').write('\n'.join(out))
 
 
+# ---------------------------------------------------------------- the usage
+#
+# 428 flights and 22 completions, and the pilot with the most airtime of all has
+# finished exactly one thing. That is the number worth looking at, and until now
+# the only way to see it was to paste SQL into the Supabase dashboard.
+#
+# TWO THINGS THIS IS CAREFUL ABOUT, because both of them mislead:
+#
+# 1. A NAME IS NOT A PILOT. Names are drawn from 21 firsts and 19 surnames --
+#    399 of them -- so with 57 pilots there is a 98.5% chance two strangers
+#    share one, and two already do. Thirteen more have no name at all.
+#    Everything here groups by pilot_id, which is a uuid; the name is only ever
+#    a label, and where one name covers more than one uuid it is said so.
+#
+# 2. secs IS WALL-CLOCK, not engagement. flightEnd logs performance.now() minus
+#    the start, so a tab left open all afternoon logs the afternoon. One row is
+#    46 hours -- this machine, sitting open while the game was worked on -- and
+#    it is 63% of all the time ever recorded. So every figure is given twice: as
+#    it stands, and with any single flight capped at an hour. Pilots you mark as
+#    your own can be taken out of the reckoning altogether.
+IDLE_CUT = 3600         # a flight longer than this is a tab, not a flight
+OURS = os.path.join(NOTES, 'ours.json')
+
+
+def load_ours():
+    try:
+        return set(json.load(open(OURS, encoding='utf-8')))
+    except Exception:
+        return set()
+
+
+def save_ours(ids):
+    os.makedirs(NOTES, exist_ok=True)
+    json.dump(sorted(ids), open(OURS, 'w', encoding='utf-8'), indent=1)
+
+
+def median(xs):
+    xs = sorted(x for x in xs if x is not None)
+    if not xs:
+        return 0
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+DONE = ('complete', 'finished')
+
+
+def summarise(rows):
+    """Every figure, over whatever set of flights it is handed."""
+    by_ref, by_day, by_place, by_ship = {}, {}, {}, {}
+    pilots = {}
+    for r in rows:
+        secs = r.get('secs') or 0
+        day = (r.get('created_at') or '')[:10]
+        pid = r.get('pilot_id') or '?'
+        ref = '%s / %s' % (r.get('kind') or '?', r.get('ref') or '-')
+        for d, k in ((by_ref, ref), (by_day, day),
+                     (by_place, r.get('place') or '?'), (by_ship, r.get('ship_id') or '?')):
+            e = d.setdefault(k, {'key': k, 'flights': 0, 'secs': [], 'pilots': set(),
+                                 'outcomes': {}})
+            e['flights'] += 1
+            e['secs'].append(secs)
+            e['pilots'].add(pid)
+            o = r.get('outcome') or '?'
+            e['outcomes'][o] = e['outcomes'].get(o, 0) + 1
+        p = pilots.setdefault(pid, {'id': pid, 'names': set(), 'flights': 0, 'secs': 0,
+                                    'completed': 0, 'places': set(), 'ships': set(),
+                                    'first': day, 'last': day, 'idle': 0})
+        if r.get('pilot'):
+            p['names'].add(r['pilot'])
+        p['flights'] += 1
+        p['secs'] += secs
+        p['completed'] += 1 if r.get('outcome') in DONE else 0
+        p['places'].add(r.get('place'))
+        p['ships'].add(r.get('ship_id'))
+        p['first'] = min(p['first'], day) if p['first'] else day
+        p['last'] = max(p['last'], day) if p['last'] else day
+        if secs > IDLE_CUT:
+            p['idle'] += 1
+
+    def tidy(d):
+        out = []
+        for e in d.values():
+            done = sum(v for k, v in e['outcomes'].items() if k in DONE)
+            out.append({'key': e['key'], 'flights': e['flights'], 'pilots': len(e['pilots']),
+                        'medianSecs': round(median(e['secs'])),
+                        'completed': done,
+                        'abandoned': e['outcomes'].get('abandoned', 0)
+                        + e['outcomes'].get('stopped', 0),
+                        'failed': e['outcomes'].get('failed', 0),
+                        'wrecked': e['outcomes'].get('wrecked', 0)})
+        out.sort(key=lambda x: -x['flights'])
+        return out
+
+    plist = []
+    for p in pilots.values():
+        names = sorted(p['names'])
+        plist.append({'id': p['id'], 'name': names[0] if names else 'a pilot unknown',
+                      'otherNames': names[1:], 'flights': p['flights'],
+                      'secs': round(p['secs']), 'completed': p['completed'],
+                      'places': len([x for x in p['places'] if x]),
+                      'ships': len([x for x in p['ships'] if x]),
+                      'first': p['first'], 'last': p['last'], 'idle': p['idle']})
+    plist.sort(key=lambda x: -x['secs'])
+
+    return {
+        'pilots': len(pilots), 'flights': len(rows),
+        'secs': round(sum(r.get('secs') or 0 for r in rows)),
+        'secsTrimmed': round(sum(min(r.get('secs') or 0, IDLE_CUT) for r in rows)),
+        'completed': sum(1 for r in rows if r.get('outcome') in DONE),
+        'byRef': tidy(by_ref), 'byPlace': tidy(by_place), 'byShip': tidy(by_ship),
+        'byDay': sorted(tidy(by_day), key=lambda x: x['key']),
+        'pilotList': plist,
+    }
+
+
+def usage():
+    rows = call('/rest/v1/flights?select=created_at,pilot_id,pilot,place,kind,ref,'
+                'ship_id,outcome,secs&order=created_at.desc&limit=20000')
+    ours = load_ours()
+    by_name = {}
+    for r in rows:
+        if r.get('pilot'):
+            by_name.setdefault(r['pilot'], set()).add(r.get('pilot_id'))
+    clashes = [{'name': n, 'browsers': len(ids)} for n, ids in by_name.items() if len(ids) > 1]
+    clashes.sort(key=lambda c: -c['browsers'])
+    return {
+        'all': summarise(rows),
+        'others': summarise([r for r in rows if r.get('pilot_id') not in ours]),
+        'ours': sorted(ours),
+        'nameClashes': clashes,
+        'idleCut': IDLE_CUT,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *a):
@@ -172,6 +307,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, page, 'text/html; charset=utf-8')
             if self.path.startswith('/api/reports'):
                 return self.send(200, load())
+            if self.path.startswith('/api/usage'):
+                return self.send(200, usage())
             m = re.fullmatch(r'/api/shot/(\d+)', self.path)
             if m:
                 rows = call('/rest/v1/bug_reports?select=shot&id=eq.' + m.group(1))
@@ -195,6 +332,14 @@ class Handler(BaseHTTPRequestHandler):
                                req.get('marks') or [], req.get('meta') or {})
                 print('  wrote bug-notes/%s' % f)
                 return self.send(200, {'ok': True, 'file': f})
+            if self.path == '/api/ours':
+                ids = load_ours()
+                for i in req.get('add') or []:
+                    ids.add(i)
+                for i in req.get('remove') or []:
+                    ids.discard(i)
+                save_ours(ids)
+                return self.send(200, {'ok': True, 'ours': sorted(ids)})
             if self.path in ('/api/close', '/api/reopen'):
                 handled = self.path == '/api/close'
                 for i in req.get('ids') or []:
