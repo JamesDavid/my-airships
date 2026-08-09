@@ -316,8 +316,38 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # THE GAME'S OWN SOURCE, served to the Models tab.
+    #
+    # The parts indicator has to build the REAL world -- the headless three in
+    # tools/ gives every mesh its own material object, so it cannot see which
+    # parts share one, which is the whole question being asked. So the page
+    # imports src/world.js exactly as the game does, and this hands it over.
+    #
+    # Read-only, GET-only, and confined to a fixed list of directories under the
+    # repo, with the path resolved and checked afterwards -- a dashboard that
+    # will serve any file the process can open is a poor thing to leave running
+    # on a laptop, even on the loopback.
+    SERVE = ('src', 'media')
+
+    def static(self, path):
+        rel = path.lstrip('/')
+        root = os.path.realpath(ROOT)
+        full = os.path.realpath(os.path.join(root, rel))
+        if not full.startswith(root + os.sep):
+            return self.send(403, {'error': 'outside the repository'})
+        if rel.split('/', 1)[0] not in self.SERVE or not os.path.isfile(full):
+            return self.send(404, {'error': 'no such file'})
+        kind = ('text/javascript' if full.endswith('.js')
+                else 'application/json' if full.endswith('.json')
+                else 'image/jpeg' if full.endswith(('.jpg', '.jpeg'))
+                else 'image/png' if full.endswith('.png')
+                else 'application/octet-stream')
+        return self.send(200, open(full, 'rb').read(), kind)
+
     def do_GET(self):
         try:
+            if self.path.split('?', 1)[0].lstrip('/').split('/', 1)[0] in self.SERVE:
+                return self.static(self.path.split('?', 1)[0])
             if self.path in ('/', '/index.html'):
                 page = open(os.path.join(HERE, 'bug_dashboard.html'), encoding='utf-8').read()
                 return self.send(200, page, 'text/html; charset=utf-8')
@@ -356,6 +386,18 @@ class Handler(BaseHTTPRequestHandler):
                     ids.discard(i)
                 save_ours(ids)
                 return self.send(200, {'ok': True, 'ours': sorted(ids)})
+            if self.path == '/api/course':
+                # A course laid out in the Level tab. Written beside the notes as
+                # JSON and never into tracks.js: the courses are hand-written with
+                # their reasoning in comments beside them, and a tool that rewrote
+                # that file would throw the reasoning away. This is the working
+                # drawing; a person still copies it in, having read it.
+                os.makedirs(NOTES, exist_ok=True)
+                name = re.sub(r'[^a-z0-9_-]', '', str(req.get('id') or 'course').lower())[:40]
+                f = os.path.join(NOTES, 'course-%s.json' % (name or 'course'))
+                json.dump(req.get('gates') or [], open(f, 'w', encoding='utf-8'), indent=1)
+                print('  wrote bug-notes/%s' % os.path.basename(f))
+                return self.send(200, {'ok': True, 'file': os.path.basename(f)})
             if self.path in ('/api/close', '/api/reopen'):
                 handled = self.path == '/api/close'
                 for i in req.get('ids') or []:
