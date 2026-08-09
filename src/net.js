@@ -49,8 +49,26 @@ const LAST = ['Bruneau', 'Vasseur', 'Marchand', 'Lefèvre', 'Beaumont', 'Dufresn
   'Chatelain', 'Roussel', 'Vaillant', 'Sauvage', 'Corbin', 'Mercier', 'Fontaine',
   'Boulanger', 'Perrault', 'Delaunay', 'Tissandier', 'Villeneuve', 'Aubert'];
 
+// A REGISTER THAT WORKS WHEN THE DRAWER IS LOCKED.
+//
+// Both of these used to read localStorage and nothing else, and store.set
+// swallows a failure by design — which is right for the pilot, since a blocked
+// write must never interrupt a flight, and wrong for everything downstream:
+//
+//   THE NAME went out empty. 30 flights since the field was added carry no name
+//     at all, and a nameless row cannot be told from a stranger's.
+//   THE ID was worse and nobody noticed: with an unwritable store, get() returns
+//     null every time, so pilotId() minted A FRESH UUID ON EVERY CALL — a
+//     different "pilot" for every flight of the same afternoon.
+//
+// So the answer is remembered HERE as well, in the module, and the store is only
+// where it is kept BETWEEN visits. Blocked storage now costs what it should cost
+// and no more: you are the same pilot for as long as the page is open, and a
+// stranger again tomorrow.
+let memoName = '', memoId = '';
+
 export function pilotName() {
-  return store.get(LS_PILOT) || '';
+  return store.get(LS_PILOT) || memoName || '';
 }
 
 /** The name a pilot flies under — assigned on the first flight if unset. */
@@ -62,16 +80,16 @@ export function ensurePilotName() {
 }
 export function setPilotName(name) {
   const clean = String(name || '').replace(/[<>&"'\\]|[\u0000-\u001F]/g, '').trim().slice(0, 24);
-  if (clean) store.set(LS_PILOT, clean);
+  if (clean) { memoName = clean; store.set(LS_PILOT, clean); }
   return clean;
 }
 export function pilotId() {
-  let id = store.get(LS_PID);
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
-    id = (crypto.randomUUID && crypto.randomUUID()) || fallbackUuid();
-    store.set(LS_PID, id);
-  }
-  return id;
+  const kept = store.get(LS_PID);
+  if (kept && /^[0-9a-f-]{36}$/i.test(kept)) return kept;
+  if (memoId) return memoId;
+  memoId = (crypto.randomUUID && crypto.randomUUID()) || fallbackUuid();
+  store.set(LS_PID, memoId);
+  return memoId;
 }
 function fallbackUuid() {
   const h = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0'));
@@ -251,7 +269,12 @@ export function logFlight({ place, kind, ref, shipId, outcome, secs, detail, kee
     // them had flown by the seventh of August and there was no way to tell
     // whether that was eight people or one person with a headset and two
     // laptops. The log wants a name on it.
-    pilot: pilotName(), pilot_id: pilotId(),
+    // ensurePilotName, NOT pilotName: the register is opened at boot, but a tab
+    // that was already standing open when the name was first collected never ran
+    // that step, and filed 30 flights signed by nobody. Asking for it HERE means
+    // the name is made at the moment it is needed, whatever else did or did not
+    // happen, and a flight can no longer be filed anonymously.
+    pilot: ensurePilotName(), pilot_id: pilotId(),
     place, kind, ref, ship_id: shipId, outcome,
     secs: Number.isFinite(secs) ? +secs.toFixed(1) : null,
     detail: detail || null, client_version: CLIENT_VERSION,
