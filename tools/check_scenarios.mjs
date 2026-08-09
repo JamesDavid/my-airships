@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import './headless.mjs';
 import * as THREE from 'three';
-import { buildWorld } from '../src/world.js';
+import { buildWorld, FIELD_EAST } from '../src/world.js';
 import { buildWorldMonaco } from '../src/world_monaco.js';
 import { buildWorldStLouis } from '../src/world_stlouis.js';
 import { SCENARIOS, freshAttempt } from '../src/scenarios.js';
@@ -1963,6 +1963,107 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
         fails++;
       } else {
         console.log('   ok   %s survives being flown twice', def.id);
+      }
+    }
+  }
+
+  // ------------------------------------------------- the four plain faults
+  //
+  // Reported from a phone in one sitting, all four measurable, none of them
+  // findable by reading the code and believing it.
+  {
+    console.log('');
+    console.log('THE FOUR PLAIN FAULTS');
+
+    // #142 -- "I can't even hit go immediately after hitting reset". Reset puts
+    // the ship on the pad; the pad is 224 m from the start ring; GO refused
+    // beyond 150. The button was working exactly as written and the number was
+    // wrong. Asserted against the world rather than against the number.
+    {
+      const gap = Math.hypot(world.padPos.x - world.startRing.x, world.padPos.z - world.startRing.z);
+      const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+      const m = src.match(/const REACH = Math\.max\((\d+),/);
+      const reach = m ? +m[1] : 0;
+      if (!m) {
+        console.log('   FAIL cannot find how far GO reaches');
+        fails++;
+      } else if (reach < gap) {
+        console.log('   FAIL GO reaches %d m but the pad is %d m from the ring — unusable after a reset',
+          reach, Math.round(gap));
+        fails++;
+      } else {
+        console.log('   ok   GO reaches %d m and the pad is %d m out, so it works from where reset leaves you',
+          reach, Math.round(gap));
+      }
+    }
+
+    // #144 -- "This scenario started us facing the wrong way": 166 degrees off,
+    // which is as wrong as it is possible to be. Every scenario that places the
+    // ship AND sets a ring should be pointed within a right angle of it.
+    {
+      let worst = null;
+      for (const def of SCENARIOS) {
+        let zone = null, spawn = null, yaw = null;
+        const ship = makeShip(def.shipId);
+        const ctx = {
+          ship, world: worldFor(def.location), wind: { x: 0, y: 0, z: 0 },
+          place: (x, y, z, w) => { spawn = { x, z }; yaw = w; ship.reset({ x, y, z }, w); },
+          setWind: () => {}, setZone: (v, r) => { zone = { v, r }; }, clearZone: () => { zone = null; },
+          zoneDist: () => 1e9, zoneR: () => 0, setCenter: () => {}, addMsg: () => {},
+          setRoute: () => {}, raceResult: () => null, complete: () => {}, fail: () => {},
+        };
+        freshAttempt(def);
+        def.setup(ctx);
+        if (!spawn || !zone || yaw === null || yaw === undefined) continue;
+        const want = Math.atan2(-(zone.v.z - spawn.z), zone.v.x - spawn.x);
+        const off = Math.abs((((yaw - want) * 180) / Math.PI + 540) % 360 - 180);
+        if (!worst || off > worst.off) worst = { id: def.id, off };
+      }
+      if (!worst) {
+        console.log('   FAIL no scenario both places the ship and sets a ring — check is measuring nothing');
+        fails++;
+      } else if (worst.off > 90) {
+        console.log('   FAIL %s spawns %d deg away from what it sends you to', worst.id, Math.round(worst.off));
+        fails++;
+      } else {
+        console.log('   ok   every scenario spawns facing its own objective (worst: %s, %d deg)',
+          worst.id, Math.round(worst.off));
+      }
+    }
+
+    // #148 -- "We always have the limit 30:00 full scale message even if that
+    // isn't the mission". The half-hour is the Deutsch prize's; it was drawn for
+    // anything that was not a lap trial, which is every scenario there is.
+    {
+      const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+      const guarded = /\} else if \(scenario && !scenario\.usesStartRing\) \{[\s\S]{0,600}?limitLabel/.test(src)
+        || /scenario && !scenario\.usesStartRing/.test(src.slice(src.indexOf('limitLabel') - 1200,
+                                                                 src.indexOf('limitLabel') + 200));
+      if (!guarded) {
+        console.log('   FAIL the half-hour limit is still shown to flights that have no limit');
+        fails++;
+      } else {
+        console.log('   ok   the half-hour is shown only to the flight that has a half-hour');
+      }
+    }
+
+    // #143 -- "the polygon for the field extends out over the water of the seine
+    // river". Reported twice. The turf is now walked back off the bank at build
+    // time, so this measures the built world and not a number in the source.
+    {
+      const P = world.padPos, east = FIELD_EAST;
+      let wet = 0, n = 0;
+      for (let x = -160; x <= east; x += 3) {
+        for (let z = -160; z <= 160; z += 3) { n++; if (inRiver(P.x + x, P.z + z)) wet++; }
+      }
+      if (wet) {
+        console.log('   FAIL %s%% of the flying ground lies over the Seine', ((100 * wet) / n).toFixed(2));
+        fails++;
+      } else if (east < 90) {
+        console.log('   FAIL the field was trimmed to %d m — there would be nowhere to walk a ship out', east);
+        fails++;
+      } else {
+        console.log('   ok   the flying ground reaches %d m east and none of it is over the water', east);
       }
     }
   }

@@ -566,7 +566,15 @@ export const SCENARIOS = [
     location: 'paris', shipId: 'no9',
     brief: 'You lunched at the Cascade, and the officers marking out the troops asked whether you would come to the review in her. Fly the little No. 9 over the massed army at Longchamps, low and slow, then away to the polo ground. Ten minutes, no more — do not disturb the good order of the review.',
     setup(ctx) {
-      { const L = placeLegacy('longchamp'); ctx.place(L.x + 540, 22, L.z + 200, -0.6); }  // the Cascade lawn
+      // "This scenario started us facing the wrong way" (#144) — and measured,
+      // she was pointed 166 degrees off it, which is as wrong as it is possible
+      // to be. Asked of the ground now rather than typed: whatever the spawn is,
+      // she looks at the review she has come to fly over.
+      {
+        const L = placeLegacy('longchamp');
+        const sx = L.x + 540, sz = L.z + 200;
+        ctx.place(sx, 22, sz, Math.atan2(-(L.z - sz), L.x - sx));
+      }  // the Cascade lawn, facing Longchamps
       // 'over', not 'land': you fly across the review, you do not come down in
       // the middle of it — the one ring in the game that is not a landing place
       { const L = placeLegacy('longchamp'); ctx.setZone(V(L.x, 10, L.z), 360, 'over'); }

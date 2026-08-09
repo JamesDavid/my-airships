@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { geo, place, placeLegacy, SEINE, ORIGIN_XZ, LEGACY_ORIGIN, LEGACY_SCALE } from './paris_geo.js';
 import { HF as PHF, groundAt as parisGroundASL, slopeAt as parisSlope,
-         SEINE_XZ, riverNear, RIVER_HALF, RIVER_GAP } from './paris_terrain.js';
+         SEINE_XZ, riverNear, inRiver, RIVER_HALF, RIVER_GAP } from './paris_terrain.js';
 
 /**
  * Paris has relief, and it always did — the game simply had not measured it.
@@ -440,6 +440,8 @@ const _sc = placeLegacy('stcloud');
 // It also sets the Deutsch course at 5.4 km each way, against the 4.9 km the
 // old position gave, and the real St-Cloud-to-Tower distance is about 5.5.
 export const PAD_POS = new THREE.Vector3(_sc.x - 300, 2.0, _sc.z - 800);
+/** How far east the flying ground reaches before the Seine stops it. */
+export let FIELD_EAST = 160;
 export const START_RING = new THREE.Vector3(PAD_POS.x + 220, 55, PAD_POS.z - 40);
 /**
  * The Aéro-Club's balloon shed — where it stands, and how big it is.
@@ -702,7 +704,34 @@ export function buildWorld(scene) {
   // bank could hold it without either the water or the hillside. It is a club's
   // park, not an aerodrome in the modern sense: 320 m is ample to walk an
   // air-ship out on and leaves 84 m of bank between the turf and the river.
-  addFlat(scene, PAD_POS.x, PAD_POS.z, 320, 320, 0x84925f, 0.1);   // the flying ground
+  // ...and it is MEASURED against the water rather than asserted against it.
+  //
+  // "the polygon for the field extends out over the water of the seine river"
+  // (#143), and before that "field on top of the sine river that we launch from
+  // at the aero club". The note above says 84 m of bank, and along the middle of
+  // the turf that was true — the river is 174 m east of the pad. But a square
+  // reaches 226 m at its CORNERS, and the bank is not straight, so the two
+  // eastern corners lay out over the Seine. Twice reported, twice fixed by
+  // moving a number that was right where it was checked.
+  //
+  // So the east edge is walked back until nothing on the turf is over water,
+  // here, at build time, against the same riverbank everything else uses. If the
+  // Seine is ever resurveyed the field gets out of its way by itself.
+  {
+    const WEST = 160, HALF_Z = 160, BANK = 10;   // metres of dry bank to leave
+    // The nearest water anywhere across the turf's width, not merely due east of
+    // the pad — the bank runs at an angle, and it is 152 m out at the northern
+    // edge against 174 m on the centre line. That 22 m is the whole of the fault.
+    let nearest = Infinity;
+    for (let z = -HALF_Z; z <= HALF_Z; z += 4) {
+      for (let x = -WEST; x <= 420; x += 2) {
+        if (inRiver(PAD_POS.x + x, PAD_POS.z + z)) { if (x < nearest) nearest = x; break; }
+      }
+    }
+    const east = Math.min(160, (Number.isFinite(nearest) ? nearest : 160) - BANK);
+    addFlat(scene, PAD_POS.x + (east - WEST) / 2, PAD_POS.z, WEST + east, HALF_Z * 2, 0x84925f, 0.1);
+    FIELD_EAST = east;                                   // published so a check can measure it
+  }
 
   // ---------- the Seine: stone quays and living, reflecting water ----------
   const riverPts = seinePoints();

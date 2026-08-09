@@ -2663,12 +2663,44 @@ function tryStartRace() {
     return;
   }
   if (race.state !== 'idle' || ship.wrecked) return;
-  if (ship.pos.distanceTo(world.startRing) > 150) {
+  // THE PAD IS 224 METRES FROM THE RING, and this used to refuse at 150 — so
+  // "I can't even hit go immediately after hitting reset" (#142) was the button
+  // working exactly as written: reset puts the ship on the pad, and the pad was
+  // out of bounds for the only thing you can do from it. The number is now
+  // measured against the world instead of guessed at, with room to spare.
+  const REACH = Math.max(260, ship.pos.distanceTo(world.padPos) + 60);
+  if (ship.pos.distanceTo(world.startRing) > REACH) {
     // No ring to point at any more, so say the place instead of the marker.
     addMsg('far', 'Convoke the Commission over the aerodrome, where the ground crew are waiting.', 6);
     return;
   }
   startTrack(historicTrack());
+}
+
+/**
+ * ...AND SHE STARTS WHEN YOU LEAVE THE GROUND.
+ *
+ * "Hitting go to start and not allowing hitting go unless on the ground is
+ * annoying — go should be automatic on taking off after selecting the mission"
+ * (#141). Quite right: the pilot has already said which flight this is by
+ * choosing it from the menu, and being made to say so again, with a button,
+ * while holding a ship that is trying to rise, is a form.
+ *
+ * So the clock starts itself the moment she is off the ground, for a scenario
+ * that has a course to fly (III is the only one that sends the pilot to the
+ * ring). GO still works, and still does the same thing, for anyone who wants
+ * to start it deliberately or to restart. Free flight is untouched: nobody who
+ * is only out flying wants a stopwatch started for them.
+ */
+let wasDown = true;
+function autoStartOnTakeoff() {
+  const armed = !!scenario && !!scenario.usesStartRing && !track && race.state === 'idle';
+  const up = !!ship && !ship.landed && !ship.wrecked;
+  if (armed && wasDown && up && ship.pos.distanceTo(world.startRing) < 900) {
+    startTrack(historicTrack());
+    addMsg('auto', 'Off the ground — the Commission has its watches out. The clock is running.', 5);
+  }
+  wasDown = !up;
 }
 
 function raceTargetPos() {
@@ -3615,6 +3647,14 @@ function updateHUD() {
     el('wr').innerHTML = wr
       ? `world record <b>${fmt(wr.t)}</b> — ${escapeHtml(wr.pilot)}`
       : (net.enabled() && wr === null ? 'world record: <b>unclaimed</b>' : '');
+  } else if (scenario && !scenario.usesStartRing) {
+    // "We always have the limit 30:00 full scale message even if that isn't the
+    // mission" (#148). It was drawn for anything that was not a lap trial, which
+    // is every scenario and free flight alike — so the submarine hunt in the bay
+    // of Monaco was told it had half an hour to round the Eiffel Tower in.
+    // The half-hour belongs to the flight that has a half-hour.
+    el('best').textContent = '';
+    el('wr').textContent = '';
   } else {
     const limitLabel = `limit ${fmt(world.raceLimit)} (${world.limitNote})`;
     el('best').textContent = race.best ? `best: ${fmt(race.best)} · ${limitLabel}` : limitLabel;
@@ -3850,6 +3890,7 @@ function frame(now) {
   // the day's PREVAILING wind and the sky's clock — not the gusting wind and a
   // frame delta, which made where a cloud sat depend on when you opened the page
   updateClouds(world.clouds, dailyWind, windGustT);
+  autoStartOnTakeoff();
   updateRace(dt);
   drainEvents();
   ambientQuotes();
