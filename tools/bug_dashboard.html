@@ -64,11 +64,20 @@
   #shot { display: block; }      /* sized in fit() — see there for why not CSS */
   #ink { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
   #foot { border-top: 1px solid var(--edge); background: var(--panel); padding: 8px 10px;
-    display: flex; gap: 10px; align-items: flex-start; }
-  #note { flex: 1; min-height: 62px; resize: vertical; font: inherit; font-size: 13px;
+    display: flex; flex-direction: column; gap: 7px; }
+  #foot .cols { display: flex; gap: 10px; align-items: flex-start; }
+  /* What the pilot actually filed, under their own picture. From a headset it is
+     always the same eleven words, but from a phone or a desk it is the whole
+     report — and reading it off the list in the corner of the eye, at 12 px and
+     clipped to two lines, was never going to work. */
+  #caption { color: var(--ink); font-size: 13.5px; line-height: 1.5; max-height: 4.6em;
+    overflow-y: auto; border-left: 2px solid var(--hot); padding: 1px 0 1px 9px; }
+  #caption .who { color: var(--dim); font-size: 11.5px; }
+  #caption.none { border-left-color: var(--edge); color: var(--dim); font-style: italic; }
+  #note { flex: 1; min-height: 84px; resize: vertical; font: inherit; font-size: 13px;
     color: var(--ink); background: #17120d; border: 1px solid var(--edge);
     border-radius: 4px; padding: 6px 8px; }
-  #state { width: 330px; max-height: 130px; overflow: auto; color: var(--dim);
+  #state { width: 340px; max-height: 148px; overflow: auto; color: var(--dim);
     font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
   #say { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
     background: #3a2d1c; border: 1px solid var(--hot); padding: 7px 16px; border-radius: 4px;
@@ -152,8 +161,11 @@
   </div>
 
   <div id="foot">
-    <textarea id="note" placeholder="What is wrong here? Plain words — “the keel bar goes through my chest”, “the water is above the quay”. The arrow says where; this says what."></textarea>
-    <div id="state"></div>
+    <div id="caption"></div>
+    <div class="cols">
+      <textarea id="note" placeholder="What is wrong here? Plain words — “the keel bar goes through my chest”, “the water is above the quay”. The arrow says where; this says what."></textarea>
+      <div id="state"></div>
+    </div>
   </div>
 </main>
 
@@ -220,6 +232,7 @@ function draw_list() {
     marks = []; redraw();
     $('#note').value = '';
     $('#state').textContent = '';
+    $('#caption').innerHTML = '';
     blank('Nothing matches these filters. Widen them on the left.');
     markHandledLabel();
     return;
@@ -252,6 +265,7 @@ async function show(i) {
   marks = [];
   $('#note').value = cur.note || '';
   $('#state').textContent = stateLines(cur);
+  caption(cur);
   markHandledLabel();
   img.removeAttribute('src'); redraw();
   // WHY THIS SAYS SOMETHING INSTEAD OF SHOWING AN EMPTY BOX. An <img> with no
@@ -266,6 +280,25 @@ async function show(i) {
   if (r.shot) { img.src = r.shot; blank(''); }
   else blank(r.error || 'No picture was filed with this report. The state is below, '
     + 'and the words the pilot left are in the list.');
+}
+
+/**
+ * What the pilot wrote, under their own picture.
+ *
+ * It was only ever in the list on the left, clipped to two lines at 12 px, which
+ * is the wrong place for the one piece of prose in the whole report: you look at
+ * the picture, and the words belong beside the picture. From a headset it is the
+ * same eleven words every time; from anywhere a keyboard exists it is the actual
+ * complaint, and it is often longer than two lines.
+ */
+function caption(r) {
+  const el = $('#caption');
+  const body = (r.body || '').trim();
+  const who = [r.pilot || 'a pilot unknown', (r.created_at || '').slice(0, 16).replace('T', ' '),
+    r.kind, r.client_version && ('build ' + r.client_version)].filter(Boolean).join(' · ');
+  el.classList.toggle('none', !body);
+  el.innerHTML = (body ? esc(body) : 'No words were filed with this one — only the picture and the state.')
+    + '<div class="who">#' + r.id + ' · ' + esc(who) + '</div>';
 }
 
 /** Put a plain sentence where the picture would be, or take it away again. */
@@ -297,7 +330,11 @@ function fit() {
   const nw = img.naturalWidth, nh = img.naturalHeight;
   if (!nw || !nh) return;
   const pane = $('#stage'), pad = 16;
-  const k = Math.min((pane.clientWidth - pad) / nw, (pane.clientHeight - pad) / nh);
+  // ...and it does not fill its pane to the last pixel. A picture pressed hard
+  // against the frame leaves the words under it looking like an afterthought,
+  // and the words are the half of this that a person writes.
+  const ROOM = 0.93;
+  const k = Math.min((pane.clientWidth - pad) / nw, (pane.clientHeight - pad) / nh) * ROOM;
   const w = Math.max(1, Math.round(nw * k)), h = Math.max(1, Math.round(nh * k));
   img.style.width = w + 'px'; img.style.height = h + 'px';
   const dpr = devicePixelRatio || 1;
