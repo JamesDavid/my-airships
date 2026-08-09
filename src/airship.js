@@ -7,7 +7,7 @@
 //  B9 landing discipline
 
 import * as THREE from 'three';
-import { windAt } from './world.js';
+import { windAt, mergeStaticInto } from './world.js';
 
 export { windAt }; // re-export for existing importers
 
@@ -1431,6 +1431,47 @@ export class Airship {
 
     // the ship throws a true shadow on the country below
     this.group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+
+    this.bakeStaticParts();
+  }
+
+  /**
+   * MERGE EVERYTHING ABOUT HER THAT NEVER MOVES.
+   *
+   * She was 132 draw calls in 52 materials — with the city batched and the
+   * field baked, the largest single object left in the frame. Most of her is
+   * dead structure: hull plates, keel rails, the wicker, cornices, placards,
+   * the fins. What moves is the tiller, the cords, the levers, the propeller,
+   * the needles, the trim weights, the duckboard, the slate.
+   *
+   * The two are told apart WITHOUT A LIST, which is the point: anything the
+   * code keeps a reference to is presumed to be something the code intends to
+   * move, and is left alone with its whole subtree. Everything else is
+   * unreachable from here except through the scene graph, so nothing can be
+   * animating it. A hand-written list of exceptions would rot the first time
+   * somebody added a fitting.
+   *
+   * `group`, `pitchGroup` and `scene` are excluded from that sweep for the
+   * obvious reason: they contain the entire ship, and marking them protects
+   * everything and merges nothing.
+   */
+  bakeStaticParts() {
+    const live = new Set();
+    const SKIP = new Set(['group', 'pitchGroup', 'scene']);
+    const hold = (o) => {
+      if (!o || typeof o !== 'object' || !o.isObject3D) return;
+      if (typeof o.traverse === 'function') o.traverse((x) => live.add(x));
+      else live.add(o);
+    };
+    for (const k of Object.keys(this)) if (!SKIP.has(k)) hold(this[k]);
+    // ...and every fitting a hand can take hold of, whatever else holds it
+    for (const c of (this.pullCords || [])) hold(c.mesh);
+    let saved = 0;
+    for (const root of [this.pitchGroup, this.group]) {
+      if (root) saved += mergeStaticInto(root, live);
+    }
+    this.bakedDraws = saved;
+    return saved;
   }
 
   // envelope half-height at local x (for wire attach)

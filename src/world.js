@@ -1603,6 +1603,82 @@ export function buildWorld(scene) {
 function farSeen(o) { if (o) { o.userData = o.userData || {}; o.userData.vrFar = true; } return o; }
 
 /**
+ * Merge a subtree's STATIC leaves into one mesh a material, in place.
+ *
+ * `live` is everything that must be left alone — anything the code still moves.
+ * Each remaining leaf has its transform relative to `root` baked into its
+ * vertices, so the merged mesh sits where the originals did and moves with the
+ * root exactly as they did. Originals are hidden rather than removed: invisible
+ * costs nothing to draw, and every check that measures a part by its geometry
+ * still has the geometry to measure.
+ *
+ * Instanced rows are skipped — their geometry is one copy with the rest in a
+ * matrix array this walker never reads, so merging one would collapse it.
+ */
+export function mergeStaticInto(root, live) {
+  if (!root || !Array.isArray(root.children)) return 0;
+  const byMat = new Map();
+  const hide = [];
+  const walk = (o, at) => {
+    if (!o || (live && live.has(o))) return;
+    const local = new THREE.Matrix4().compose(
+      o.position || new THREE.Vector3(),
+      o.quaternion || new THREE.Quaternion(),
+      o.scale || new THREE.Vector3(1, 1, 1));
+    const world = new THREE.Matrix4().multiplyMatrices(at, local);
+    const g = o.geometry;
+    if (g && (o.isInstancedMesh || Array.isArray(o.matrices))) return;
+    if (g && typeof g.type === 'string' && o.material && o.visible !== false) {
+      let e = byMat.get(o.material);
+      if (!e) { e = { mat: o.material, parts: [] }; byMat.set(o.material, e); }
+      e.parts.push({ geom: g, at: world.clone() });
+      hide.push(o);
+    }
+    if (Array.isArray(o.children)) for (const c of o.children) walk(c, world);
+  };
+  const I = new THREE.Matrix4();
+  for (const c of root.children) walk(c, I);
+  if (!hide.length) return 0;
+
+  let made = 0;
+  for (const { mat, parts } of byMat.values()) {
+    const pos = [], nrm = [], idx = [];
+    let base = 0;
+    for (const part of parts) {
+      const a = part.geom.attributes && part.geom.attributes.position;
+      if (!a || !a.array || !a.count) continue;        // a stub geometry
+      const nm = part.geom.attributes.normal;
+      const v = new THREE.Vector3();
+      const nMat = new THREE.Matrix3().getNormalMatrix(part.at);
+      for (let i = 0; i < a.count; i++) {
+        v.set(a.array[i * 3], a.array[i * 3 + 1], a.array[i * 3 + 2]).applyMatrix4(part.at);
+        pos.push(v.x, v.y, v.z);
+        if (nm && nm.array) {
+          v.set(nm.array[i * 3], nm.array[i * 3 + 1], nm.array[i * 3 + 2])
+            .applyMatrix3(nMat).normalize();
+          nrm.push(v.x, v.y, v.z);
+        } else nrm.push(0, 1, 0);
+      }
+      const ix = part.geom.index;
+      if (ix && ix.array) for (let i = 0; i < ix.array.length; i++) idx.push(base + ix.array[i]);
+      else for (let i = 0; i < a.count; i++) idx.push(base + i);
+      base += a.count;
+    }
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g2.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g2.setIndex(idx);
+    const m = new THREE.Mesh(g2, mat);
+    m.castShadow = true;
+    m.userData.mergedStatic = true;
+    root.add(m);
+    made++;
+  }
+  for (const o of hide) o.visible = false;
+  return hide.length - made;
+}
+
+/**
  * A FAR VERSION OF A MONUMENT, for a headset.
  *
  * The monuments are marked vrFar and never culled, because the Deutsch prize is
