@@ -130,20 +130,18 @@ scale on the basket slate, live, inside the headset.
    which also means every check that measures a monument's real size still has
    real geometry to measure.
 
-0d. **DONE — the ship's dead structure is merged.** With the city batched and
-   the field baked, the largest single object left was the player's own airship:
-   **132 draws in 52 materials**. Most of her is dead structure — hull plates,
-   keel rails, wicker, cornices, placards, fins — and what moves is the tiller,
-   cords, levers, propeller, needles, trim weights, duckboard and slate.
+0d. **REVERTED — do not merge the ship.** It was tried: 132 draws → 87, with
+   the static/moving split derived automatically from what the code holds a
+   reference to. Every check passed, all thirteen fittings stayed reachable,
+   and she still came out wrong in the headset. The merge was reverted whole.
 
-   The two are told apart **without a list**: anything the code keeps a
-   reference to is presumed to be something the code intends to move, and is
-   left alone with its whole subtree. A hand-written list of exceptions would
-   rot the first time somebody added a fitting. (`group`, `pitchGroup` and
-   `scene` are excluded from that sweep — they contain the whole ship.)
-
-   **132 → 87 draws**, all thirteen grabbable fittings still reachable, checked
-   by the reach and grab tests that already existed.
+   If it is attempted again, the two things that went wrong the first time were
+   both invisible to the harness: the merge dropped UVs, so all 52 textured
+   surfaces — the dial faces and every placard — sampled one texel; and
+   something else was still wrong after that was fixed. **Do not try again
+   without a way to see the result that is not the headless three.** The ship is
+   the one object a pilot inspects from half a metre, and 45 draws is not worth
+   a basket that is subtly wrong.
 
 0a. **DONE — the chimney smoke is three plumes, and they follow you.** It was
    54 plumes of 5 puffs, each puff its own transparent mesh: **270 draws**, the
