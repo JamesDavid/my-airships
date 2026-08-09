@@ -2707,25 +2707,42 @@ function addBookPlaces(scene, buildings) {
   // ---- M. Henry Deutsch's air-ship house, a bare skeleton "scarcely two
   // air-ships' lengths" in front of Santos-Dumont's own doors: the hazard he
   // complained of, and passed high above coming home from the Tower.
+  // ONE DRAW FOR THE WHOLE FRAME.
+  //
+  // It was thirty separate meshes — fourteen columns, two side beams, seven
+  // roof trusses and seven ridge posts — every one of them a plain box in the
+  // same iron, and thirty draw calls of it standing in an empty park.
+  //
+  // Not merged: INSTANCED. Every piece is a box, and a box of any size is a
+  // unit cube with a scale on it, so the whole skeleton is one geometry and
+  // thirty matrices. That matters after the airship: instancing carries no
+  // vertex buffer to rebuild, no UVs to lose and nothing to bake, and the
+  // headless three can see it. Merging would have bought the same single draw
+  // and the same risks that had to be reverted.
   const skel = new THREE.Group();
   const SK_L = 62, SK_W = 16, SK_H = 21;
-  for (const sx of [-1, 1]) {
-    for (let i = 0; i <= 6; i++) {
-      const col = new THREE.Mesh(new THREE.BoxGeometry(0.8, SK_H, 0.8), iron);
-      col.position.set(-SK_L / 2 + (i / 6) * SK_L, SK_H / 2, sx * SK_W / 2);
-      skel.add(col);
+  {
+    const bones = [];                               // [x, y, z, w, h, d]
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i <= 6; i++) {
+        bones.push([-SK_L / 2 + (i / 6) * SK_L, SK_H / 2, sx * SK_W / 2, 0.8, SK_H, 0.8]);
+      }
+      bones.push([0, SK_H, sx * SK_W / 2, SK_L, 0.8, 0.8]);
     }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(SK_L, 0.8, 0.8), iron);
-    beam.position.set(0, SK_H, sx * SK_W / 2);
-    skel.add(beam);
-  }
-  for (let i = 0; i <= 6; i++) {                    // roof trusses, no cladding
-    const t = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, SK_W), iron);
-    t.position.set(-SK_L / 2 + (i / 6) * SK_L, SK_H + 0.4, 0);
-    skel.add(t);
-    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.6, 0.7), iron);
-    ridge.position.set(t.position.x, SK_H + 2.2, 0);
-    skel.add(ridge);
+    for (let i = 0; i <= 6; i++) {                  // roof trusses, no cladding
+      const x = -SK_L / 2 + (i / 6) * SK_L;
+      bones.push([x, SK_H + 0.4, 0, 0.7, 0.7, SK_W]);
+      bones.push([x, SK_H + 2.2, 0, 0.7, 3.6, 0.7]);
+    }
+    const frame = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), iron, bones.length);
+    const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion();
+    const pv = new THREE.Vector3(), sv = new THREE.Vector3();
+    bones.forEach((b, i) => {
+      frame.setMatrixAt(i, m4.compose(pv.set(b[0], b[1], b[2]), q0, sv.set(b[3], b[4], b[5])));
+    });
+    if (frame.instanceMatrix) frame.instanceMatrix.needsUpdate = true;
+    frame.castShadow = true;
+    skel.add(frame);
   }
   // "scarcely two air-ships' lengths" in front of Santos-Dumont's own doors —
   // which is a RELATIONSHIP, not a coordinate, so it is written as one. The
