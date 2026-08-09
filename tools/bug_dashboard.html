@@ -1188,23 +1188,52 @@ async function showPreview(m) {
     const ray = new T.Raycaster();
     const ndc = new T.Vector2();
     let down = null;
-    const spin = { yaw: 0.9, pitch: 0.9, auto: true };
+    // yaw and pitch turn it; zoom is a multiple of the framing distance; target
+    // is the point it turns about, which panning moves.
+    const spin = { yaw: 0.9, pitch: 0.9, auto: true, zoom: 1, target: new T.Vector3() };
     pv.spin = spin;
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // ---- WHEEL TO ZOOM, RIGHT-DRAG (or shift-drag) TO PAN ----
+    //
+    // Once the spin is stopped the model just sits there, and a fence seen from
+    // one fixed distance is no more use than a fence in a list. Zoom is a
+    // multiplier on the framing distance rather than a camera move, so it means
+    // the same thing whether the thing is a hatbox or the Trocadero.
+    renderer.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      spin.auto = false;
+      spin.zoom = Math.max(0.04, Math.min(8, spin.zoom * Math.exp(e.deltaY * 0.0012)));
+    }, { passive: false });
+
     renderer.domElement.addEventListener('pointerdown', (e) => {
-      down = { x: e.clientX, y: e.clientY, yaw: spin.yaw, pitch: spin.pitch, moved: 0 };
+      down = { x: e.clientX, y: e.clientY, yaw: spin.yaw, pitch: spin.pitch, moved: 0,
+        pan: e.button === 2 || e.shiftKey, target: spin.target.clone(), button: e.button };
       spin.auto = false;
       renderer.domElement.setPointerCapture(e.pointerId);
     });
     renderer.domElement.addEventListener('pointermove', (e) => {
       if (!down) return;
       down.moved = Math.max(down.moved, Math.hypot(e.clientX - down.x, e.clientY - down.y));
+      if (down.pan) {
+        // across the screen, in the world: the camera's own right and up, scaled
+        // by how far away it is, so a pan drags at the same rate as the picture
+        const right = new T.Vector3(), up = new T.Vector3();
+        camera.matrixWorld.extractBasis(right, up, new T.Vector3());
+        const k = (pv.r || 1) * spin.zoom * 0.004;
+        spin.target.copy(down.target)
+          .addScaledVector(right, -(e.clientX - down.x) * k)
+          .addScaledVector(up, (e.clientY - down.y) * k);
+        return;
+      }
       spin.yaw = down.yaw - (e.clientX - down.x) * 0.008;
       spin.pitch = Math.max(0.08, Math.min(1.5, down.pitch - (e.clientY - down.y) * 0.006));
     });
     renderer.domElement.addEventListener('pointerup', (e) => {
       const wasDrag = down && down.moved > 4;
+      const wasPan = down && down.pan;
       down = null;
-      if (wasDrag || !pickedModel) return;
+      if (wasDrag || wasPan || !pickedModel) return;
       const b = renderer.domElement.getBoundingClientRect();
       ndc.x = ((e.clientX - b.left) / b.width) * 2 - 1;
       ndc.y = -((e.clientY - b.top) / b.height) * 2 + 1;
@@ -1231,10 +1260,19 @@ async function showPreview(m) {
       }
       if (spin.auto) spin.yaw += 0.004;
       if (pv.r) {
-        const d = pv.r * 2.1;
-        camera.position.set(Math.cos(spin.yaw) * d * Math.cos(spin.pitch * 0.6),
-          Math.sin(spin.pitch) * pv.r * 1.6, Math.sin(spin.yaw) * d * Math.cos(spin.pitch * 0.6));
-        camera.lookAt(0, 0, 0);
+        const d = pv.r * 2.1 * spin.zoom;
+        camera.position.set(
+          spin.target.x + Math.cos(spin.yaw) * d * Math.cos(spin.pitch * 0.6),
+          spin.target.y + Math.sin(spin.pitch) * pv.r * 1.6 * spin.zoom,
+          spin.target.z + Math.sin(spin.yaw) * d * Math.cos(spin.pitch * 0.6));
+        camera.lookAt(spin.target);
+        // the near plane follows the zoom, or a hatbox at eight times in is all
+        // z-fighting and a fairground at a twentieth is clipped away
+        const near = Math.max(0.01, pv.r * spin.zoom * 0.01);
+        if (Math.abs(camera.near - near) > near * 0.2) {
+          camera.near = near; camera.far = Math.max(1000, pv.r * 60);
+          camera.updateProjectionMatrix();
+        }
       }
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
@@ -1263,7 +1301,7 @@ async function showPreview(m) {
   pv.borrowed = roots.map((o) => ({ o, from: o.parent, at: o.position.clone() }));
   for (const r of roots) { pv.holder.add(r); r.position.sub(c); }
   pv.r = Math.max(1, sz.length() / 2);
-  pv.spin && (pv.spin.auto = true);
+  if (pv.spin) { pv.spin.auto = true; pv.spin.zoom = 1; pv.spin.target.set(0, 0, 0); }
   if (!pv.marker) {
     // a box round whatever is chosen. NOT a change of material: materials here
     // are shared between hundreds of parts, so tinting one would tint them all
@@ -1273,6 +1311,14 @@ async function showPreview(m) {
     pv.scene.add(pv.marker);
   }
   pv.marker.visible = false;
+  const hint = box.querySelector('.hint') || (() => {
+    const el = document.createElement('div');
+    el.className = 'lbl hint';
+    el.style.cssText = 'top:auto;bottom:8px;font-size:11.5px;opacity:.75';
+    box.appendChild(el);
+    return el;
+  })();
+  hint.textContent = 'drag to turn · wheel to zoom · right-drag or shift-drag to pan · click a piece to note it';
   box.querySelector('.lbl').textContent = roots.length > 1
     ? `${m.name} — all ${roots.length} of them, spread over `
       + `${sz.x.toFixed(0)} x ${sz.z.toFixed(0)} m`
