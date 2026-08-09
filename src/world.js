@@ -1081,13 +1081,31 @@ export function buildWorld(scene) {
   const smokeRand = mulberry32(4711);
   // stride the WHOLE list, or every plume lands in whichever quarter happened
   // to be generated first and the rest of Paris sits with cold chimneys
-  // each puff is its own transparent draw call, so a phone gets a thinner city
+  // A FEW, AND NEAR YOU — because that is what smoke is FOR.
+  //
+  // It was 54 plumes of 5 puffs, each puff its own transparent mesh: 270 draw
+  // calls, the largest single item in the frame over the Tower, and the code
+  // already knew — it thinned the city on phones to 26 rather than fix it.
+  //
+  // But smoke is not scenery here, it is an INSTRUMENT: "the city itself shows
+  // the wind", and a pilot reads the surface wind off a chimney near him. He
+  // cannot read one two kilometres away, where it is a grey speck. Fifty-four
+  // of them buy nothing a handful does not, so there are three, and they FOLLOW
+  // HIM — re-homed onto a rooftop near the ship whenever they fall behind, and
+  // faded in so the change is not seen.
+  //
+  // 270 draws become 15, and the instrument is always to hand instead of
+  // wherever the city happened to be generated first.
   const phone = matchMedia('(pointer: coarse)').matches && innerWidth < 1100;
-  const WANT = phone ? 26 : 54;
-  const stride = Math.max(1, Math.floor(buildings.length / (WANT * 1.6)));
-  for (let i = 3; i < buildings.length && plumes.length < WANT; i += stride) {
+  const WANT = phone ? 2 : 3;
+  const REHOME = 620;                   // beyond this a plume is not readable
+  const smokeStacks = [];               // rooftops worth a chimney, for re-homing
+  const stride = Math.max(1, Math.floor(buildings.length / 400));
+  for (let i = 3; i < buildings.length; i += stride) {
     const b = buildings[i];
     if (b.top < 8) continue;                        // sheds and stalls have no chimneys
+    smokeStacks.push(b);
+    if (plumes.length >= WANT) continue;
     const sooty = smokeRand() < 0.35;               // some fires burn dirtier than others
     const mat = new THREE.MeshLambertMaterial({
       color: sooty ? 0x6f6a63 : 0xb2aba0,
@@ -1109,8 +1127,38 @@ export function buildWorld(scene) {
       op: (sooty ? 0.34 : 0.24) + smokeRand() * 0.1,
     });
   }
-  const tick = (dt, t, wind) => {
+  const tick = (dt, t, wind, from) => {
     lm.roueWheel.rotation.z += dt * 0.025; // the Grande Roue turns
+    // ---- keep the smoke where the pilot can read it ----
+    if (from && smokeStacks.length) {
+      for (const pl of plumes) {
+        const d = Math.hypot(pl.base.x - from.x, pl.base.z - from.z);
+        if (d < REHOME && !pl.out) {
+          pl.fade = Math.min(1, (pl.fade === undefined ? 1 : pl.fade) + dt * 0.5);
+          continue;
+        }
+        // pick a rooftop near him that is not the one another plume is on
+        let best = null, bd = Infinity;
+        for (let k = 0; k < 24; k++) {
+          const b = smokeStacks[(Math.floor(t * 7) + k * 37) % smokeStacks.length];
+          const q = Math.hypot(b.x - from.x, b.z - from.z);
+          if (q < 90 || q > REHOME * 0.7) continue;      // not underfoot, not far
+          if (plumes.some((o) => o !== pl && Math.hypot(o.base.x - b.x, o.base.z - b.z) < 120)) continue;
+          if (q < bd) { bd = q; best = b; }
+        }
+        if (best) {
+          pl.base.set(best.x, best.top + 1.2, best.z);
+          pl.fade = 0;                                    // and fade it in
+          if (pl.out) { pl.out = false; for (const p of pl.puffs) p.visible = true; }
+        } else {
+          // NO ROOFTOPS WITHIN REACH — which is not a failure, it is St-Cloud.
+          // Out there the aerodrome stands in the park with no city about it, so
+          // there are no chimneys to smoke and the plume should not merely be
+          // stranded five kilometres off still costing five draws: it goes out.
+          if (!pl.out) { pl.out = true; for (const p of pl.puffs) p.visible = false; }
+        }
+      }
+    }
     // the old mill answers the wind too — faster when it blows harder
     if (bookPlaces.sails) bookPlaces.sails.rotation.x += dt * 0.05 * Math.hypot(wind.x, wind.z);
     const wLen = Math.hypot(wind.x, wind.z) || 1;
@@ -1124,7 +1172,8 @@ export function buildWorld(scene) {
           pl.base.y + u * pl.rise,
           pl.base.z + wz * lean * 40 * wLen * 0.25);
         p.scale.setScalar(0.9 + u * 5.2);          // it spreads as it cools
-        p.material.opacity = pl.op * (1 - u) * (0.35 + u * 1.6);
+        p.material.opacity = pl.op * (1 - u) * (0.35 + u * 1.6)
+          * (pl.fade === undefined ? 1 : pl.fade);
       });
     }
   };

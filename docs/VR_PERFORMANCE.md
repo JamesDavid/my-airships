@@ -19,7 +19,12 @@ Measured by `tools/check_scenarios.mjs`, from the St-Cloud aerodrome:
 | | |
 |---|---|
 | meshes in the Paris scene | 2,496 |
-| **drawn from the aerodrome** | **~221** (966 → 580 clouds → 408 city trim → 221 monuments) |
+| **submitted over the Eiffel Tower** | **322** (577 before the smoke was cut) |
+| **submitted from St-Cloud** | **533** — of which the aerodrome's own field is 303 |
+
+Those two are measured in a *browser* with the cull applied, which is the honest
+number. The headless checker counts a narrower set and reads lower; do not quote
+it as the frame cost.
 | budget | ~200 |
 
 So this world is **draw-call bound**, by about 5×. That is the answer to
@@ -124,6 +129,23 @@ scale on the basket slate, live, inside the headset.
    not everywhere. The detailed group is kept and swapped back in close to,
    which also means every check that measures a monument's real size still has
    real geometry to measure.
+
+0a. **DONE — the chimney smoke is three plumes, and they follow you.** It was
+   54 plumes of 5 puffs, each puff its own transparent mesh: **270 draws**, the
+   largest single item in the frame over the Tower. The code already knew and
+   thinned the city to 26 plumes on phones rather than fix it.
+
+   The fix was a design argument, not a rendering one. Smoke here is an
+   *instrument* — "the city itself shows the wind" — and a pilot reads the
+   surface wind off a chimney **near him**. He cannot read one two kilometres
+   away, where it is a grey speck. So there are three, they re-home onto a
+   rooftop near the ship whenever they fall behind, and they fade in so the
+   change is not seen. **270 → 15**, and where there is no city to smoke — over
+   St-Cloud, in the park — they go out entirely: **0**.
+
+   The general lesson, and it is the better one: *before making a thing cheaper,
+   ask what it is for.* Instancing 270 puffs would have been the clever answer
+   and the wrong one.
 
 0c. **DONE — the housetops shed their trim.** A house is three instanced rows:
    the block, its roof cap, its chimneys. So dropping the fiddly ones at range

@@ -3743,7 +3743,9 @@ function frame(now) {
   }
   const flagAng = Math.atan2(-wind.z, wind.x);
   for (const f of world.flags || []) f.rotation.y = flagAng + Math.sin(windGustT * 3.1) * 0.14;
-  world.tick?.(dt, windGustT, wind);
+  // the ship's own position too: the chimney smoke follows her, because a
+  // plume you cannot see is not a wind cue
+  world.tick?.(dt, windGustT, wind, ship && ship.pos);
   clockTheMovers(dt);
 
   // the sky box re-centers on the camera (or its walls show as black past 2 km)
