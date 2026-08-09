@@ -745,6 +745,23 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 // drag orbit (mouse or touch) on the canvas only
 let dragging = false, orbitYaw = 0, orbitPitch = 0, lastPX = 0, lastPY = 0;
+
+/**
+ * Has this ship anything aboard her to steer with?
+ *
+ * Only the "Brazil" has not: a spherical free balloon with no motor, no rudder
+ * and no tail. Everywhere else the view springs back to dead ahead when you let
+ * go of it, which is right for a ship you are pointing somewhere — the framing
+ * you fly by is over her bow. In a balloon there is no bow. You drift where the
+ * wind takes you and you look where you like, so the view stays where it is
+ * put, and A / D turn the PILOT in his basket instead of a helm that does not
+ * exist. That is the whole difference between flying a ship and riding a
+ * balloon, and it is one function.
+ */
+function noHelm() { return !!ship && ship.spec.physics.weathercocks === false; }
+
+/** Radians a second: a man turning round in a basket, not a machine. */
+const LOOK_TURN = 1.1;
 const cvs = renderer.domElement;
 cvs.style.touchAction = 'none';
 cvs.addEventListener('pointerdown', (e) => {
@@ -3451,7 +3468,7 @@ function updateCamera(dt) {
     desired = p.clone().add(off);
     look = p.clone().addScaledVector(fwd, 30);
     look.y += 5;
-    if (!dragging) { orbitYaw *= Math.pow(0.3, dt); orbitPitch *= Math.pow(0.3, dt); }
+    if (!dragging && !noHelm()) { orbitYaw *= Math.pow(0.3, dt); orbitPitch *= Math.pow(0.3, dt); }
   } else if (camMode === 1) {
     // first person, standing in the basket (B3: the diagonal intoxication)
     desired = new THREE.Vector3();
@@ -3466,7 +3483,7 @@ function updateCamera(dt) {
       const rel = look.clone().sub(desired).applyAxisAngle(new THREE.Vector3(0, 1, 0), orbitYaw);
       look = desired.clone().add(rel);
     }
-    if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
+    if (!dragging && !noHelm()) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
     snap = true;
   } else if (camMode === 2) {
     // ---- OVER THE SIDE ----
@@ -3500,7 +3517,7 @@ function updateCamera(dt) {
       rel.y += orbitPitch * 60;
       look = desired.clone().add(rel);
     }
-    if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
+    if (!dragging && !noHelm()) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
     snap = true;
   } else if (camMode === 3) {
     // postcard: drag to pan and tilt around the ship; glides back to the
@@ -3511,7 +3528,7 @@ function updateCamera(dt) {
     off.y += orbitPitch * 45;
     desired = p.clone().add(off);
     look = p;
-    if (!dragging) { orbitYaw *= Math.pow(0.45, dt); orbitPitch *= Math.pow(0.45, dt); }
+    if (!dragging && !noHelm()) { orbitYaw *= Math.pow(0.45, dt); orbitPitch *= Math.pow(0.45, dt); }
   } else {
     desired = world.vistaPos.clone();
     look = p;
@@ -3733,6 +3750,14 @@ function frame(now) {
   if (kidGame()) wind.multiplyScalar(KID_WIND);
 
   pollInput();
+  // In a balloon the helm turns the man, not the bag — and having turned, he
+  // stays turned. Taken here, before the ship is ever handed it, so nothing
+  // downstream has to know she is different.
+  if (noHelm() && input.rudder) {
+    orbitYaw += input.rudder * LOOK_TURN * dt;
+    orbitYaw = ((orbitYaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    input.rudder = 0;
+  }
   const env = {
     underCloud: underCloud(world.clouds, ship.pos.x, ship.pos.z),
     inBois: world.isInBois(ship.pos.x, ship.pos.z),

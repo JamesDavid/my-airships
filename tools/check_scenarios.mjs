@@ -6,6 +6,7 @@
 // scenario II could not be. This runs them.
 //
 // Use: node tools/check_scenarios.mjs
+import { readFileSync } from 'node:fs';
 import './headless.mjs';
 import * as THREE from 'three';
 import { buildWorld } from '../src/world.js';
@@ -1776,10 +1777,26 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('');
   console.log('NO SCENARIO TELLS A WATER SHIP TO SPEND ITS SAND');
   {
-    const src2 = await (await import('node:fs/promises')).readFile('src/scenarios.js', 'utf8');
+    const raw2 = await (await import('node:fs/promises')).readFile('src/scenarios.js', 'utf8');
+    // Over the CODE only. A comment explaining the rule necessarily contains
+    // the words the rule forbids, and a check that reads its own prose is
+    // measuring nothing. Blanked rather than deleted, so every offset — and so
+    // every line number and every slice of context below — still lines up.
+    const src2 = raw2.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/\S/g, ' '))
+                     .replace(/\/\/.*$/gm, (m) => m.replace(/\S/g, ' '));
     const bad2 = [];
-    // any literal mention of sand or water that is not chosen from the ship
-    for (const m of src2.matchAll(/'[^']*(sand|water)[^']*'/g)) {
+    // A literal "sand" or "water" that is TALKING ABOUT BALLAST, and is not
+    // chosen from the ship.
+    //
+    // The word alone is not the offence — this world is full of water that has
+    // nothing to do with what a pilot throws over the side: the bay, the Seine,
+    // the surface a submarine boat passes under. The offence is naming the
+    // substance while telling the pilot what to spend, because the No. 5 has
+    // water in her keel and the No. 9 sand in her bags, and a pilot may change
+    // ships. So both must be present: the substance, and the spending of it.
+    const SPENDING = /\b(ballast|bags?|sacks?|spend|spends|spent|drop|dropped|throw|thrown|runs out|ran out)\b/i;
+    for (const m of src2.matchAll(/'[^']*\b(sand|water)\b[^']*'/g)) {
+      if (!SPENDING.test(m[0])) continue;
       const around = src2.slice(Math.max(0, m.index - 120), m.index + m[0].length);
       if (!/spec\.ballast/.test(around)) bad2.push(m[0].slice(0, 54));
     }
@@ -1791,50 +1808,73 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     }
   }
 
-  // ------------------------------------------ the free balloon holds her head
+  // -------------------------------------- the free balloon cannot be steered
   //
-  // The "Brazil" has no motor, no rudder and no airspeed of her own, so nothing
-  // weathercocks her and nothing pulls her back: turned, she stays turned, and
-  // the helm is simply which way the pilot is facing. She used to swing head to
-  // wind on the guide rope like every other ship, which snapped the view round
-  // whenever you tried to look somewhere.
+  // The "Brazil" is a sphere with no motor, no rudder and no tail, and she goes
+  // WITH the wind, so she has no airspeed to be turned by either. She therefore
+  // cannot be steered at all, and does not weathercock — not even on the guide
+  // rope, because a boat rides to her anchor by being longer than she is wide
+  // and a sphere is not.
   //
-  // Both halves are asserted, because the fix that only does the first half is
-  // "switch the weathercock off everywhere", and that would quietly take the
-  // rope-riding out of the eight ships whose flying depends on it.
+  // This check was briefly the opposite of itself. The first attempt at "the
+  // view snaps back in the balloon" gave her a helm — a slow one, but a helm —
+  // and it passed, because it tested that she TURNED and held it. She should do
+  // neither. The pilot turns; she does not. So both halves are asserted: she
+  // never answers a helm, and a ship that has one still rides to her rope, in
+  // case the next fix for this is "switch the weathercock off everywhere".
   {
     const deg = (r) => (r * 180) / Math.PI;
     const env = { groundAt: () => 0, isWater: () => false };
-    const held = (id) => {
+    const flown = (id) => {
       const s = makeShip(id);
       s.reset(new THREE.Vector3(0, 40, 0), 0);
       const wind = new THREE.Vector3(6, 0, 0);
-      fly(s, { wind, env, secs: 2, pilot: () => ({ throttle: 0, rudder: 1, pitch: 0, vent: 0, coax: 0 }) });
-      fly(s, { wind, env, secs: 3 });                  // let the helm run off
-      const settled = s.yaw;
-      fly(s, { wind, env, secs: 120 });                // and now leave her alone
-      return { turned: deg(settled), drift: Math.abs(deg(s.yaw - settled)) };
+      const start = s.yaw;
+      fly(s, { wind, env, secs: 20, pilot: () => ({ throttle: 0, rudder: 1, pitch: 0, vent: 0, coax: 0 }) });
+      const onHelm = Math.abs(deg(s.yaw - start));
+      fly(s, { wind, env, secs: 120 });                 // and now hands off
+      return { onHelm, adrift: Math.abs(deg(s.yaw - start)) };
     };
-    const b = held('brazil'), p = held('no6');
-    if (Math.abs(b.turned) < 20) {
-      console.log('   FAIL the Brazil will not answer her helm at all: %s deg for two seconds of it',
-        b.turned.toFixed(1));
+    const b = flown('brazil'), p = flown('no6');
+    if (b.onHelm > 1) {
+      console.log('   FAIL the Brazil answers her helm: %s deg of it. She has no rudder.',
+        b.onHelm.toFixed(1));
       fails++;
-    } else if (b.drift > 2) {
-      console.log('   FAIL the Brazil does not hold her head: %s deg away in two minutes, hands off',
-        b.drift.toFixed(1));
+    } else if (b.adrift > 1) {
+      console.log('   FAIL the Brazil is turned by the wind: %s deg. A sphere has no head to hold.',
+        b.adrift.toFixed(1));
       fails++;
     } else {
-      console.log('   ok   the Brazil turns %s deg and holds it (%s deg in two minutes)',
-        b.turned.toFixed(0), b.drift.toFixed(1));
+      console.log('   ok   the Brazil cannot be steered and is not weathercocked (%s deg in all)',
+        b.adrift.toFixed(1));
     }
-    if (p.drift < 15) {
-      console.log('   FAIL the No. 6 no longer rides to her rope: only %s deg in two minutes',
-        p.drift.toFixed(1));
+    if (p.adrift < 15) {
+      console.log('   FAIL the No. 6 no longer answers or rides to her rope: %s deg in all',
+        p.adrift.toFixed(1));
       fails++;
     } else {
-      console.log('   ok   and a ship with a tail still weathercocks (%s deg in two minutes)',
-        p.drift.toFixed(0));
+      console.log('   ok   and a ship with a rudder and a tail still comes round (%s deg)',
+        p.adrift.toFixed(0));
+    }
+
+    // ...and the pilot turns instead, and STAYS turned. That lives in main.js
+    // with the view rather than in the flight model, so it is read there: the
+    // helm must be taken off the ship, and the spring-back that returns every
+    // other view to dead ahead must not run in her.
+    const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+    const turnsPilot = /noHelm\(\)\s*&&\s*input\.rudder[\s\S]{0,320}?input\.rudder = 0;/.test(src);
+    const springs = [...src.matchAll(/if \(!dragging(?: && !noHelm\(\))?\) \{ orbitYaw/g)];
+    const guarded = [...src.matchAll(/if \(!dragging && !noHelm\(\)\) \{ orbitYaw/g)];
+    if (!turnsPilot) {
+      console.log('   FAIL nothing turns the pilot in a ship with no helm');
+      fails++;
+    } else if (!springs.length || springs.length !== guarded.length) {
+      console.log('   FAIL %d of %d views still spring back to dead ahead in a balloon',
+        springs.length - guarded.length, springs.length);
+      fails++;
+    } else {
+      console.log('   ok   the helm turns the pilot instead, and all %d views hold where he puts them',
+        springs.length);
     }
   }
 

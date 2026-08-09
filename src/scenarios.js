@@ -267,7 +267,16 @@ export const SCENARIOS = [
       }
       if (!this.warned && this.dead && ctx.ship.bags < ctx.ship.spec.physics.bags) {
         this.warned = true;
-        ctx.addMsg('sc2', 'The water runs out of the keel and the fall eases — and the wind now has that much longer to carry you. The Tower is downwind.', 8);
+        // Asked of the ship, not typed. A pilot may change ships when landed,
+        // and the No. 5's water in her keel is not the No. 9's sand in her bags
+        // — this line used to say "water" whatever was actually going over the
+        // side. The check that forbids it could not see it: its own regex had a
+        // literal control character where a word boundary was meant, so it
+        // matched nothing and passed on every scenario for as long as it ran.
+        ctx.addMsg('sc2', (ctx.ship.spec.ballast === 'water'
+          ? 'The water runs out of the keel'
+          : 'The sand runs out of the bags')
+          + ' and the fall eases — and the wind now has that much longer to carry you. The Tower is downwind.', 8);
       }
 
       if (ctx.ship.wrecked) {

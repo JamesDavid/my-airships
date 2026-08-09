@@ -34,12 +34,14 @@ export const SHIPS = {
     keel: { type: 'basket-long', length: 3.5, drop: 7.5 },
     prop: 'none', rudderScale: 0,
     physics: {
-      // A / D turn the basket by hand and she STAYS turned — she is the only
-      // ship here with no rudder to turn with and no airflow to be turned by,
-      // so the helm is simply which way you are facing. Radians a second at
-      // full helm: a half turn in about eight seconds, which is a pilot hauling
-      // on the net and not a machine. See the freeYaw branch in airship.js.
-      freeYaw: 0.4,
+      // SHE CANNOT BE STEERED, and that is the whole point of her: a sphere in
+      // a wind has no preferred heading and nothing to give it one — no rudder,
+      // no tail, and no airspeed of her own to work either against. So she does
+      // not weathercock, not even riding to her guide rope, and A / D do not
+      // turn her at all. What they turn is the PILOT, in the basket: see
+      // noHelm() in main.js. Drifting where the wind takes you while you look
+      // wherever you like is the lesson she is in the shed to teach.
+      weathercocks: false,
       thrust: 0, dragQ: 0.2, dragL: 0.3, yawRate: 0, pitchMax: 0,
       gasLift: 3.0, weightBase: 1.7, bagLift: 0.2, bags: 6, fuel: 0, ventRate: 2.5,
       ropeLen: 90, ropeLift: 0.55, pressureLimit: 9, speedPressure: 0,

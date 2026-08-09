@@ -2123,31 +2123,29 @@ export class Airship {
       const gl = this.vel.x * latFlat.x + this.vel.z * latFlat.z;
       vane += ROPE_VANE * this.groundedFrac * (gl / hull);
     }
-    if (P.freeYaw) {
-      // ---- A FREE BALLOON KEEPS WHATEVER HEADING YOU GIVE HER ----
+    if (P.weathercocks === false) {
+      // ---- A SPHERE HAS NO HEAD TO HOLD TO WIND ----
       //
       // The "Brazil" has no motor, no rudder and no tail, and — the part that
-      // matters — no airspeed: she goes with the wind, so there is no airflow
-      // over her to weathercock into and nothing to pull her back. A basket
-      // turned is a basket turned. Aeronauts turn theirs by hand, hauling on
-      // the ropes of the net, for no better reason than wanting to look the
-      // other way, and it stays turned.
+      // decides it — no airspeed: she goes WITH the wind, so there is no
+      // airflow over her to weathercock into. Nor does the guide rope give her
+      // one: a boat rides to her anchor because her hull is longer than it is
+      // wide, and a sphere is not. So the vane above is not merely small here,
+      // it is WRONG. With the rope down it was swinging her head to wind and
+      // taking the pilot's view round with it, and the pilot could do nothing
+      // about it, because there is nothing aboard her to do it with.
       //
-      // So the vane above is not merely small here, it is WRONG: with the guide
-      // rope down it was swinging her head to wind and snapping the view back
-      // round every time the pilot tried to look somewhere. She is the one ship
-      // in the shed where the helm is a way of pointing your eyes, and it must
-      // hold. (Left alone she would also wander a few degrees a minute off the
+      // She therefore keeps whatever heading she has, and the pilot who wants
+      // to look elsewhere turns HIMSELF, in the basket — which is what really
+      // happened, and is handled in main.js where the view lives, not here
+      // where the flying does. She is not steerable and must not become so.
+      //
+      // (Left alone a real one also wanders a few degrees a minute, off the
       // torsion in the net and the shear across her height. Not modelled: a
       // view that creeps while you are looking through it is a fault report,
       // and the small truth is not worth the large annoyance.)
       this.sideslip = 0;
-      const wantFree = input.rudder * P.freeYaw;
-      // A fifth of a second either way. Longer and letting go of the helm
-      // coasts ten degrees past where you were aiming, which in a headset is
-      // the difference between looking at a thing and looking near it.
-      this.yawVel += (wantFree - this.yawVel) * Math.min(1, dt / 0.2);
-      this.yaw += this.yawVel * dt;
+      this.yawVel = 0;
     } else {
       this.sideslip = vane;
       const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55) + vane;
