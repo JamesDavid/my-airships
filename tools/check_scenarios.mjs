@@ -2068,6 +2068,66 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     }
   }
 
+  // --------------------------------- EVERY CORNER MUST BE FLYABLE BY THE SHIP
+  //
+  // "harbor circuit the turns are too tight" (#150). Measured, the corner at the
+  // Casino was a 167 DEGREE turn -- very nearly a reversal -- wanting 908 m of
+  // approach off a leg of 675. Two hundred and thirty metres short: it could not
+  // be flown, only blundered round.
+  //
+  // The St. Louis triangle had learned this already and been re-cut for it; the
+  // lesson was written in a comment there and applied nowhere else. So it is a
+  // rule now, over every course there is.
+  //
+  // The turning circle is FLOWN rather than derived -- full helm, full throttle,
+  // until the circle settles -- so the day somebody changes a rudder or a hull,
+  // the courses are re-judged against the ship that actually exists.
+  {
+    console.log('');
+    console.log('EVERY CORNER MUST BE FLYABLE BY THE SHIP');
+    const circle = (id) => {
+      const s = makeShip(id);
+      s.reset(new THREE.Vector3(0, 40, 0), 0);
+      const wind = new THREE.Vector3(0, 0, 0);
+      const env = { groundAt: () => 0, isWater: () => true };
+      const helm = { throttle: 1, rudder: 1, pitch: 0, vent: 0, coax: 0 };
+      for (let i = 0; i < 60 * 30; i++) s.update(1 / 30, helm, wind, env);
+      const pts = [];
+      for (let i = 0; i < 60 * 30; i++) {
+        s.update(1 / 30, helm, wind, env);
+        if (i % 10 === 0) pts.push({ x: s.pos.x, z: s.pos.z });
+      }
+      const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+      const cz = pts.reduce((a, p) => a + p.z, 0) / pts.length;
+      return pts.reduce((a, p) => a + Math.hypot(p.x - cx, p.z - cz), 0) / pts.length;
+    };
+    const R = circle('no6');
+    console.log('   the No. 6 circles at %d m radius at racing speed', Math.round(R));
+
+    for (const t of TRACKS) {
+      if (!t.gates || t.gates.length < 3) continue;
+      const g = t.gates;
+      let worst = Infinity, ang0 = 0, at0 = 0;
+      for (let i = 0; i < g.length; i++) {
+        const a = g[(i - 1 + g.length) % g.length], b = g[i], c = g[(i + 1) % g.length];
+        const iv = { x: b.x - a.x, z: b.z - a.z }, ov = { x: c.x - b.x, z: c.z - b.z };
+        const inL = Math.hypot(iv.x, iv.z);
+        const ang = Math.abs((((Math.atan2(ov.z, ov.x) - Math.atan2(iv.z, iv.x)) * 180) / Math.PI + 540) % 360 - 180);
+        // room to set a corner up: the tangent length of the turn itself
+        const room = inL - R * Math.tan((Math.min(ang, 170) / 2 * Math.PI) / 180);
+        if (room < worst) { worst = room; ang0 = ang; at0 = i; }
+      }
+      if (worst < 0) {
+        console.log('   FAIL %s: corner %d is %d deg and %d m SHORT of the room to fly it',
+          t.name, at0, Math.round(ang0), Math.round(-worst));
+        fails++;
+      } else {
+        console.log('   ok   %s tightest corner %d deg, %d m in hand',
+          t.name.padEnd(22), Math.round(ang0), Math.round(worst));
+      }
+    }
+  }
+
   console.log('');
   console.log('%s', fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');
   process.exit(fails ? 1 : 0);

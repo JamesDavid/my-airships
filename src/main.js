@@ -2965,7 +2965,20 @@ function scenCtx() {
       // moved onto their true positions, rings moved and the checks did not:
       // you could land inside the green ring and be told you had missed.
       scenZone = { pos: pos.clone(), r, kind };
-      scenRing.visible = true; scenRing.position.copy(pos); scenRing.scale.setScalar(r / 24);
+      // AN 'OVER' RING IS A HOOP IN THE AIR, NOT A CIRCLE ON THE GRASS.
+      //
+      // "The ring should be way smaller around the landing area, and if we need
+      // to fly over an area have aerial rings" (#147). Both kinds were drawn
+      // the same: a great flat circle lying on the ground, which says LAND HERE
+      // in every other scenario — so the review at Longchamps was a 360 m disc
+      // on the turf telling the pilot to put down in the middle of the parade.
+      // Lifted to flying height it says the true thing, which is fly through
+      // this, and it can be much smaller because a hoop you aim at does not
+      // need to be a field you can land in.
+      const air = kind === 'over';
+      const ringAt = pos.clone();
+      if (air) ringAt.y += 45;
+      scenRing.visible = true; scenRing.position.copy(ringAt); scenRing.scale.setScalar(r / 24);
       scenBeacon.visible = true;
       scenBeacon.position.set(pos.x, pos.y + 75, pos.z);
       scenBeacon.scale.set(r / 24, 1, r / 24);
@@ -3446,17 +3459,38 @@ function initAudio() {
   noise.start();
   audio = { ctx, osc, gain, windGain };
 }
+/**
+ * A number fit to hand to the sound card.
+ *
+ * WebAudio throws on a non-finite value — "Failed to execute 'setTargetAtTime'
+ * on 'AudioParam': The provided float value is non-finite" — and it throws from
+ * inside the frame, which used to end the session outright. One NaN anywhere in
+ * the flight model, for one frame, and the game stopped with "She will not leave
+ * the shed".
+ *
+ * The motor's noise is not worth a session. Anything that is not a real number
+ * becomes the quiet default and the flight goes on; the fault is still written
+ * to the fault book, so it rides out on the next report instead of vanishing
+ * with the page.
+ */
+function num(v, fallback = 0) {
+  if (Number.isFinite(v)) return v;
+  noteFault('audio', 'a non-finite value reached the sound: ' + String(v));
+  return fallback;
+}
+
 function updateAudio() {
   drawSoundBtn();                  // the context can suspend itself at any time
   if (!audio) return;
-  const h = ship.motorHealth;
+  const h = num(ship.motorHealth, 1);
+  const thr = num(ship.throttle, 0);
   const flicker = ship.sputtering && Math.random() < 0.35 ? 0.15 : 1;
-  const target = muted || ship.wrecked || !ship.motorOn ? 0 : ship.throttle * 0.055 * flicker * (0.4 + 0.6 * h);
-  audio.gain.gain.setTargetAtTime(target, audio.ctx.currentTime, 0.05);
-  audio.osc.frequency.setTargetAtTime(42 + 75 * ship.throttle * h, audio.ctx.currentTime, 0.1);
-  const spd = ship.vel.length();
+  const target = muted || ship.wrecked || !ship.motorOn ? 0 : thr * 0.055 * flicker * (0.4 + 0.6 * h);
+  audio.gain.gain.setTargetAtTime(num(target, 0), audio.ctx.currentTime, 0.05);
+  audio.osc.frequency.setTargetAtTime(num(42 + 75 * thr * h, 42), audio.ctx.currentTime, 0.1);
+  const spd = num(ship.vel.length(), 0);
   const wt = muted ? 0 : Math.min(0.13, (spd / 17) ** 2 * 0.13);
-  audio.windGain.gain.setTargetAtTime(wt, audio.ctx.currentTime, 0.12);
+  audio.windGain.gain.setTargetAtTime(num(wt, 0), audio.ctx.currentTime, 0.12);
 }
 // a short chime for gate passes and finishes
 function blip(freq) {
@@ -4192,4 +4226,34 @@ function vrPanel() {
   ship.drawPanel(rows, toast ? '' : note, nav, toast);
 }
 
-renderer.setAnimationLoop(frame);
+/**
+ * THE LOOP OUTLIVES ONE BAD FRAME.
+ *
+ * setAnimationLoop stops calling you the moment your callback throws, so any
+ * single exception anywhere in the frame — one NaN into the sound card, one
+ * property read off something that was disposed mid-swap — ended the flight and
+ * left the page dead. The pilot sees the world freeze and has no idea why.
+ *
+ * A game is not a build: it should limp rather than stop. The fault is written
+ * to the fault book (so it rides out on the pilot's next report, with the state
+ * and the picture, which is far more use than a console nobody had open), the
+ * pilot is told once, and the next frame is attempted. If it keeps throwing the
+ * message does not repeat — a hundred identical toasts help nobody.
+ */
+let lastFrameFault = '';
+let frameFaults = 0;
+function safeFrame(now) {
+  try {
+    frame(now);
+  } catch (e) {
+    frameFaults++;
+    const what = String((e && e.message) || e);
+    noteFault('frame', what);
+    if (what !== lastFrameFault) {
+      lastFrameFault = what;
+      addMsg('framefault', 'Something in the works slipped — the flight goes on. '
+        + 'If it looks wrong, the FAUTE button now carries what happened.', 6);
+    }
+  }
+}
+renderer.setAnimationLoop(safeFrame);

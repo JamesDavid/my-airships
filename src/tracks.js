@@ -153,8 +153,25 @@ export const TRACKS = [
     gates: (() => {
       const P = (id) => { const p = placeMC(id); return { x: p.x, z: p.z, g: groundMC(p.x, p.z) }; };
       const st = P('stage'), pt = P('port'), cs = P('casino'), rk = P('rock'), oc = P('oceano');
+      // RE-CUT FOR A SHIP THAT TURNS LIKE AN AIRSHIP — the same lesson the
+      // St. Louis triangle learned below, and this course had not.
+      //
+      // "harbor circuit the turns are too tight" (#150), and measured, it was
+      // not merely tight: flown stage-bay-casino-rockfoot-palace, the corner at
+      // the Casino was a 167 DEGREE TURN — very nearly a reversal. The No. 6
+      // circles at 102 m radius at racing speed (flown, not derived: full helm,
+      // full throttle, until the circle settles), so that corner wants 908 m of
+      // approach and the leg into it is 675. Two hundred and thirty metres
+      // short: it could not be flown at all, only blundered round.
+      //
+      // Same five places, visited in the order that suits a turning circle.
+      // Found by working every order of them from the landing-stage and taking
+      // the one whose tightest corner has the most room: every corner now has
+      // 208 m in hand, against minus 230.
       return [
         { x: st.x, y: 20, z: st.z, r: 18 },                           // off the landing-stage
+        { x: oc.x + 150, y: 22, z: oc.z + 120, r: 20 },               // out round the Rock's foot
+        { x: rk.x, y: rk.g + 40, z: rk.z, r: 18 },                    // clear OVER the palace
         // OUT OVER THE WATER. At port + [120, 90] this one stood where the
         // ground rises to 12 m, and its lower rim is at 0 — so twelve metres of
         // rock came up through a ring you are meant to fly at wave-top height:
@@ -163,8 +180,6 @@ export const TRACKS = [
         // round the hoop rather than at its centre.
         { x: pt.x + 68, y: 18, z: pt.z + 16, r: 18 },                 // wave-top across the bay
         { x: cs.x + 40, y: cs.g + 34, z: cs.z + 30, r: 20 },          // the Casino terrace
-        { x: oc.x + 150, y: 22, z: oc.z + 120, r: 20 },               // out round the Rock's foot
-        { x: rk.x, y: rk.g + 40, z: rk.z, r: 18 },                    // clear OVER the palace
       ];
     })(),
   },

@@ -577,7 +577,9 @@ export const SCENARIOS = [
       }  // the Cascade lawn, facing Longchamps
       // 'over', not 'land': you fly across the review, you do not come down in
       // the middle of it — the one ring in the game that is not a landing place
-      { const L = placeLegacy('longchamp'); ctx.setZone(V(L.x, 10, L.z), 360, 'over'); }
+      // 360 m was a disc most of the way across Longchamps; as an aerial hoop it
+      // only has to be a thing you can aim at and fly through. See #147.
+      { const L = placeLegacy('longchamp'); ctx.setZone(V(L.x, 10, L.z), 150, 'over'); }
       ctx.setCenter('July 14th, 1903', 'Over the review at Longchamps — low, and under ten minutes. (green ring)');
       this.over = 0; this.saluted = false; this.done = false;
     },
