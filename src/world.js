@@ -1236,22 +1236,48 @@ export function buildWorld(scene) {
     put(-190, 80, 26, 14, 7);
     put(-60, -150, 40, 18, 9, 0.2);         // the carriage sheds
     // the hydrogen cylinders, in their rows
+    // ONE ROW, NOT FOURTEEN. A pilot asked whether he can even see these --
+    // 1.8 m across at 238 m from the pad is about seven pixels an eye, and
+    // there were fourteen draw calls of it. They are identical bottles standing
+    // in rows, which is what an InstancedMesh is for.
     const cyl = new THREE.MeshLambertMaterial({ color: 0x5c6b52 });
-    for (let i = 0; i < 14; i++) {
-      const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 5.5, 8), cyl);
-      const cx2 = -205 + (i % 7) * 4.5, cz2 = 120 + Math.floor(i / 7) * 6;
-      c2.position.set(cx2, 2.75 + sitOn(cx2, cz2), cz2);
-      c2.castShadow = true; field.add(c2);
+    {
+      const bottles = new THREE.InstancedMesh(
+        new THREE.CylinderGeometry(0.9, 0.9, 5.5, 8), cyl, 14);
+      const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion();
+      const pv = new THREE.Vector3(), sv = new THREE.Vector3(1, 1, 1);
+      for (let i = 0; i < 14; i++) {
+        const cx2 = -205 + (i % 7) * 4.5, cz2 = 120 + Math.floor(i / 7) * 6;
+        bottles.setMatrixAt(i, m4.compose(
+          pv.set(cx2, 2.75 + sitOn(cx2, cz2), cz2), q0, sv));
+      }
+      if (bottles.instanceMatrix) bottles.instanceMatrix.needsUpdate = true;
+      bottles.castShadow = true;
+      field.add(bottles);
     }
     // the paling that shut the ground off from the park
+    // ...and one row for the whole paling, which was forty-four draws of an
+    // identical half-metre post. Nobody counts the posts in a fence.
     const paleM = new THREE.MeshLambertMaterial({ color: 0x7d6a4c });
-    for (let i = 0; i < 44; i++) {
-      const a = (i / 44) * Math.PI * 2;
-      const pale = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.2, 0.5), paleM);
-      const px2 = Math.cos(a) * 235, pz2 = Math.sin(a) * 235;
-      pale.position.set(px2, 1.6 + sitOn(px2, pz2), pz2);
-      field.add(pale);
+    {
+      const pales = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(0.5, 3.2, 0.5), paleM, 44);
+      const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion();
+      const pv = new THREE.Vector3(), sv = new THREE.Vector3(1, 1, 1);
+      for (let i = 0; i < 44; i++) {
+        const a = (i / 44) * Math.PI * 2;
+        const px2 = Math.cos(a) * 235, pz2 = Math.sin(a) * 235;
+        pales.setMatrixAt(i, m4.compose(
+          pv.set(px2, 1.6 + sitOn(px2, pz2), pz2), q0, sv));
+      }
+      if (pales.instanceMatrix) pales.instanceMatrix.needsUpdate = true;
+      field.add(pales);
     }
+    // and the rest of the field is dead stone that never moves, so it is merged
+    // by material — everything but the hangar's flag, which streams with the
+    // wind and must not be baked. Marked here; the merge happens at the end of
+    // buildWorld, once liftToTerrain has put it all on the hill.
+    field.userData.bakeStatic = true;
   }
 
   // ---------- Neuilly St James, "the first of the world's air-ship stations" ----------
@@ -1384,6 +1410,28 @@ export function buildWorld(scene) {
     for (const f of [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag]) mark(f);
     if (lm.roueWheel) mark(lm.roueWheel);
     addFarProxies(scene, 6, live);
+
+    // ...and the same treatment for anything the world asked to have baked that
+    // is not a monument. The St-Cloud field is the case: a hangar, a club
+    // house, an office, a gas plant, carriage sheds — dead stone standing in a
+    // park, and 303 draw calls of it, the largest single item in the frame from
+    // the aerodrome. The flag on the hangar's mast is in `live` and is left to
+    // stream.
+    for (const o of [...scene.children]) {
+      // STRICT === and a real children array. The headless three hands back a
+      // permissive proxy for some objects, so a truthy `bakeStatic` matched one
+      // whose `children` is a FUNCTION, and makeFarProxy died trying to iterate
+      // it. Fifth time this proxy has produced a false reading today.
+      if (!o.userData || o.userData.bakeStatic !== true) continue;
+      if (!Array.isArray(o.children) || !o.children.length) continue;
+      const saw = { hit: false }, leaves = [];
+      const merged = makeFarProxy(o, saw, leaves, live);
+      if (!merged || !leaves.length) continue;
+      scene.add(merged);
+      merged.userData.bakedFrom = o;
+      for (const leaf of leaves) leaf.visible = false;
+      merged.visible = true;
+    }
   }
 
   const LM = (id) => { const q = placeLegacy(id); return { x: q.x, z: q.z }; };
@@ -1621,7 +1669,9 @@ function makeFarProxy(group, sawInstanced = { hit: false }, merged = [], live = 
     }
     if (Array.isArray(o.children)) for (const c of o.children) walk(c, world);
   };
-  for (const c of (group.children || [])) walk(c, m4.identity());
+  // ...and the merger will not be handed something that only looks like a group
+  if (!Array.isArray(group.children)) return null;
+  for (const c of group.children) walk(c, m4.identity());
 
   const out = [];
   for (const { mat, parts } of byMat.values()) {
