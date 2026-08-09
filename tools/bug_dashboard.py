@@ -27,6 +27,7 @@
 # is there in one read.
 import argparse
 import base64
+import datetime
 import json
 import os
 import re
@@ -137,11 +138,21 @@ MODELS = os.path.join(NOTES, 'models')
 
 
 def model_note_path(key):
-    safe = re.sub(r'[^a-z0-9_-]', '', str(key).lower())[:60] or 'model'
+    # 120, not 60: the key carries which PIECES were meant on the end of it,
+    # and cutting it back to sixty threw that away and filed the note against
+    # the whole model instead.
+    safe = re.sub(r'[^a-z0-9_-]', '', str(key).lower())[:120] or 'model'
     return os.path.join(MODELS, safe + '.md')
 
 
 def read_model_notes():
+    """Each model's whole THREAD, not merely the last thing said about it.
+
+    A note on a model starts a conversation -- "bicycle seat too high?" wants an
+    answer, and the answer belongs beside the question rather than replacing it.
+    So the file is append-only below its header, and the page is handed the lot:
+    who said what, when, and whether the thing was ever settled.
+    """
     out = {}
     if not os.path.isdir(MODELS):
         return out
@@ -149,28 +160,60 @@ def read_model_notes():
         if not f.endswith('.md'):
             continue
         txt = open(os.path.join(MODELS, f), encoding='utf-8').read()
-        m = re.search(r'\n---\n\n(.*)$', txt, re.S)
-        done = '\nstatus: done' in txt
-        out[f[:-3]] = {'note': (m.group(1) if m else txt).strip(), 'done': done}
+        m = re.search(r'\n---\n(.*)$', txt, re.S)
+        thread = (m.group(1) if m else txt).strip()
+        entries = []
+        # THE FIRST CHUNK HAS NO HEADER, and that is the whole of it.
+        #
+        # A note written before there were threads is just the words, sitting
+        # under the `---` with no `### who — when` over them. Splitting on the
+        # marker still yields it as chunk zero, and parsing chunk zero as though
+        # it had a header ate the message: the pilot's own line became the
+        # "who" and the text came out empty. Reported as "my message on the
+        # brazil was gone. nothing about the wires in the history" -- and it was
+        # not gone, it was being read as a name.
+        parts = re.split(r'^### ', thread, flags=re.M)
+        if parts and parts[0].strip():
+            entries.append({'who': 'you', 'when': '', 'text': parts[0].strip()})
+        for part in parts[1:]:
+            part = part.strip()
+            if not part:
+                continue
+            head, _, body = part.partition('\n')
+            who, _, when = head.partition(' — ')
+            entries.append({'who': (who.strip() or 'you'), 'when': when.strip(),
+                            'text': body.strip()})
+        out[f[:-3]] = {'note': entries[-1]['text'] if entries else '',
+                       'thread': entries, 'done': 'status: done' in txt}
     return out
 
 
-def write_model_note(key, name, note, stats, done):
+def write_model_note(key, name, note, stats, done, who='you'):
+    """Add to the thread. The header is written once; everything else appends."""
     os.makedirs(MODELS, exist_ok=True)
     path = model_note_path(key)
-    if not (note or '').strip() and not done:
-        if os.path.exists(path):
-            os.remove(path)
-        reindex_models()
-        return None
-    body = ['# ' + (name or key)]
-    for k in ('place', 'copies', 'drawsEach', 'drawsTotal', 'triangles', 'materials', 'parts'):
-        if stats.get(k) not in (None, ''):
-            body.append('%-14s %s' % (k + ':', stats[k]))
+    note = (note or '').strip()
+    if not os.path.exists(path):
+        if not note and not done:
+            return None
+        head = ['# ' + (name or key)]
+        for k in ('place', 'copies', 'drawsEach', 'drawsTotal', 'triangles',
+                  'materials', 'parts', 'partOf', 'pieces', 'geometry',
+                  'instanced', 'animates', 'copiesOfModel'):
+            if stats.get(k) not in (None, ''):
+                head.append('%-14s %s' % (k + ':', stats[k]))
+        head += ['', '---', '']
+        open(path, 'w', encoding='utf-8').write('\n'.join(head))
+
+    txt = open(path, encoding='utf-8').read()
+    if note:
+        stamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        txt = txt.rstrip('\n') + '\n\n### %s — %s\n\n%s\n' % (who, stamp, note)
+    # `status: done` lives in the header, and is set or cleared rather than piled up
+    txt = re.sub(r'^status: done\n', '', txt, flags=re.M)
     if done:
-        body.append('status: done')
-    body += ['', '---', '', note.strip() or '(no words)', '']
-    open(path, 'w', encoding='utf-8').write('\n'.join(body))
+        txt = txt.replace('\n\n---\n', '\nstatus: done\n\n---\n', 1)
+    open(path, 'w', encoding='utf-8').write(txt)
     reindex_models()
     return os.path.basename(path)
 
@@ -180,8 +223,9 @@ def reindex_models():
     notes = read_model_notes()
     rows = []
     for key, v in notes.items():
-        first = (v['note'].splitlines() or [''])[0]
-        rows.append((key, first, v['done']))
+        last = (v.get('thread') or [{}])[-1]
+        first = ((last.get('text') or '').splitlines() or [''])[0]
+        rows.append((key, '%s: %s' % (last.get('who', 'you'), first), v['done']))
     rows.sort(key=lambda r: (r[2], r[0]))
     out = ['# The model queue', '',
            'Left on models in the Models tab of tools/bug_dashboard.py. One .md',
@@ -467,7 +511,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {'ok': True, 'ours': sorted(ids)})
             if self.path == '/api/modelnote':
                 f = write_model_note(req.get('key'), req.get('name'), req.get('note') or '',
-                                     req.get('stats') or {}, bool(req.get('done')))
+                                     req.get('stats') or {}, bool(req.get('done')),
+                                     req.get('who') or 'you')
                 print('  model queue: %s' % (f or 'cleared'))
                 return self.send(200, {'ok': True, 'file': f, 'notes': read_model_notes()})
             if self.path == '/api/course':

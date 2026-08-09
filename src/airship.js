@@ -581,9 +581,30 @@ export class Airship {
     // Nothing found it for months because the harness threw hand-built geometry
     // away, and the wires are hand-built. They go to the rim's outer edge now,
     // one to each side, which is where a basket's cords are made fast anyway.
+    // THE RIM IS WHERE THE CORDS ARE MADE FAST, so that is where they end.
+    //
+    // "the front two and back two support wire pairs do not connect to the
+    // basket" -- and measured, they did not: the wires ran to y = -drop and
+    // z = 0.62 x big, while the rim bars they are supposed to be tied to sit at
+    // y = -drop + 0.05 x big and z = (1.14 x big - 0.09) / 2. On the Brazil that
+    // is 5.75 cm below the rim and 10 cm outside it: four cords ending in mid
+    // air beside the basket.
+    //
+    // The two numbers were written independently of the rim and drifted from it.
+    // They are now taken FROM the rim, so a basket that changes size takes its
+    // suspension with it.
+    const BIG = K.type === 'basket-long' ? 1.15 : 1;
+    const RIM_D = 1.14 * BIG, RIM_T = 0.09, RIM_Y = -drop + 0.05 * BIG;
     if (this.keelApexY === undefined) {
-      this.keelApexY = -drop;
-      this.keelLandZ = 0.62 * (K.type === 'basket-long' ? 1.15 : 1);
+      this.keelApexY = RIM_Y;                     // the top of the rim bar
+      this.keelLandZ = (RIM_D - RIM_T) / 2;       // its centreline, fore and aft
+      // ...AND THEY CONVERGE ON IT. The landing points were spread along the
+      // KEEL's length, which is right for a ship that has a keel and absurd for
+      // one that has not: the Brazil's wires spread over 3.5 m on to a basket
+      // 1.54 m wide, so the outer four of the seven ended past the ends of the
+      // bar -- "the front two and back two support wire pairs do not connect to
+      // the basket". A basket's cords gather in. This is how far they gather to.
+      this.keelLandHalfX = (1.34 * BIG - RIM_T) / 2;
     }
     if (K.type === 'saddle') {
       // No. 4: no basket at all — a bicycle saddle amid the spider web
@@ -632,11 +653,11 @@ export class Airship {
       // is hollow inside". Four bars round the edge, and the sky where the sky
       // should be.
       const rimMat = new THREE.MeshLambertMaterial({ color: 0x6f5a3a });
-      const RW = 1.34 * big, RD = 1.14 * big, RT = 0.09;
+      const RW = 1.34 * big, RD = RIM_D, RT = RIM_T;   // RD/RT shared with the suspension
       for (const [w2, d2, x2, z2] of [[RW, RT, 0, (RD - RT) / 2], [RW, RT, 0, -(RD - RT) / 2],
                                       [RT, RD, (RW - RT) / 2, 0], [RT, RD, -(RW - RT) / 2, 0]]) {
         const bar = new THREE.Mesh(new THREE.BoxGeometry(w2, 0.1, d2), rimMat);
-        bar.position.set(bx + x2, -drop + 0.05 * big, z2);
+        bar.position.set(bx + x2, RIM_Y, z2);
         bar.castShadow = true;
         this.pitchGroup.add(bar);
       }
@@ -1345,7 +1366,11 @@ export class Airship {
     }
     for (let i = 0; i < n; i++) {
       const fx = -K.length / 2 + (K.length / (n - 1)) * i;
-      const ex = fx * 0.85;
+      const ex = fx * 0.85;                       // where it leaves the hem
+      // where it lands: along the keel where there is one, gathered on to the
+      // basket rim where there is not
+      const lhx = this.keelLandHalfX;
+      const lx = lhx === undefined ? fx : -lhx + ((2 * lhx) / (n - 1)) * i;
       const h = hemAt(ex);
       for (const sz of [-1, 1]) {
         // the small wooden rod in the hem, and the wire hung from it
@@ -1363,7 +1388,7 @@ export class Airship {
         // ...and on to the member that is actually there: the apex on a truss
         // keel, or the longeron on this wire's OWN side where there is no apex
         wirePts.push(ex, h.y, sz * h.z,
-          fx, this.keelApexY !== undefined ? this.keelApexY : -drop,
+          lx, this.keelApexY !== undefined ? this.keelApexY : -drop,
           sz * (this.keelLandZ || 0));
       }
     }

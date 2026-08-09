@@ -131,6 +131,17 @@
   .tip b { color: var(--hot); }
   .tip.good { border-left-color: #4a6b3a; }
   .tip.good b { color: #8fbf72; }
+  #planBody { flex: 1; display: flex; min-height: 0; }
+  #planWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #blockBar { width: 320px; flex: none; border-left: 1px solid var(--edge); background: #1d1710;
+    display: none; flex-direction: column; }
+  #blockBar.show { display: flex; }
+  #blockBar h3 { margin: 0; padding: 9px 12px 4px; font-size: 14px; color: var(--hot); }
+  #blockCanvas { height: 240px; background: #0d0a07; border-bottom: 1px solid var(--edge);
+    border-top: 1px solid var(--edge); }
+  #blockCanvas canvas { display: block; width: 100%; height: 100%; }
+  #blockFacts { padding: 8px 12px 16px; font-size: 12.5px; color: var(--dim); overflow-y: auto; }
+  #blockFacts b { color: var(--ink); }
   #plan { flex: 1; position: relative; background: #0d0a07; overflow: hidden; cursor: crosshair; }
   #plan canvas { display: block; }
   #planBar { padding: 7px 10px; border-bottom: 1px solid var(--edge); background: var(--panel);
@@ -140,6 +151,14 @@
   .mark { cursor: pointer; border: 1px solid var(--edge); background: #2f2519; color: var(--dim);
     border-radius: 9px; font: inherit; font-size: 11px; padding: 0 7px; }
   .mark.on { background: var(--hot); border-color: var(--hot); color: #241b10; }
+  .thread { margin: 6px 0 10px; }
+  .said { border-left: 3px solid var(--edge); padding: 4px 0 4px 10px; margin: 0 0 8px; }
+  .said.works { border-left-color: #4a6b3a; }
+  .said .who { color: var(--dim); font-size: 11px; letter-spacing: .03em; }
+  .said .who b { color: var(--hot); }
+  .said.works .who b { color: #8fbf72; }
+  .said .txt { color: var(--ink); font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .settled { color: #8fbf72; font-size: 12px; margin: 0 0 8px; }
   kbd { font: 11px ui-monospace, monospace; background: #3a2f22; border: 1px solid var(--edge);
     border-radius: 3px; padding: 0 4px; }
 </style>
@@ -180,8 +199,13 @@
   </div>
   <div id="level">
     <div id="planBar"></div>
-    <div id="plan"></div>
-    <div id="planInfo"></div>
+    <div id="planBody">
+      <div id="planWrap">
+        <div id="plan"></div>
+        <div id="planInfo"></div>
+      </div>
+      <div id="blockBar"></div>
+    </div>
   </div>
   <div id="bar">
     <button data-tool="arrow" class="on">Arrow</button>
@@ -774,21 +798,36 @@ function partsKey(m, parts) {
   const idx = parts.map((x) => m.parts.indexOf(x)).sort((a, b) => a - b);
   // first, last, how many, and a sum -- short enough for a filename and
   // specific enough that two different sets do not land on the same one
-  const sum = idx.reduce((a, b) => (a + b * 31) % 99991, 7);
-  return (modelKey(m) + `--parts-${idx.length}-${idx[0]}-${idx[idx.length - 1]}-${sum}`)
-    .slice(0, 78).toLowerCase();
+  return `${modelKey(m)}--parts-${idx.length}-${shortHash(idx.join(','))}`;
 }
 
 /** A stable name for one PIECE of a model: what it is, and which of them. */
 function partKey(m, part) {
   const i = m.parts.indexOf(part);
-  const what = (part.name || part.o.type || 'part').replace(/[^A-Za-z0-9]+/g, '-');
-  return (modelKey(m) + '--' + what + '-' + i).slice(0, 78).toLowerCase();
+  const what = (part.name || part.o.type || 'part').replace(/[^A-Za-z0-9]+/g, '-').slice(0, 20);
+  return `${modelKey(m)}--${what}-${i}`.toLowerCase();
 }
 
-/** A stable name for a model across runs: what it is made of, and how many. */
-const modelKey = (m) => (($('#whichWorld').value) + '-' + m.copies + 'x-'
-  + m.fingerprint.replace(/[^A-Za-z0-9]+/g, '-')).slice(0, 60).toLowerCase();
+/**
+ * A stable name for a model across runs.
+ *
+ * HASHED, NOT TRUNCATED. This used to be the fingerprint itself cut to sixty
+ * characters -- and every air-ship begins with the same rigging wires, so all
+ * ten of them cut down to the SAME sixty characters and shared one note file.
+ * A note left on the No. 9 appeared on the Brazil, and the `--parts-...` suffix
+ * that says WHICH pieces were meant fell off the end entirely, which is why
+ * "when I select specific pieces and leave a note I don't think it associates
+ * the pieces with the note". It did not: the name it was filed under could not
+ * hold that much.
+ *
+ * A hash is the same length whatever it is given, so nothing is ever cut off.
+ */
+function shortHash(str) {
+  let h = 2166136261 >>> 0;                    // FNV-1a
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(36);
+}
+const modelKey = (m) => `${$('#whichWorld').value}-${m.copies}x-${shortHash(m.fingerprint)}`;
 let pv = null;                      // the preview renderer, made once
 
 async function three() {
@@ -1187,17 +1226,27 @@ function drawNoteBox() {
          &nbsp;<button id="mall" class="mark">note the whole model instead</button>`
       : `the whole model &nbsp;<span style="color:var(--dim)">— click a piece in the picture, or a row
          above, to talk about just that one · <b>ctrl-click</b> to take several</span>`;
+  // THE THREAD, so a model carries its whole history and not merely its latest
+  // complaint. An issue is raised, something is done about it, and the doing is
+  // written under the raising where the next person will find both.
+  const thread = (have.thread || []).map((e) => `
+    <div class="said ${e.who === 'works' ? 'works' : ''}">
+      <div class="who"><b>${esc(e.who === 'works' ? 'the works' : 'you')}</b>${e.when ? ' · ' + esc(e.when) : ''}</div>
+      <div class="txt">${esc(e.text)}</div>
+    </div>`).join('');
   box.innerHTML = `<h2 style="font-size:14px;color:var(--hot);margin:18px 0 4px">What to do about it</h2>
     <p class="note" style="margin:0 0 6px">${about}</p>
+    ${have.done ? '<p class="settled">✓ settled — reopen it by adding to the thread and pressing “not done”.</p>' : ''}
+    <div class="thread">${thread}</div>
     <div style="display:flex;gap:10px;align-items:flex-start">
       <textarea id="mnote" style="flex:1;min-height:74px;resize:vertical;font:inherit;font-size:13px;
         color:var(--ink);background:#17120d;border:1px solid var(--edge);border-radius:4px;padding:6px 8px"
         placeholder="${part ? 'e.g. this bar is what goes through the pilot in the headset — drop it 40 cm'
           : 'e.g. one material and per-instance colour would collect the 1,004 draws — worth it, this is the whole city'}"
-        >${esc(have.note)}</textarea>
+        ></textarea>
       <div style="display:flex;flex-direction:column;gap:6px">
-        <button id="msave" class="go">Add to the queue</button>
-        <button id="mdone" class="${have.done ? 'on' : ''}">${have.done ? 'done' : 'mark done'}</button>
+        <button id="msave" class="go">${have.thread && have.thread.length ? 'Reply' : 'Raise it'}</button>
+        <button id="mdone" class="${have.done ? 'on' : ''}">${have.done ? 'not done' : 'mark settled'}</button>
       </div>
     </div>
     <p class="note" style="color:var(--dim);font-size:12px">Kept in bug-notes/models/, indexed in
@@ -1217,7 +1266,7 @@ function drawNoteBox() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, name, note: $('#mnote').value, done, stats }) })).json();
     modelNotes = res.notes || modelNotes;
-    say(res.file ? 'queued — bug-notes/models/' + res.file : 'taken off the queue');
+    say(res.file ? 'written to bug-notes/models/' + res.file : 'taken off the queue');
     drawModelList();
     drawNoteBox();                 // re-read, or "mark done" is a one-way door
   };
@@ -1448,7 +1497,7 @@ async function showPreview(m) {
 // and a tool that rewrote that file would throw the reasoning away.
 
 const TURN_R = 102;                 // the No. 6 at racing speed; see check_scenarios
-let plan = null, courses = [], course = null, dragging = null;
+let plan = null, courses = [], course = null, dragging = null, bp = null;
 // A TOKEN, because both of these await a world build and a person can change
 // their mind faster than Paris builds. Without it the pending pickCourse from
 // the last choice comes back, sets the world picker to ITS course's location,
@@ -1577,7 +1626,14 @@ function ensurePlan() {
       if (d < 60 && (!best || d < best.d)) best = { i, d, mode: 'move' };
     });
     if (best) { dragging = best; }
-    else dragging = { mode: 'pan', from: w, cx: planView.cx, cz: planView.cz };
+    else {
+      // NOT A GATE: it may be a building. Hit-tested in the building's own frame
+      // -- the fair is a fan and the blocks are turned, so a click has to be
+      // rotated back before it can be compared against the box.
+      const hit = blockAt(w.x, w.z);
+      if (hit) { showBlock(hit); dragging = null; return; }
+      dragging = { mode: 'pan', from: w, cx: planView.cx, cz: planView.cz };
+    }
     cv.setPointerCapture(e.pointerId);
     drawPlan();
   });
@@ -1701,7 +1757,11 @@ function makeMap(v, W, H) {
   const built = world.buildings || [];
   let tallest = 1;
   for (const b of built) tallest = Math.max(tallest, b.h || b.top || 1);
-  for (const b of built) {
+  // ...and drawn largest first, so a kiosk is painted ON a palace rather than
+  // under it. The click test picks the smallest that fits; the drawing has to
+  // agree with it or the two would disagree about what you are pointing at.
+  const order = [...built].sort((p1, p2) => ((p2.w || 8) * (p2.d || 8)) - ((p1.w || 8) * (p1.d || 8)));
+  for (const b of order) {
     const px = (b.x - v.cx) * v.k + W / 2, py = (b.z - v.cz) * v.k + H / 2;
     const bw = Math.max(1.5, (b.w || 10) * v.k), bd = Math.max(1.5, (b.d || 10) * v.k);
     const reach = Math.max(bw, bd);
@@ -1813,6 +1873,169 @@ function drawPlan() {
     ctx.fillText(String(i), P.px + rr + 4, P.py - 4);
   });
   writePlanInfo();
+}
+
+/** Which building, if any, is under that point of the ground. */
+function blockAt(x, z) {
+  const world = builtWorld && builtWorld.world;
+  // SMALLEST FIRST. A palace four hundred metres long covers a dozen kiosks, and
+  // taking the first box that contains the point meant the big one always won and
+  // the small ones could never be clicked at all. The tightest fit is the one the
+  // pointer meant.
+  const all = [...((world && world.buildings) || [])]
+    .sort((p1, p2) => ((p1.w || 8) * (p1.d || 8)) - ((p2.w || 8) * (p2.d || 8)));
+  for (const b of all) {
+    let dx = x - b.x, dz = z - b.z;
+    if (b.ry) {                       // back into the building's own frame
+      const c = Math.cos(b.ry), s2 = Math.sin(b.ry);
+      const rx = dx * c - dz * s2, rz = dx * s2 + dz * c;
+      dx = rx; dz = rz;
+    }
+    if (Math.abs(dx) <= (b.w || 8) / 2 && Math.abs(dz) <= (b.d || 8) / 2) return b;
+  }
+  return null;
+}
+
+/**
+ * The model standing on that spot, in a panel beside the plan.
+ *
+ * The collider list says a box is HERE and this big; it does not say what it is.
+ * So the nearest top-level object of the scene whose own box contains the
+ * collider's middle is taken to be the thing itself -- which is the same
+ * assumption the game makes when it collides with it.
+ *
+ * A CLONE is rendered, not the object. The Models tab borrows real objects out
+ * of the world and puts them back, and two panels borrowing the same thing at
+ * once would leave the world with a hole in it.
+ */
+async function showBlock(b) {
+  const bar = $('#blockBar');
+  bar.classList.add('show');
+  const T = await three();
+  const world = builtWorld && builtWorld.world;
+  const scene = builtWorld && builtWorld.scene;
+  let found = null, bestD = Infinity;
+  const box = new T.Box3(), mid = new T.Vector3(b.x, 0, b.z);
+  for (const o of (scene && scene.children) || []) {
+    if (!o.isObject3D || o.isLight) continue;
+    box.setFromObject(o);
+    if (!isFinite(box.min.x) || box.isEmpty()) continue;
+    const inside = b.x >= box.min.x && b.x <= box.max.x && b.z >= box.min.z && b.z <= box.max.z;
+    if (!inside) continue;
+    const c = box.getCenter(new T.Vector3());
+    const d = Math.hypot(c.x - b.x, c.z - b.z) + (box.max.x - box.min.x) + (box.max.z - box.min.z);
+    if (d < bestD) { bestD = d; found = o; }
+  }
+  // the nearest named landmark, purely to say WHERE this is
+  let near = '';
+  for (const L of (world && world.landmarks) || []) {
+    const d = Math.hypot(L.x - b.x, L.z - b.z);
+    if (d < 400) { near = L.name; break; }
+  }
+  let meshes = 0, tris = 0;
+  if (found) {
+    found.traverse((o) => {
+      if (!o.isMesh && !o.isInstancedMesh) return;
+      meshes++;
+      const a = o.geometry && o.geometry.attributes && o.geometry.attributes.position;
+      if (a) tris += ((o.geometry.index ? o.geometry.index.count : a.count) / 3)
+        * (o.isInstancedMesh ? (o.count || 1) : 1);
+    });
+  }
+  bar.innerHTML = `<h3>${esc((found && found.name) || 'a building')}</h3>
+    <div id="blockCanvas"></div>
+    <div id="blockFacts">
+      <div><b>${Math.round(b.w)} × ${Math.round(b.d)} m</b>, ${Math.round(b.h || b.top || 0)} m tall
+        ${b.ry ? ' · turned ' + Math.round((b.ry * 180) / Math.PI) + '°' : ''}</div>
+      <div>at <b>${Math.round(b.x)}, ${Math.round(b.z)}</b>${near ? ' · by ' + esc(near) : ''}</div>
+      <div style="margin-top:6px"><b>${meshes}</b> draw${meshes === 1 ? '' : 's'} ·
+        <b>${Math.round(tris).toLocaleString()}</b> triangles</div>
+      ${found ? '' : '<div style="margin-top:6px;color:#e88a7d">No single object stands here — '
+        + 'this collider belongs to something larger, or to the terrain.</div>'}
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="mark" id="blockOpen">open in Models</button>
+        <button class="mark" id="blockClose">close</button>
+      </div>
+      <textarea id="blockNote" style="width:100%;margin-top:8px;min-height:62px;resize:vertical;
+        font:inherit;font-size:12.5px;color:var(--ink);background:#17120d;border:1px solid var(--edge);
+        border-radius:4px;padding:6px 8px" placeholder="something wrong with this one? it goes on the same queue"></textarea>
+      <button class="mark" id="blockQueue" style="margin-top:6px">add it to the queue</button>
+    </div>`;
+  $('#blockClose').onclick = () => bar.classList.remove('show');
+
+  // ---- THE SAME MODEL, AND THE SAME QUEUE ----
+  //
+  // Seeing a thing on the plan and wanting to say something about it is the same
+  // impulse as seeing it in the Models tab, so it reaches the same place: the
+  // note goes on the model's own thread, and "open in Models" takes you to the
+  // fuller view of it rather than making you hunt down a list of forty-eight.
+  $('#blockOpen').onclick = async () => {
+    if (!found) return say('nothing here to open');
+    showTab('models');
+    for (let i = 0; i < 120 && !models.length; i++) await new Promise((r) => setTimeout(r, 250));
+    const want = models.findIndex((m) => (m.all || [m]).some((x) => x.root === found));
+    if (want >= 0) pickModel(want);
+    else say('it is part of something larger — not a model of its own');
+  };
+  $('#blockQueue').onclick = async () => {
+    const note = $('#blockNote').value.trim();
+    if (!note) return say('write something first');
+    // keyed by the model where there is one, so the plan and the Models tab
+    // write to the SAME thread rather than two that never meet
+    const one = found && models.find((m) => (m.all || [m]).some((x) => x.root === found));
+    const key = one ? modelKey(one)
+      : `${$('#whichWorld').value}-block-${Math.round(b.x)}-${Math.round(b.z)}`;
+    const res = await (await fetch('/api/modelnote', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, who: 'you', name: (found && found.name) || `a building at ${Math.round(b.x)}, ${Math.round(b.z)}`,
+        note, stats: { place: $('#whichWorld').value, at: `${Math.round(b.x)}, ${Math.round(b.z)}`,
+          size: `${Math.round(b.w)} x ${Math.round(b.d)} x ${Math.round(b.h || 0)} m`,
+          drawsEach: meshes, triangles: Math.round(tris) } }) })).json();
+    modelNotes = res.notes || modelNotes;
+    $('#blockNote').value = '';
+    say(res.file ? 'queued — bug-notes/models/' + res.file : 'nothing written');
+  };
+  if (found) previewClone(found, $('#blockCanvas'));
+}
+
+/** A small turning view of a copy of something. Its own renderer, its own clone. */
+async function previewClone(obj, host) {
+  const T = await three();
+  if (!bp) {
+    const renderer = new T.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const scene = new T.Scene();
+    scene.background = new T.Color(0x0d0a07);
+    scene.add(new T.HemisphereLight(0xffe9c4, 0x30302a, 2.2));
+    const key = new T.DirectionalLight(0xfff0d0, 1.3); key.position.set(3, 6, 2); scene.add(key);
+    const camera = new T.PerspectiveCamera(45, 1, 0.1, 40000);
+    const holder = new T.Group(); scene.add(holder);
+    bp = { renderer, scene, camera, holder, t: 0, r: 1 };
+    const tick = () => {
+      const h = bp.host;
+      if (h && h.clientWidth) {
+        renderer.setSize(h.clientWidth, h.clientHeight, false);
+        camera.aspect = h.clientWidth / h.clientHeight; camera.updateProjectionMatrix();
+        bp.t += 0.005;
+        const d = bp.r * 2.4;
+        camera.position.set(Math.cos(bp.t) * d, bp.r * 1.3, Math.sin(bp.t) * d);
+        camera.lookAt(0, 0, 0);
+        renderer.render(scene, camera);
+      }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  bp.host = host;
+  host.innerHTML = '';
+  host.appendChild(bp.renderer.domElement);
+  bp.holder.clear();
+  const c = obj.clone(true);
+  const bb = new T.Box3().setFromObject(c);
+  const mid = bb.getCenter(new T.Vector3()), sz = bb.getSize(new T.Vector3());
+  c.position.sub(mid);
+  bp.holder.add(c);
+  bp.r = Math.max(1, sz.length() / 2);
 }
 
 const corner = (a, b, c) => {
