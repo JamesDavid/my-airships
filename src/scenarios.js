@@ -1,7 +1,7 @@
 import { placeLegacy } from './paris_geo.js';
 import { ROTHSCHILD } from './paris_stcloud.js';
 import { inRiver } from './paris_terrain.js';
-import { PAD_POS, NEUILLY_OUT, NEUILLY_TENT, NEUILLY_LONG } from './world.js';
+import { PAD_POS, NEUILLY_OUT, NEUILLY_TENT, NEUILLY_LONG, mulberry32 } from './world.js';
 // The campaign: historical scenarios from the memoir, and the AI rival ships.
 // Each scenario gets a ctx from main.js: { ship, world, addMsg, setCenter,
 // setZone, clearZone, complete, fail, startRace, place }.
@@ -769,6 +769,49 @@ export const SCENARIOS = [
       }
       if (ctx.ship.landed && d >= ctx.zoneR()) {
         return ctx.fail('Down somewhere in the Bois, safely enough — but the polo ground is still waiting, and so is he, pedalling.');
+      }
+    },
+  },
+  {
+    id: 'no6-submarines',
+    title: 'X. The Enemy of the Submarine (the last chapter)',
+    sub: 'No. 6 — five boats under the bay of Monaco, found from the end of the guide rope',
+    location: 'monaco', shipId: 'no6',
+    brief: '“Any submarine boat, stealthily pursuing its course underneath them, will be beautifully visible to him, while from a warship’s deck it would be quite invisible… This is a well-observed fact, and depends on certain optical laws.” The one thing in this book that had not happened yet. Five boats are under the bay. Quarter it LOW — from a height you see only the sky in the water — and when you catch one, hold her while she is signalled.',
+    setup(ctx) {
+      if (this.fleet) this.fleet.dispose();          // a second run, not a second fleet
+      // Not the daily seed: this is a solo scenario and flying the same five
+      // legs all day would be learning the answer rather than the skill.
+      this.fleet = ctx.world.makeSubmarines(mulberry32((Math.random() * 4294967296) >>> 0), 5);
+      this.said = {};
+      const S = ctx.world.startRing;
+      ctx.place(S.x, 70, S.z, Math.atan2(-(ctx.world.turnRing.z - S.z), ctx.world.turnRing.x - S.x));
+      ctx.clearZone();
+      ctx.setCenter('The bay of Monaco — the twentieth century',
+        'Five boats, under way, somewhere in the bay. Fly LOW and look straight down — '
+        + 'at a flat angle the sea is only a mirror. Press C for “Over the side” to lean out and '
+        + 'watch the water. Hold within ninety metres for four seconds to signal one.');
+    },
+    tick(ctx, dt) {
+      const f = this.fleet;
+      if (!f) return;
+      const news = f.tick(dt, ctx.ship.pos, 0);
+      if (news.sighted && !this.said.first) {
+        this.said.first = 1;
+        ctx.addMsg('sub-1', 'Something under the swell — hold her there. “Follow all its movements, and signal them.”', 6);
+      }
+      if (news.signalled) {
+        const n = f.found();
+        ctx.addMsg('sub-' + n, n < f.total
+          ? `Boat ${news.signalled.name} signalled — ${n} of ${f.total}. Away and find the rest.`
+          : 'The last of them.', 6);
+      }
+      if (ctx.ship.wrecked) {
+        return ctx.fail('Into the bay of Monaco, which is where this ship goes when she is flown carelessly. The boats pass on, unreported.');
+      }
+      if (f.found() >= f.total && !this.said.done) {
+        this.said.done = 1;
+        return ctx.complete('All five reported, and not one of them ever knew. “The twentieth century air-ship must become from the beginning the great enemy of that other twentieth century marvel — the submarine boat — and not only its enemy but its master.” He wrote that in 1904. It took the Royal Navy until 1915 to agree with him.');
       }
     },
   },

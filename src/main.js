@@ -15,9 +15,20 @@ import { SCENARIOS, Rival } from './scenarios.js';
 import * as vr from './vr.js';
 import { gateOffset, TRACKS, trackSpawn, GHOST_DT, gateHeadings, encodeGhost, decodeGhost, loadCustomTracks, saveCustomTrack } from './tracks.js';
 import * as net from './net.js';
+
+// The frame meter's state lives HERE, at the very top, and not beside the rest
+// of the meter far down the file, because the Options menu draws a button out
+// of meter.on — and the menu is built during boot, a few hundred lines below,
+// while a `const` declared at line 3900 is still in its temporal dead zone.
+// It threw "Cannot access 'meter' before initialization", which the boot guard
+// reported as "some of the works did not start: the menu", and it cost the
+// whole Options panel — headset resolution, frame meter and camera with it.
+// A `const` is only hoisted as far as its dead zone; put it above every use.
+const meter = { on: false, fps: 0, calls: 0, tris: 0, _n: 0, _t: 0, _acc: 0 };
+
 import * as live from './live.js';
 import { courseLength, shipTopSpeed } from './anticheat.js';
-import { GAMES, gameById, pickPlaces, hiddenPlace, warmth, KID_WIND, TAG_GRACE, FOLLOW_RANGE } from './games.js';
+import { GAMES, gameById, pickPlaces, hiddenPlace, warmth, roundRng, KID_WIND, TAG_GRACE, FOLLOW_RANGE } from './games.js';
 
 // ---------------------------------------------------------------- the drawer
 // iOS Safari in private browsing has a localStorage that THROWS on write, and
@@ -929,14 +940,15 @@ function pollInput() {
   }
 }
 
-function cycleCamera() { cycleCameraTo((camMode + 1) % 4); }
+function cycleCamera() { cycleCameraTo((camMode + 1) % CAM_NAMES.length); }
 
 function cycleCameraTo(m) {
   camMode = m;
   // in a headset the near plane belongs to vr.js, which sets it to let the
   // instruments in at arm's length; leave it alone
   if (!vr.inVR()) {
-    camera.near = camMode === 1 ? (ship.eyeNear || 0.1) : 0.5;  // FP: instruments are inches from the eye
+    // both aboard views have the ship's own woodwork inches from the eye
+    camera.near = (camMode === 1 || camMode === 2) ? (ship.eyeNear || 0.1) : 0.5;
     camera.updateProjectionMatrix();
   }
   addMsg('cam', 'Camera: ' + CAM_NAMES[camMode], 0);
@@ -1405,7 +1417,10 @@ function buildTogether() {
       ? `<b>Playing ${escapeHtml((gameById(play.id) || {}).name || play.id)}</b> — half the day’s wind`
       : '<b>Games</b> — gentler than a trial, and nobody is knocked out';
     div.appendChild(gh);
-    for (const g of GAMES) {
+    // A game may belong to one place — the submarine hunt is the bay of Monaco
+    // and nowhere else — and offering it over Paris would put a button in the
+    // menu that cannot do anything when it is pressed.
+    for (const g of GAMES.filter((g) => !g.place || g.place === currentLocation)) {
       const few = live.roster().filter((r) => !r.spectating).length < g.minPilots;
       menuButton(div, g.name, few ? `${g.sub} · wants ${g.minPilots} pilots` : g.sub, () => {
         if (few) { addMsg('game', `${g.name} wants at least ${g.minPilots} aboard.`, 5); return; }
@@ -1583,6 +1598,7 @@ const play = {
   lastTag: 0,                  // the no-tag-backs grace
   ping: 0, pause: 0,           // hot-and-cold: the next bell, and the pause after a find
   kept: 0, lost: 0,            // follow: seconds with the leader and without
+  fleet: null,                 // the submarine hunt: the boats under the bay
   said: '',                    // the line under the instruments
 };
 
@@ -1611,6 +1627,7 @@ function makeGem(p) {
 function startGame(id, round) {
   if (id) flightBegin('game', id);
   clearGems();
+  if (play.fleet) { play.fleet.dispose(); play.fleet = null; }
   play.id = id; play.round = round || 1;
   play.got = new Set(); play.ping = 0; play.pause = 0; play.kept = 0; play.lost = 0;
   play.itTimes = new Map(); play.lastTag = 0; play.said = '';
@@ -1624,6 +1641,13 @@ function startGame(id, round) {
     play.places = [hiddenPlace(world, code, play.round)].filter(Boolean);
     setCenter('Hot and cold', 'Something is hidden over one of the places. '
       + 'The bell rings faster as you get warmer — there is nothing to read.');
+  } else if (id === 'submarines') {
+    play.places = [];
+    // seeded from the day and the room code, like every other game here, so the
+    // whole room hunts the same five boats without a word going over the wire
+    play.fleet = world.makeSubmarines ? world.makeSubmarines(roundRng(code, play.round), 5) : null;
+    setCenter('The submarine hunt', 'Five boats are under the bay. Fly LOW and look straight '
+      + 'down — at a flat angle the sea is only a mirror. Hold over one for four seconds.');
   } else if (id === 'tag') {
     play.places = [];
     setCenter('Tag', 'Fly into another ship to pass it on. Silk on silk: nobody is hurt.');
@@ -1639,6 +1663,7 @@ function stopGame(quiet) {
   flightEnd('stopped', play.id === 'postcards'
     ? { found: play.got.size, of: play.places.length } : null);
   clearGems();
+  if (play.fleet) { play.fleet.dispose(); play.fleet = null; }
   play.id = null; play.places = []; play.got = new Set(); play.said = '';
   if (!quiet) setCenter('', '');
   buildMenuButtons();
@@ -1753,6 +1778,7 @@ function tickGames(dt) {
   }
   if (play.id === 'postcards') return tickHunt(dt);
   if (play.id === 'hotcold') return tickHotCold(dt);
+  if (play.id === 'submarines') return tickSubs(dt);
   if (play.id === 'tag') return tickTag(dt);
   if (play.id === 'follow') return tickFollow(dt);
 }
@@ -1776,6 +1802,30 @@ function tickHunt() {
     }
   }
   play.said = `Gems: ${play.got.size} of ${play.places.length}`;
+}
+
+/**
+ * The submarine hunt. The fleet does the optics and the station-keeping; this
+ * only reports what it says has happened.
+ */
+function tickSubs(dt) {
+  const f = play.fleet;
+  if (!f) return;
+  const news = f.tick(dt, ship.pos, 0);
+  if (news.signalled) {
+    blip(660); setTimeout(() => blip(920), 130);
+    addMsg('sub', `Boat ${news.signalled.name} signalled — ${f.found()} of ${f.total}.`, 6);
+    if (live.inRoom()) live.callClaim('sub-' + news.signalled.name, { name: 'a submarine boat' });
+    if (f.found() >= f.total) {
+      setCenter('Every one of them', 'The whole flotilla reported, and not one of them ever knew.');
+      blip(1320);
+    }
+  }
+  // the slate carries the count, and how far through holding one you are —
+  // without it a pilot cannot tell "nearly" from "not at all"
+  const h = f.holding();
+  play.said = `Boats: ${f.found()} of ${f.total}`
+    + (h ? ` · holding ${h.sub.name} ${Math.round(h.part * 100)}%` : '');
 }
 
 function tickHotCold(dt) {
@@ -3371,7 +3421,7 @@ function blip(freq) {
 }
 
 // ---------------------------------------------------------------- camera
-const CAM_NAMES = ['Chase', 'Aboard — the basket', 'Postcard', 'From the Tower'];
+const CAM_NAMES = ['Chase', 'Aboard — the basket', 'Over the side', 'Postcard', 'From the Tower'];
 const camPos = new THREE.Vector3(-1050, 40, 120);
 let bobT = 0;
 function updateCamera(dt) {
@@ -3419,6 +3469,40 @@ function updateCamera(dt) {
     if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
     snap = true;
   } else if (camMode === 2) {
+    // ---- OVER THE SIDE ----
+    //
+    // "Cruising at the end of its guide rope, the air-ship will carry its
+    // navigator here and there at will at the right height above the waves.
+    // Any submarine boat... will be beautifully visible to him."
+    //
+    // He is looking DOWN, over the rail, and until this there was no way to do
+    // that on a flat screen: aboard, the basket's own rail and instruments fill
+    // the bottom of the frame, and every other view looks level or at the ship.
+    // In a headset you simply lean out. This is leaning out.
+    //
+    // The eye goes to the rail and outboard of it, so the woodwork is behind
+    // you rather than under your chin, and it looks down at the water sixty
+    // metres out at fifty degrees — steep enough to see INTO the sea rather
+    // than the sky reflected off it, which is the whole of the optics in
+    // submarines.js. Useful well beyond the hunt: it is also how you watch a
+    // guide rope, and how you judge a landing.
+    const lat0 = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    desired = new THREE.Vector3();
+    (view.eyePoint || view.basketMesh).getWorldPosition(desired);
+    desired.addScaledVector(lat0, 1.5).addScaledVector(fwd, 0.3);
+    desired.y += 0.35;
+    const DOWN = (50 * Math.PI) / 180;
+    look = desired.clone()
+      .addScaledVector(fwd, Math.cos(DOWN) * 60)
+      .add(new THREE.Vector3(0, -Math.sin(DOWN) * 60, 0));
+    if (orbitYaw || orbitPitch) {
+      const rel = look.clone().sub(desired).applyAxisAngle(new THREE.Vector3(0, 1, 0), orbitYaw);
+      rel.y += orbitPitch * 60;
+      look = desired.clone().add(rel);
+    }
+    if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
+    snap = true;
+  } else if (camMode === 3) {
     // postcard: drag to pan and tilt around the ship; glides back to the
     // classic side framing when released
     const lat = new THREE.Vector3(-fwd.z, 0, fwd.x);
@@ -3437,7 +3521,7 @@ function updateCamera(dt) {
   camPos.lerp(desired, snap ? 1 : k);
   // keep the lens out of the turf BEFORE aiming it, or the framing is computed
   // from a position the camera does not end up at
-  if (camMode !== 1 && camPos.y < 2) camPos.y = 2;
+  if (camMode !== 1 && camMode !== 2 && camPos.y < 2) camPos.y = 2;
   camera.position.copy(camPos);
   camera.lookAt(look);
 }
@@ -3599,7 +3683,7 @@ window.__game = { get ship() { return ship; }, get camMode() { return camMode; }
   get track() { return track; }, get ghostBest() { return ghostBest; }, get ghostRec() { return ghostRec; },
   get scene() { return scene; }, get composer() { return composer; },   // force a frame when rAF is asleep
   updateCamera, pollInput, drawThrottleLever, checkCollisions, hullPoints, updateHUD,
-  setCamMode(m) { camMode = m; camera.near = m === 1 ? (ship.eyeNear || 0.1) : 0.5; camera.updateProjectionMatrix(); },
+  setCamMode(m) { camMode = m; camera.near = (m === 1 || m === 2) ? (ship.eyeNear || 0.1) : 0.5; camera.updateProjectionMatrix(); },
   startScenario, startTrack, loadWorld, SCENARIOS, TRACKS, camera, camPos, input, keys, race, wind };
 
 let hudTick = 0;
@@ -3616,7 +3700,23 @@ function frame(now) {
     // dead and the board could not be worked. The controllers are read here
     // whatever else is stopped.
     if (vr.inVR()) vr.pollVR(ship);
-    updateCamera(dt); draw(); readMeter(dt * 1000);
+    updateCamera(dt);
+    // ...AND THE SKY FOLLOWS THE CAMERA HERE TOO.
+    //
+    // It was re-centred only in the flying half of the frame, below the return,
+    // while draw() is called in BOTH. So every frame with a panel open drew a
+    // sky still standing where it was last left — and the sky is a box of
+    // 10,000 with the camera's far plane at 12,000, so once you are more than
+    // about two kilometres from it its far wall falls outside the frustum and
+    // is clipped to BLACK. Measured from a filed fault: the camera 5,644 m from
+    // the sky, its farthest corner 14,304 m off against a far plane of 12,000.
+    //
+    // That is "the sky is black unless im near the eiffel tower" over again —
+    // the Tower is the world origin, which is where the sky was left — and it
+    // is the same fault the note above makePhysicalSky warns about. It has to
+    // happen on every frame that draws, so it happens beside draw().
+    skyFollows();
+    draw(); readMeter(dt * 1000);
     if (bugWanted) takeVRFault();   // or a fault filed over an open board never goes
     return;
   }
@@ -3748,8 +3848,7 @@ function frame(now) {
   world.tick?.(dt, windGustT, wind, ship && ship.pos);
   clockTheMovers(dt);
 
-  // the sky box re-centers on the camera (or its walls show as black past 2 km)
-  if (world.sky) world.sky.position.copy(camera.position);
+  skyFollows();
 
   // sun shadow frustum follows the ship; water shimmers
   if (world.sun) {
@@ -3894,7 +3993,7 @@ function stillWater(on) {
 // the aerodrome this world draws 966 meshes, against a Quest's budget of about
 // two hundred, which says the answer is draw calls and not resolution before
 // any A/B is run at all.
-const meter = { on: false, fps: 0, calls: 0, tris: 0, _n: 0, _t: 0, _acc: 0 };
+// (the object itself is hoisted to the top of the module — see there for why)
 function readMeter(dtMs) {
   if (!meter.on) return;
   meter._n++; meter._acc += dtMs;
@@ -3910,6 +4009,17 @@ function meterLine() {
   if (!meter.on) return null;
   return `${meter.fps} fps · ${meter.calls} draws · `
     + `${(meter.tris / 1000).toFixed(0)}k tris · fb ${vr.framebufferScale().toFixed(2)}`;
+}
+
+/**
+ * The sky box stands on the camera, always.
+ *
+ * Sky renders on a box of 10,000 and the far plane is 12,000, so it only fits
+ * the frustum while the camera is near its middle. Left behind, its far wall
+ * clips and the horizon goes black.
+ */
+function skyFollows() {
+  if (world && world.sky) world.sky.position.copy(camera.position);
 }
 
 function draw() {

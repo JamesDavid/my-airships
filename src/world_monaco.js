@@ -18,6 +18,7 @@ import { makeClouds, mulberry32, makePhysicalSky, makeShadowSun, makeWaterSurfac
 import { STREETS_MC } from './monaco_streets.js';
 import { footprint as mcFootprint } from './monaco_footprints.js';
 import { HF, place, groundAt, groundRaw, isSea, slopeAt } from './monaco_geo.js';
+import { makeSubmarineFleet } from './submarines.js';
 import { inSiteMC } from './monaco_plan.js';
 
 /** A named place as a point on the actual ground. */
@@ -654,6 +655,26 @@ export function buildWorldMonaco(scene) {
       out: 'Down the coast to Cap Martin — into the teeth of the breeze. Guide-rope low over the waves.',
       back: 'Home to the bay of Monaco — the wind behind you now.',
       turnMsg: 'Round Cap Martin! “The air-ship swung round like a boat” — now home on the wind, like an eagle.',
+    },
+    /**
+     * Boats under the bay, for whoever wants to hunt them.
+     *
+     * NOT built into the world the way the escort is, and that is deliberate.
+     * There were no submarines in the bay of Monaco in February 1902 — the
+     * passage this comes from is the book's LAST chapter, about what the
+     * air-ship was going to be for, and it is a prophecy, not a memory. So the
+     * bay is clean unless something asks for them, and the thing that asks
+     * says in its own brief that it is looking forward.
+     *
+     * `rng` is passed in rather than made here so a whole room hunts the same
+     * five boats from the same day-and-code seed, exactly as the postcard hunt
+     * agrees on its places without sending anything over the wire.
+     */
+    makeSubmarines(rng, n = 5) {
+      const pad = 260;
+      const box = { x0: Math.min(START.x, TURN.x) - pad, x1: Math.max(START.x, TURN.x) + pad,
+                    z0: Math.min(START.z, TURN.z) - pad, z1: Math.max(START.z, TURN.z) + pad };
+      return makeSubmarineFleet(scene, (x, z) => isSea(x, z), box, rng, n);
     },
     // the ground IS the map now: anything at or under the waterline is sea,
     // except the planks of the landing-stage

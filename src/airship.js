@@ -2123,12 +2123,39 @@ export class Airship {
       const gl = this.vel.x * latFlat.x + this.vel.z * latFlat.z;
       vane += ROPE_VANE * this.groundedFrac * (gl / hull);
     }
-    this.sideslip = vane;
-    const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55) + vane;
-    // she leans into it over about three seconds — a hull this size does not
-    // change its mind quickly, and neither does the air around it
-    this.yawVel += (want - this.yawVel) * Math.min(1, dt / 3);
-    this.yaw += this.yawVel * dt;
+    if (P.freeYaw) {
+      // ---- A FREE BALLOON KEEPS WHATEVER HEADING YOU GIVE HER ----
+      //
+      // The "Brazil" has no motor, no rudder and no tail, and — the part that
+      // matters — no airspeed: she goes with the wind, so there is no airflow
+      // over her to weathercock into and nothing to pull her back. A basket
+      // turned is a basket turned. Aeronauts turn theirs by hand, hauling on
+      // the ropes of the net, for no better reason than wanting to look the
+      // other way, and it stays turned.
+      //
+      // So the vane above is not merely small here, it is WRONG: with the guide
+      // rope down it was swinging her head to wind and snapping the view back
+      // round every time the pilot tried to look somewhere. She is the one ship
+      // in the shed where the helm is a way of pointing your eyes, and it must
+      // hold. (Left alone she would also wander a few degrees a minute off the
+      // torsion in the net and the shear across her height. Not modelled: a
+      // view that creeps while you are looking through it is a fault report,
+      // and the small truth is not worth the large annoyance.)
+      this.sideslip = 0;
+      const wantFree = input.rudder * P.freeYaw;
+      // A fifth of a second either way. Longer and letting go of the helm
+      // coasts ten degrees past where you were aiming, which in a headset is
+      // the difference between looking at a thing and looking near it.
+      this.yawVel += (wantFree - this.yawVel) * Math.min(1, dt / 0.2);
+      this.yaw += this.yawVel * dt;
+    } else {
+      this.sideslip = vane;
+      const want = input.rudder * P.yawRate * (flow / hull) * (1 - this.fold * 0.55) + vane;
+      // she leans into it over about three seconds — a hull this size does not
+      // change its mind quickly, and neither does the air around it
+      this.yawVel += (want - this.yawVel) * Math.min(1, dt / 3);
+      this.yaw += this.yawVel * dt;
+    }
 
     // broadphase: buildings near the ship, for the rope's rooftop draping and
     // for the floor. It used to run AFTER the ground contact below, which is

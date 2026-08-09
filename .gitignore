@@ -22,3 +22,11 @@ tools/.cache/
 # wrong reason. It has to travel with the checks that depend on it.
 node_modules/*
 !node_modules/three/
+
+# What the works wrote on those screenshots, with the marked pictures.
+# Same reason as the line above: they are pictures of pilots' screens.
+bug-notes/
+
+# Python bytecode from the tools
+__pycache__/
+*.pyc

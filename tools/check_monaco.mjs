@@ -284,6 +284,100 @@ console.log('');
   }
 }
 
+// ------------------------------------------------ the boats under the bay
+//
+// "Any submarine boat, stealthily pursuing its course underneath them, will be
+// beautifully visible to him, while from a warship's deck it would be quite
+// invisible. This is a well-observed fact, and depends on certain optical
+// laws." The whole hunt stands on that sentence being TRUE in the game and not
+// merely quoted in the brief, so it is measured: from the air, plain; from a
+// deck, nothing; and the band you must fly in is the one the book describes.
+console.log('');
+console.log('THE SUBMARINE HUNT');
+{
+  const S = await import('../src/submarines.js');
+  const { mulberry32 } = await import('../src/world.js');
+  const fleet = world.makeSubmarines(mulberry32(20250809), 5);
+
+  if (fleet.total < 5) {
+    console.log('   FAIL only %d of 5 boats found a lane to patrol in the bay', fleet.total);
+    fails++;
+  } else {
+    console.log('   ok   five boats, five patrol legs');
+  }
+
+  // Every leg must be water END TO END. A leg laid across the Rock would have
+  // a boat swimming through the Prince's palace, and the walk that lays them
+  // steps 20 m at a time, which is wide enough to stride over a jetty.
+  let dry = 0;
+  for (const sub of fleet.subs) {
+    const L = sub.leg, n = Math.ceil(L.len / 8);
+    for (let i = 0; i <= n; i++) {
+      const f = i / n;
+      if (!world.isWater(L.ax + (L.bx - L.ax) * f, L.az + (L.bz - L.az) * f)) dry++;
+    }
+  }
+  if (dry) { console.log('   FAIL a patrol leg crosses dry land at %d places', dry); fails++; }
+  else console.log('   ok   every leg is open water from end to end');
+
+  // ...and they are boats, not arithmetic errors. Same rule as the escort above.
+  let quick = 0;
+  for (const sub of fleet.subs) {
+    const kmh = sub.mps * 3.6;
+    if (kmh > 20) { console.log('   FAIL a boat makes %s km/h', kmh.toFixed(0)); quick++; }
+  }
+  if (quick) fails++; else console.log('   ok   none of them makes more than twenty km/h');
+
+  // THE OPTICS. Three claims, each from the passage.
+  const deck = S.legibility(12, 900, 7);            // a warship's eye, 900 m off
+  const air = S.legibility(120, 60, 7);             // the air-ship, low, nearly over
+  if (!(deck < 0.02)) {
+    console.log('   FAIL from a deck at 900 m she reads %s — the book says invisible', deck.toFixed(3));
+    fails++;
+  } else if (!(air > 8 * Math.max(deck, 1e-4))) {
+    console.log('   FAIL the air-ship sees no better than the deck does');
+    fails++;
+  } else {
+    console.log('   ok   beautifully visible from the air (%s), invisible from a deck (%s)',
+      air.toFixed(2), deck.toFixed(3));
+  }
+
+  // "at the right height above the waves" — there is a BAND, and it is low.
+  // Measured as the half-width of the strip of water she reads in at all.
+  const swath = (alt) => {
+    let edge = 0;
+    for (let f = 0; f < 2500; f += 2) if (S.legibility(alt, f, 7) >= S.SEEN) edge = f;
+    return edge;
+  };
+  const low = swath(120), high = swath(500), deckSwath = swath(12);
+  if (!(low > high && low > deckSwath)) {
+    console.log('   FAIL no band: 12 m -> %d m, 120 m -> %d m, 500 m -> %d m', deckSwath, low, high);
+    fails++;
+  } else {
+    console.log('   ok   the band is low: %d m of water at 12 m up, %d m at 120 m, %d m at 500 m',
+      deckSwath, low, high);
+  }
+
+  // And she can actually be signalled — flown, not argued about. A pilot who
+  // holds station over one for the four seconds gets her; one who sits at 500 m
+  // over the same water never sees a thing.
+  const sub0 = fleet.subs[0];
+  fleet.tick(0.001, null);                          // put them on their legs
+  const holdOver = (alt) => {
+    for (const s of fleet.subs) { s.held = 0; s.signalled = false; }
+    for (let i = 0; i < 400; i++) {
+      fleet.tick(1 / 30, { x: sub0.x, y: alt, z: sub0.z });
+    }
+    return sub0.signalled;
+  };
+  const got = holdOver(120), missed = holdOver(520);
+  if (!got) { console.log('   FAIL holding station at 120 m never signals her'); fails++; }
+  else if (missed) { console.log('   FAIL she can be signalled from 520 m, where she is not visible'); fails++; }
+  else console.log('   ok   held at 120 m she is signalled; from 520 m she never is');
+
+  fleet.dispose();
+}
+
 console.log('');
 console.log(fails ? `${fails} FAILURE(S)` : 'Monaco: all clear.');
 process.exit(fails ? 1 : 0);

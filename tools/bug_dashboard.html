@@ -1,0 +1,359 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>My Airships — what is wrong in the picture</title>
+<!--
+  The page half of tools/bug_dashboard.py. It never speaks to Supabase: the
+  service key stays in the server, and everything here is 127.0.0.1.
+
+  Marks are kept in NORMALISED coordinates, 0..1 across the picture, and never
+  in screen pixels. The picture is shown fitted to whatever pane it has, so a
+  mark stored in pixels would land somewhere else on a different window — and
+  the flattened PNG is drawn at the picture's OWN size, which is larger again.
+  One arrow, three sizes, one set of numbers.
+-->
+<style>
+  :root {
+    --ink: #f0e2c4; --dim: #b9a682; --panel: #2a2118; --edge: #4a3c2c;
+    --paper: #17120d; --hot: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; background: var(--paper);
+    color: var(--ink); font: 14px/1.45 "Iowan Old Style", Palatino, Georgia, serif; }
+  h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: .02em; }
+  aside { width: 310px; flex: none; border-right: 1px solid var(--edge);
+    display: flex; flex-direction: column; background: #1d1710; }
+  aside header { padding: 10px 12px; border-bottom: 1px solid var(--edge); }
+  aside .sub { color: var(--dim); font-size: 12px; }
+  #list { overflow-y: auto; flex: 1; }
+  .row { padding: 8px 12px; border-bottom: 1px solid #2b2318; cursor: pointer; }
+  .row:hover { background: #241d14; }
+  .row.on { background: #3a2d1c; box-shadow: inset 3px 0 0 var(--hot); }
+  .row .id { color: var(--hot); font-weight: 700; }
+  .row .meta { color: var(--dim); font-size: 11.5px; }
+  .row .snip { color: #d6c7a6; font-size: 12px; margin-top: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tag { font-size: 10.5px; padding: 0 5px; border-radius: 8px; margin-left: 5px;
+    background: #4a3c2c; color: var(--ink); }
+  .tag.done { background: #2f4a2c; }
+  .tag.note { background: #4a3c2c; color: var(--hot); }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #bar { padding: 7px 10px; border-bottom: 1px solid var(--edge); background: var(--panel);
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  button, select { font: inherit; font-size: 13px; color: var(--ink); background: #3a2f22;
+    border: 1px solid var(--edge); border-radius: 4px; padding: 4px 9px; cursor: pointer; }
+  button:hover { background: #4a3c2c; }
+  button.on { background: var(--hot); color: #241b10; border-color: var(--hot); }
+  button.go { background: #4a6b3a; border-color: #5d8149; }
+  button.go:hover { background: #5d8149; }
+  .swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+  .spacer { flex: 1; }
+  #stage { flex: 1; position: relative; overflow: hidden; background: #0d0a07;
+    display: flex; align-items: center; justify-content: center; padding: 8px; }
+  #wrap { position: relative; line-height: 0; }
+  #shot { display: block; }      /* sized in fit() — see there for why not CSS */
+  #ink { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+  #foot { border-top: 1px solid var(--edge); background: var(--panel); padding: 8px 10px;
+    display: flex; gap: 10px; align-items: flex-start; }
+  #note { flex: 1; min-height: 62px; resize: vertical; font: inherit; font-size: 13px;
+    color: var(--ink); background: #17120d; border: 1px solid var(--edge);
+    border-radius: 4px; padding: 6px 8px; }
+  #state { width: 330px; max-height: 130px; overflow: auto; color: var(--dim);
+    font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+  #say { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: #3a2d1c; border: 1px solid var(--hot); padding: 7px 16px; border-radius: 4px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #say.show { opacity: 1; }
+  #typing { position: absolute; display: none; font: 600 16px/1.2 Georgia, serif;
+    background: #17120dcc; color: var(--ink); border: 1px dashed var(--hot);
+    padding: 2px 5px; outline: none; }
+  .empty { padding: 26px; color: var(--dim); text-align: center; }
+  kbd { font: 11px ui-monospace, monospace; background: #3a2f22; border: 1px solid var(--edge);
+    border-radius: 3px; padding: 0 4px; }
+</style>
+
+<aside>
+  <header>
+    <h1>What is wrong in the picture</h1>
+    <div class="sub" id="count">loading…</div>
+  </header>
+  <div id="list"></div>
+</aside>
+
+<main>
+  <div id="bar">
+    <button data-tool="arrow" class="on">Arrow</button>
+    <button data-tool="box">Box</button>
+    <button data-tool="ring">Ring</button>
+    <button data-tool="pen">Pen</button>
+    <button data-tool="text">Text</button>
+    <span style="width:8px"></span>
+    <button class="swatch" data-ink="#ff3b30" style="background:#ff3b30"></button>
+    <button class="swatch" data-ink="#ffd60a" style="background:#ffd60a"></button>
+    <button class="swatch" data-ink="#32d74b" style="background:#32d74b"></button>
+    <button class="swatch" data-ink="#0a84ff" style="background:#0a84ff"></button>
+    <span style="width:8px"></span>
+    <button id="undo">Undo</button>
+    <button id="clear">Clear</button>
+    <span class="spacer"></span>
+    <span class="sub" style="color:var(--dim)"><kbd>J</kbd><kbd>K</kbd> next · <kbd>Ctrl</kbd>+<kbd>S</kbd> save · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo</span>
+    <button id="close">Mark handled</button>
+    <button id="save" class="go">Save the note</button>
+  </div>
+
+  <div id="stage">
+    <div id="wrap">
+      <img id="shot" alt="">
+      <canvas id="ink"></canvas>
+      <input id="typing" spellcheck="false">
+    </div>
+  </div>
+
+  <div id="foot">
+    <textarea id="note" placeholder="What is wrong here? Plain words — “the keel bar goes through my chest”, “the water is above the quay”. The arrow says where; this says what."></textarea>
+    <div id="state"></div>
+  </div>
+</main>
+
+<div id="say"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const list = $('#list'), img = $('#shot'), ink = $('#ink'), ctx = ink.getContext('2d');
+let reports = [], cur = null, marks = [], tool = 'arrow', colour = '#ff3b30', drawing = null;
+
+const say = (m) => { const e = $('#say'); e.textContent = m; e.classList.add('show');
+  clearTimeout(say._t); say._t = setTimeout(() => e.classList.remove('show'), 1800); };
+
+// ---------------------------------------------------------------- the list
+async function boot() {
+  reports = await (await fetch('/api/reports')).json();
+  $('#count').textContent = reports.length + ' report' + (reports.length === 1 ? '' : 's')
+    + ' · ' + reports.filter(r => r.note).length + ' already written up';
+  list.innerHTML = '';
+  if (!reports.length) { list.innerHTML = '<div class="empty">Nothing open. Well done.</div>'; return; }
+  reports.forEach((r, i) => {
+    const st = r.state || {}, sh = st.ship || {};
+    const el = document.createElement('div');
+    el.className = 'row'; el.dataset.i = i;
+    el.innerHTML = `<div><span class="id">#${r.id}</span>
+        <span class="meta">${(r.created_at || '').slice(0, 16).replace('T', ' ')}
+        · ${esc(r.pilot || 'no name')}</span>
+        ${r.handled ? '<span class="tag done">handled</span>' : ''}
+        ${r.note ? '<span class="tag note">written up</span>' : ''}</div>
+      <div class="meta">${esc(sh.place || st.location || '—')}${sh.id ? ' · ' + esc(sh.id) : ''}${st.scenario ? ' · ' + esc(st.scenario) : ''}</div>
+      <div class="snip">${esc((r.body || '').slice(0, 130))}</div>`;
+    el.onclick = () => show(i);
+    list.appendChild(el);
+  });
+  show(0);
+}
+const esc = (s) => String(s == null ? '' : s).replace(/[<&>]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+// ---------------------------------------------------------------- one report
+async function show(i) {
+  if (i < 0 || i >= reports.length) return;
+  cur = reports[i];
+  [...list.children].forEach((c, n) => c.classList.toggle('on', n === i));
+  list.children[i] && list.children[i].scrollIntoView({ block: 'nearest' });
+  marks = [];
+  $('#note').value = cur.note || '';
+  $('#state').textContent = stateLines(cur);
+  img.removeAttribute('src'); redraw();
+  const r = await (await fetch('/api/shot/' + cur.id)).json();
+  if (cur !== reports[i]) return;                       // a faster click won
+  if (r.shot) { img.src = r.shot; } else { img.removeAttribute('src'); say('no picture on this one'); }
+}
+
+img.onload = () => { fit(); redraw(); };
+addEventListener('resize', () => { fit(); redraw(); });
+
+/**
+ * Size the picture to the pane, and the overlay to the picture, exactly.
+ *
+ * Not left to `max-width: 100%`, for two reasons. A headset picture is about
+ * 1,200 px wide and this window is wider than that, so CSS alone would show it
+ * small in the middle of a black field — and a fault you cannot see is a fault
+ * you cannot point at, which is the whole job here. And `object-fit: contain`
+ * would letterbox INSIDE the element, leaving the overlay covering bars that
+ * are not picture, so every mark would land offset by half a bar. Working the
+ * size out here keeps the canvas and the picture the same rectangle.
+ */
+function fit() {
+  const nw = img.naturalWidth, nh = img.naturalHeight;
+  if (!nw || !nh) return;
+  const pane = $('#stage'), pad = 16;
+  const k = Math.min((pane.clientWidth - pad) / nw, (pane.clientHeight - pad) / nh);
+  const w = Math.max(1, Math.round(nw * k)), h = Math.max(1, Math.round(nh * k));
+  img.style.width = w + 'px'; img.style.height = h + 'px';
+  const dpr = devicePixelRatio || 1;
+  ink.style.width = w + 'px'; ink.style.height = h + 'px';
+  ink.width = Math.round(w * dpr); ink.height = Math.round(h * dpr);
+}
+
+function stateLines(r) {
+  const st = r.state || {}, sh = st.ship || {}, p = st.page || {}, ui = st.ui || {}, inst = st.instruments || {};
+  const L = [];
+  const add = (k, v) => { if (v !== undefined && v !== null && v !== '') L.push(k.padEnd(10) + v); };
+  add('place', sh.place || st.location);
+  add('ship', sh.id);
+  if (sh.x !== undefined) add('at', `x ${sh.x}  y ${sh.y}  z ${sh.z}   yaw ${sh.yaw}`);
+  add('camera', ui.camera);
+  add('scenario', st.scenario);
+  add('course', st.course && st.course.name);
+  add('alt', inst.alt); add('speed', inst.speed); add('wind', inst.wind);
+  add('screen', p.w && (p.w + '×' + p.h + ' @' + p.dpr));
+  add('build', r.client_version);
+  if ((st.faults || []).length) L.push('', 'faults:', ...st.faults.slice(0, 6).map(f => '  ' + String(f).slice(0, 90)));
+  L.push('', 'repro: __game.ship.pos.set(' + [sh.x, sh.y, sh.z].join(', ') + '); __game.ship.yaw = ' + sh.yaw + ';');
+  return L.join('\n');
+}
+
+// ---------------------------------------------------------------- drawing
+// Everything is stored 0..1 so the same marks fit the screen and the saved PNG.
+const at = (e) => {
+  const b = ink.getBoundingClientRect();
+  return [(e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height];
+};
+
+ink.addEventListener('pointerdown', (e) => {
+  if (!img.getAttribute('src')) return;
+  const p = at(e);
+  if (tool === 'text') return typeAt(p, e);
+  ink.setPointerCapture(e.pointerId);
+  drawing = { tool, colour, pts: [p] };
+  redraw();
+});
+ink.addEventListener('pointermove', (e) => {
+  if (!drawing) return;
+  const p = at(e);
+  if (drawing.tool === 'pen') drawing.pts.push(p); else drawing.pts[1] = p;
+  redraw();
+});
+ink.addEventListener('pointerup', () => {
+  if (!drawing) return;
+  const d = drawing; drawing = null;
+  const far = d.pts.length > 1 && Math.hypot(d.pts[d.pts.length - 1][0] - d.pts[0][0],
+    d.pts[d.pts.length - 1][1] - d.pts[0][1]) > 0.008;
+  if (far) marks.push(d);                       // a stray click is not a mark
+  redraw();
+});
+
+function typeAt(p, e) {
+  const box = $('#typing'), b = ink.getBoundingClientRect(), w = $('#wrap').getBoundingClientRect();
+  box.style.display = 'block';
+  box.style.left = (b.left - w.left + p[0] * b.width) + 'px';
+  box.style.top = (b.top - w.top + p[1] * b.height - 12) + 'px';
+  box.style.color = colour;
+  box.value = ''; box.focus();
+  box.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault();
+      if (box.value.trim()) marks.push({ tool: 'text', colour, pts: [p], text: box.value.trim() });
+      box.style.display = 'none'; redraw(); }
+    if (ev.key === 'Escape') { box.style.display = 'none'; }
+    ev.stopPropagation();
+  };
+}
+
+function redraw() { paint(ctx, ink.width, ink.height, true); }
+
+/** Draw every mark into a context of any size. Line weights scale with it. */
+function paint(c, W, H, clear) {
+  if (clear) c.clearRect(0, 0, W, H);
+  const unit = Math.max(2, Math.round(Math.min(W, H) / 320));
+  for (const m of marks.concat(drawing ? [drawing] : [])) {
+    c.save();
+    c.strokeStyle = m.colour; c.fillStyle = m.colour;
+    c.lineWidth = unit; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.shadowColor = 'rgba(0,0,0,.75)'; c.shadowBlur = unit * 1.6;
+    const P = m.pts.map(([x, y]) => [x * W, y * H]);
+    if (m.tool === 'pen') {
+      c.beginPath(); P.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke();
+    } else if (m.tool === 'box' && P[1]) {
+      c.strokeRect(P[0][0], P[0][1], P[1][0] - P[0][0], P[1][1] - P[0][1]);
+    } else if (m.tool === 'ring' && P[1]) {
+      const rx = Math.abs(P[1][0] - P[0][0]) / 2, ry = Math.abs(P[1][1] - P[0][1]) / 2;
+      c.beginPath(); c.ellipse((P[0][0] + P[1][0]) / 2, (P[0][1] + P[1][1]) / 2, rx, ry, 0, 0, 7); c.stroke();
+    } else if (m.tool === 'arrow' && P[1]) {
+      const [x0, y0] = P[0], [x1, y1] = P[1];
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+      const a = Math.atan2(y1 - y0, x1 - x0), h = unit * 5.5;
+      c.beginPath(); c.moveTo(x1, y1);
+      c.lineTo(x1 - h * Math.cos(a - 0.4), y1 - h * Math.sin(a - 0.4));
+      c.lineTo(x1 - h * Math.cos(a + 0.4), y1 - h * Math.sin(a + 0.4));
+      c.closePath(); c.fill();
+    } else if (m.tool === 'text') {
+      c.font = '600 ' + (unit * 7) + 'px Georgia, serif';
+      c.textBaseline = 'bottom';
+      c.fillText(m.text, P[0][0], P[0][1]);
+    }
+    c.restore();
+  }
+}
+
+// ---------------------------------------------------------------- saving
+// The picture is flattened at its OWN size, not the size it happened to be
+// shown at, so a note read six months from now is as sharp as what was filed.
+async function save() {
+  if (!cur) return;
+  const note = $('#note').value;
+  if (!note.trim() && !marks.length) return say('nothing to save on this one');
+  let png = null;
+  if (img.naturalWidth && marks.length) {
+    const cv = document.createElement('canvas');
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const c = cv.getContext('2d');
+    c.drawImage(img, 0, 0);
+    paint(c, cv.width, cv.height, false);
+    png = cv.toDataURL('image/png');
+  }
+  const st = cur.state || {}, sh = st.ship || {}, ui = st.ui || {};
+  const res = await (await fetch('/api/note', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: cur.id, note, png, marks, meta: {
+      created_at: cur.created_at, pilot: cur.pilot, body: cur.body,
+      place: sh.place || st.location, ship: sh.id, camera: ui.camera,
+      at: sh.x !== undefined ? `x ${sh.x} y ${sh.y} z ${sh.z} yaw ${sh.yaw}` : null } }) })).json();
+  if (!res.ok) return say('could not write it: ' + (res.error || '?'));
+  cur.note = note;
+  const row = [...list.children].find(c => reports[+c.dataset.i] === cur);
+  if (row && !row.querySelector('.tag.note')) {
+    row.querySelector('div').insertAdjacentHTML('beforeend', '<span class="tag note">written up</span>');
+  }
+  say('saved to bug-notes/' + res.file);
+}
+
+$('#save').onclick = save;
+$('#close').onclick = async () => {
+  if (!cur) return;
+  await fetch('/api/close', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: [cur.id] }) });
+  cur.handled = true; say('#' + cur.id + ' marked handled');
+  const row = [...list.children].find(c => reports[+c.dataset.i] === cur);
+  if (row && !row.querySelector('.tag.done')) {
+    row.querySelector('div').insertAdjacentHTML('beforeend', '<span class="tag done">handled</span>');
+  }
+};
+$('#undo').onclick = () => { marks.pop(); redraw(); };
+$('#clear').onclick = () => { marks = []; redraw(); };
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
+  tool = b.dataset.tool;
+  document.querySelectorAll('[data-tool]').forEach(o => o.classList.toggle('on', o === b));
+});
+document.querySelectorAll('[data-ink]').forEach(b => b.onclick = () => { colour = b.dataset.ink; });
+
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+    return;
+  }
+  const i = reports.indexOf(cur);
+  if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); show(i + 1); }
+  if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); show(i - 1); }
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); marks.pop(); redraw(); }
+  if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+  const keys = { a: 'arrow', b: 'box', r: 'ring', p: 'pen', t: 'text' };
+  if (keys[e.key]) document.querySelector('[data-tool="' + keys[e.key] + '"]').click();
+});
+
+boot();
+</script>

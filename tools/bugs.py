@@ -58,56 +58,64 @@ def call(path, method='GET', body=None, headers=None):
     return json.loads(raw) if raw else None
 
 
-ap = argparse.ArgumentParser()
-ap.add_argument('--all', action='store_true')
-ap.add_argument('--shots', action='store_true')
-ap.add_argument('--close', nargs='+', type=int, default=[])
-a = ap.parse_args()
+# Everything below is the command line. It is inside a function so that this
+# module can be IMPORTED for its key handling and its call() — the dashboard
+# does exactly that — without argparse seizing that program's own arguments.
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--all', action='store_true')
+    ap.add_argument('--shots', action='store_true')
+    ap.add_argument('--close', nargs='+', type=int, default=[])
+    a = ap.parse_args()
 
-if a.close:
-    for i in a.close:
-        call('/rest/v1/bug_reports?id=eq.%d' % i, 'PATCH', {'handled': True},
-             {'Prefer': 'return=minimal'})
-        print('closed %d' % i)
-    sys.exit(0)
+    if a.close:
+        for i in a.close:
+            call('/rest/v1/bug_reports?id=eq.%d' % i, 'PATCH', {'handled': True},
+                 {'Prefer': 'return=minimal'})
+            print('closed %d' % i)
+        sys.exit(0)
 
-q = 'select=*&order=created_at.desc&limit=200'
-if not a.all:
-    q += '&handled=eq.false'
-rows = call('/rest/v1/bug_reports?' + q)
-print('%d report%s\n' % (len(rows), '' if len(rows) == 1 else 's'))
+    q = 'select=*&order=created_at.desc&limit=200'
+    if not a.all:
+        q += '&handled=eq.false'
+    rows = call('/rest/v1/bug_reports?' + q)
+    print('%d report%s\n' % (len(rows), '' if len(rows) == 1 else 's'))
 
-for r in rows:
-    st = r.get('state') or {}
-    page = st.get('page') or {}
-    print('=' * 78)
-    print('#%-5s %s   %s   %s%s'
-          % (r['id'], r['created_at'][:19].replace('T', ' '),
-             r.get('pilot') or '(no name)', r.get('client_version') or '?',
-             '   HANDLED' if r.get('handled') else ''))
-    for k_, v in (('where', st.get('location')), ('ship', st.get('ship')),
-                  ('course', st.get('track') or st.get('scenario')),
-                  ('room', st.get('room')), ('browser', page.get('ua')),
-                  ('screen', page.get('screen'))):
-        if v:
-            print('  %-8s %s' % (k_, str(v)[:110]))
-    faults = st.get('faults') or st.get('errors')
-    if faults:
-        print('  faults:')
-        for f in (faults if isinstance(faults, list) else [faults])[:8]:
-            print('    %s' % str(f)[:160])
-    print()
-    for line in (r.get('body') or '').splitlines():
-        print('    ' + line)
-    print()
-    if r.get('shot'):
-        if a.shots:
-            m = r['shot'].split(',', 1)
-            ext = 'png' if 'png' in m[0] else 'jpg'
-            out = os.path.join(ROOT, 'bug-%d.%s' % (r['id'], ext))
-            open(out, 'wb').write(base64.b64decode(m[1]))
-            print('    [screenshot -> %s]' % out)
-        else:
-            print('    [screenshot attached, %d KB — rerun with --shots]'
-                  % (len(r['shot']) // 1400))
+    for r in rows:
+        st = r.get('state') or {}
+        page = st.get('page') or {}
+        print('=' * 78)
+        print('#%-5s %s   %s   %s%s'
+              % (r['id'], r['created_at'][:19].replace('T', ' '),
+                 r.get('pilot') or '(no name)', r.get('client_version') or '?',
+                 '   HANDLED' if r.get('handled') else ''))
+        for k_, v in (('where', st.get('location')), ('ship', st.get('ship')),
+                      ('course', st.get('track') or st.get('scenario')),
+                      ('room', st.get('room')), ('browser', page.get('ua')),
+                      ('screen', page.get('screen'))):
+            if v:
+                print('  %-8s %s' % (k_, str(v)[:110]))
+        faults = st.get('faults') or st.get('errors')
+        if faults:
+            print('  faults:')
+            for f in (faults if isinstance(faults, list) else [faults])[:8]:
+                print('    %s' % str(f)[:160])
         print()
+        for line in (r.get('body') or '').splitlines():
+            print('    ' + line)
+        print()
+        if r.get('shot'):
+            if a.shots:
+                m = r['shot'].split(',', 1)
+                ext = 'png' if 'png' in m[0] else 'jpg'
+                out = os.path.join(ROOT, 'bug-%d.%s' % (r['id'], ext))
+                open(out, 'wb').write(base64.b64decode(m[1]))
+                print('    [screenshot -> %s]' % out)
+            else:
+                print('    [screenshot attached, %d KB — rerun with --shots]'
+                      % (len(r['shot']) // 1400))
+            print()
+
+
+if __name__ == '__main__':
+    main()

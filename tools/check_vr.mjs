@@ -7,6 +7,7 @@
 // gamepad, and the real vr.js driven through both.
 //
 // Use: node tools/check_vr.mjs
+import { readFileSync } from 'node:fs';
 import './headless.mjs';
 const THREE = await import('three');
 const vr = await import('../src/vr.js');
@@ -569,6 +570,73 @@ if (!renderer.shadowMap.enabled) {
 }
 if (vr.inVR() || vr.menuShowing()) { console.log('   FAIL the session did not end cleanly'); fails++; }
 else console.log('   ok   the session ends and hands the flat game back');
+
+// ------------------------------------------------- the sky rides the camera
+//
+// Sky renders on a box scaled to 10,000 with the far plane at 12,000, so it
+// only fits the frustum while the camera is near its middle. Left behind, its
+// far wall clips and the horizon goes BLACK — filed from a headset as "looks
+// wrong here" over a lit city, and before that as "the sky is black unless im
+// near the eiffel tower", the Tower being the world origin, which is exactly
+// where the sky sits until something moves it.
+//
+// The re-centre used to live only in the flying half of frame(), below the
+// early return a panel takes — while draw() is called in BOTH halves. So every
+// frame with the menu, the board, the bug book or the album open drew a stale
+// sky, and in a headset the board is how you start a scenario: five kilometres
+// in one step with the sky still at the origin. Measured before the fix: the
+// camera 4,296 m off, the sky's far corner 12,957 m out against a far plane of
+// 12,000.
+//
+// This does not grep for the fix. It reads frame(), finds every draw() in it,
+// and requires the re-centre to come first on each path — so it fails for any
+// arrangement that draws without it, not merely for the one seen so far.
+{
+  const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const from = src.indexOf('function frame(now)');
+  let depth = 0, end = from;
+  for (let i = src.indexOf('{', from); i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) { end = i; break; }
+  }
+  const body = src.slice(from, end);
+  const strip = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ 	]*\/\/.*$/gm, '');
+  const draws = [...strip.matchAll(/\bdraw\(\)/g)].map(m => m.index);
+  const skies = [...strip.matchAll(/skyFollows\(\)/g)].map(m => m.index);
+  const naked = draws.filter(d => !skies.some(k => k < d && !strip.slice(k, d).includes('return')));
+  if (!draws.length) {
+    console.log('   FAIL check is looking at the wrong function: no draw() inside frame()');
+    fails++;
+  } else if (naked.length) {
+    console.log('   FAIL %d of %d draw() paths in frame() render without re-centring the sky',
+      naked.length, draws.length);
+    fails++;
+  } else {
+    console.log('   ok   all %d draw() paths in frame() re-centre the sky first', draws.length);
+  }
+
+  // ...and a const is only useful once its dead zone is past. meter.on is read
+  // by the Options menu, which is built during boot; declared down beside the
+  // rest of the meter it threw "Cannot access 'meter' before initialization"
+  // and cost the whole Options panel — reported by the boot guard as "some of
+  // the works did not start: the menu".
+  // over the code only — the comment three lines up says "meter.on" itself, and
+  // a check that reads its own prose is measuring nothing.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/\S/g, ' '))
+                  .replace(/\/\/.*$/gm, m => m.replace(/\S/g, ' '));
+  const decl = code.search(/^const meter = \{/m);
+  const use = code.search(/\bmeter\.(on|fps|calls|tris)\b/);
+  if (decl < 0 || use < 0) {
+    console.log('   FAIL cannot find the frame meter to check its declaration order');
+    fails++;
+  } else if (decl > use) {
+    console.log('   FAIL meter is used at char %d but not declared until %d — a dead-zone throw at boot',
+      use, decl);
+    fails++;
+  } else {
+    console.log('   ok   the frame meter is declared above every use of it');
+  }
+}
 
 console.log('');
 console.log(fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');

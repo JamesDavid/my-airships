@@ -38,6 +38,20 @@ export const GAMES = [
     minPilots: 1,
   },
   {
+    id: 'submarines',
+    name: 'The submarine hunt',
+    sub: 'find the boats under the bay — Monaco only',
+    how: 'Five submarine boats are under way in the bay, and they cannot be seen from a '
+      + 'boat at all. Fly LOW and look straight down: at a flat angle the sea is only a '
+      + 'mirror of the sky. When you catch one, hold over her for four seconds and she is '
+      + 'signalled. Split up — the bay is wide.',
+    minPilots: 1,
+    // The last chapter of the book, and the only game here that is a prophecy
+    // rather than a memory: there were no submarines in the bay in 1902. It is
+    // offered where its water is and nowhere else.
+    place: 'monaco',
+  },
+  {
     id: 'follow',
     name: 'Follow the leader',
     sub: 'stay with the ship in front',

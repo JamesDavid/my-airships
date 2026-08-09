@@ -7,9 +7,12 @@
 //
 // Use: node tools/check_scenarios.mjs
 import './headless.mjs';
+import * as THREE from 'three';
 import { buildWorld } from '../src/world.js';
+import { buildWorldMonaco } from '../src/world_monaco.js';
+import { buildWorldStLouis } from '../src/world_stlouis.js';
 import { SCENARIOS } from '../src/scenarios.js';
-import { makeShip } from './sim.mjs';
+import { makeShip, fly } from './sim.mjs';
 import { SHIPS } from '../src/ships.js';
 import { TRACKS } from '../src/tracks.js';
 import { inRiver } from '../src/paris_terrain.js';
@@ -536,11 +539,25 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   console.log('   Monaco, "vent button broken, stuck at 82%", 82 being the floor');
   console.log('   written on that very line. Scenario I held 34 and II held 20.');
   console.log('');
+  // EACH SCENARIO GETS ITS OWN WORLD. They all used to get Paris, which held
+  // for as long as every scenario asked its world only for things all three
+  // have — a start ring, a wind. The submarine hunt asks Monaco for the boats
+  // under Monaco's own bay, and Paris has no such thing, so the sweep threw
+  // rather than reporting. Built once each and kept.
+  const WORLDS = { paris: world };
+  const worldFor = (loc) => {
+    if (!WORLDS[loc]) {
+      const sc = { children: [], add(...o) { this.children.push(...o); },
+        remove() {}, traverse(f) { f(this); } };
+      WORLDS[loc] = loc === 'monaco' ? buildWorldMonaco(sc) : buildWorldStLouis(sc);
+    }
+    return WORLDS[loc];
+  };
   for (const def of SCENARIOS) {
     const ship = makeShip(def.shipId);
     let zone = null;
     const ctx = {
-      ship, world, wind: { x: 0, y: 0, z: 0 },
+      ship, world: worldFor(def.location), wind: { x: 0, y: 0, z: 0 },
       place: (x, y, z, yaw) => ship.reset({ x, y, z }, yaw),
       setWind: () => {}, setZone: (v, r) => { zone = { v, r }; }, clearZone: () => { zone = null; },
       zoneDist: () => (zone ? Math.hypot(ship.pos.x - zone.v.x, ship.pos.z - zone.v.z) : 1e9),
@@ -1771,6 +1788,53 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
       fails++;
     } else {
       console.log('   ok   every mention of ballast is chosen from the ship');
+    }
+  }
+
+  // ------------------------------------------ the free balloon holds her head
+  //
+  // The "Brazil" has no motor, no rudder and no airspeed of her own, so nothing
+  // weathercocks her and nothing pulls her back: turned, she stays turned, and
+  // the helm is simply which way the pilot is facing. She used to swing head to
+  // wind on the guide rope like every other ship, which snapped the view round
+  // whenever you tried to look somewhere.
+  //
+  // Both halves are asserted, because the fix that only does the first half is
+  // "switch the weathercock off everywhere", and that would quietly take the
+  // rope-riding out of the eight ships whose flying depends on it.
+  {
+    const deg = (r) => (r * 180) / Math.PI;
+    const env = { groundAt: () => 0, isWater: () => false };
+    const held = (id) => {
+      const s = makeShip(id);
+      s.reset(new THREE.Vector3(0, 40, 0), 0);
+      const wind = new THREE.Vector3(6, 0, 0);
+      fly(s, { wind, env, secs: 2, pilot: () => ({ throttle: 0, rudder: 1, pitch: 0, vent: 0, coax: 0 }) });
+      fly(s, { wind, env, secs: 3 });                  // let the helm run off
+      const settled = s.yaw;
+      fly(s, { wind, env, secs: 120 });                // and now leave her alone
+      return { turned: deg(settled), drift: Math.abs(deg(s.yaw - settled)) };
+    };
+    const b = held('brazil'), p = held('no6');
+    if (Math.abs(b.turned) < 20) {
+      console.log('   FAIL the Brazil will not answer her helm at all: %s deg for two seconds of it',
+        b.turned.toFixed(1));
+      fails++;
+    } else if (b.drift > 2) {
+      console.log('   FAIL the Brazil does not hold her head: %s deg away in two minutes, hands off',
+        b.drift.toFixed(1));
+      fails++;
+    } else {
+      console.log('   ok   the Brazil turns %s deg and holds it (%s deg in two minutes)',
+        b.turned.toFixed(0), b.drift.toFixed(1));
+    }
+    if (p.drift < 15) {
+      console.log('   FAIL the No. 6 no longer rides to her rope: only %s deg in two minutes',
+        p.drift.toFixed(1));
+      fails++;
+    } else {
+      console.log('   ok   and a ship with a tail still weathercocks (%s deg in two minutes)',
+        p.drift.toFixed(0));
     }
   }
 
