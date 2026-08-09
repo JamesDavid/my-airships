@@ -1496,15 +1496,29 @@ function makeMap(v, W, H) {
   for (const b of built) {
     const px = (b.x - v.cx) * v.k + W / 2, py = (b.z - v.cz) * v.k + H / 2;
     const bw = Math.max(1.5, (b.w || 10) * v.k), bd = Math.max(1.5, (b.d || 10) * v.k);
-    if (px < -bw || py < -bd || px > W + bw || py > H + bd) continue;
+    const reach = Math.max(bw, bd);
+    if (px < -reach || py < -reach || px > W + reach || py > H + reach) continue;
     const t = Math.min(1, (b.h || b.top || 1) / tallest);
     const g = Math.round(120 + t * 110);
+    c.save();
+    c.translate(px, py);
+    // ...AND THEY TURN. "you didnt get st louis footprints right" -- and the
+    // world had them right all along: world_stlouis pushes each palace collider
+    // with an `ry`, because the fair is a FAN of buildings set at angles round
+    // the Grand Basin, not a grid. This map drew every one of them square to the
+    // page and so drew a fairground that does not exist. The rotation is the
+    // same one the ship collides against, so the plan and the flying now agree.
+    //
+    // Screen y runs the way world z does here, so the angle goes in negated --
+    // the same convention as rotation.y in the world itself.
+    if (b.ry) c.rotate(-b.ry);
     c.fillStyle = `rgba(${g}, ${Math.round(g * 0.96)}, ${Math.round(g * 0.86)}, 0.85)`;
-    c.fillRect(px - bw / 2, py - bd / 2, bw, bd);
+    c.fillRect(-bw / 2, -bd / 2, bw, bd);
     if (bw > 5 && bd > 5) {
       c.strokeStyle = 'rgba(30,22,14,0.7)'; c.lineWidth = 1;
-      c.strokeRect(px - bw / 2, py - bd / 2, bw, bd);
+      c.strokeRect(-bw / 2, -bd / 2, bw, bd);
     }
+    c.restore();
   }
 
   // and the places, because a course is described by them
