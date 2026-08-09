@@ -759,6 +759,8 @@ function drawUsage() {
 // question being asked: which parts share a material.
 
 let THREE = null, builtWorld = null, models = [], pickedModel = null, modelNotes = {};
+let foldBySize = false;      // by SHAPE by default: that is the instancing question
+let showAllCopies = true;    // and show the whole fleet where it stands
 let pickedPart = null;              // one piece of it, chosen in the preview
 
 /** A stable name for one PIECE of a model: what it is, and which of them. */
@@ -810,6 +812,26 @@ async function getWorld() {
   return worldPending;
 }
 
+// SIZE IS NOT PART OF THE SHAPE, for the question being asked here.
+//
+// An InstancedMesh carries a matrix per instance, so a two-metre box and a
+// forty-metre box are the SAME GEOMETRY scaled differently and can be one draw.
+// That is exactly how the Deutsch skeleton went from thirty boxes to one.
+//
+// Folding on the exact dimensions therefore split what should have been folded:
+// "a lot of models called 1 box - by the hill of Saint-Cloud", each its own row,
+// each a separate wish, when together they are one instancing job. Only the type
+// and the SEGMENT counts matter -- a 12-sided cylinder and an 8-sided one really
+// are different geometry and cannot share an instance.
+const SIZELESS = /^(width|height|depth|radius|radiusTop|radiusBottom|length|innerRadius|outerRadius|tube|arc|thetaStart|thetaLength|phiStart|phiLength)$/;
+function shapeFamily(m) {
+  const g = m.geometry || {};
+  const p = g.parameters || {};
+  const segs = Object.keys(p).filter((k) => !SIZELESS.test(k)).sort()
+    .map((k) => k + ':' + p[k]).join(',');
+  return (g.type || '?') + '[' + segs + ']';
+}
+
 /** What a part IS, for the purpose of asking whether two of them are the same. */
 function signature(m) {
   const g = m.geometry || {};
@@ -818,7 +840,7 @@ function signature(m) {
     .map((k) => (typeof p[k] === 'number' ? +p[k].toFixed(3) : p[k])).join(',') + ')';
   const mat = Array.isArray(m.material) ? m.material.map((x) => x.uuid).join('+')
     : (m.material && m.material.uuid) || '-';
-  return { shape, mat, key: shape + '|' + mat };
+  return { shape, mat, family: shapeFamily(m), key: shape + '|' + mat };
 }
 
 const tris = (m) => {
@@ -879,8 +901,9 @@ function analyse(root, name) {
   // whole point. This is what turns a list of 1,529 anonymous groups into
   // "here is one tree, and there are four hundred of it".
   const fingerprint = parts.map((p) => p.sig.shape).sort().join(';');
+  const family = parts.map((p) => p.sig.family).sort().join(';');
   return { name, root, parts, groups: [...groups.values()], draws, instanced,
-    tris: parts.reduce((a, p) => a + p.tris, 0), tips, fingerprint };
+    tris: parts.reduce((a, p) => a + p.tris, 0), tips, fingerprint, family };
 }
 
 /**
@@ -933,11 +956,12 @@ async function loadModels() {
   // number, not four hundred entries, and the number IS the finding.
   const byShape = new Map();
   for (const m of each) {
-    const g = byShape.get(m.fingerprint);
-    if (g) { g.copies++; g.all.push(m); } else byShape.set(m.fingerprint, { ...m, copies: 1, all: [m] });
+    const key = foldBySize ? m.fingerprint : m.family;
+    const g = byShape.get(key);
+    if (g) { g.copies++; g.all.push(m); } else byShape.set(key, { ...m, copies: 1, all: [m] });
     // ...and remember how many DIFFERENT materials the copies use, because that
     // is what decides whether the saving on offer is real. See the tip below.
-    const g2 = byShape.get(m.fingerprint);
+    const g2 = byShape.get(key);
     g2.mats = g2.mats || new Set();
     for (const part of m.parts) g2.mats.add(part.sig.mat);
   }
@@ -952,9 +976,15 @@ function drawModelList() {
   // draws in the WORLD, so copies count — the header used to add one of each
   const total = models.reduce((a, m) => a + m.draws * m.copies, 0);
   const copies = models.reduce((a, m) => a + m.copies, 0);
-  list.innerHTML = `<div class="m" style="cursor:default;border-bottom:1px solid var(--edge)">
-      <span class="d">${total}</span><span class="n">draws · ${models.length} distinct models
-      in ${copies} objects</span></div>`;
+  list.innerHTML = `<div class="m" style="cursor:default;border-bottom:1px solid var(--edge);
+      display:block">
+      <div><span class="d">${total}</span> <span class="n">draws · ${models.length} distinct
+      models in ${copies} objects</span></div>
+      <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap">
+        <button class="chip ${foldBySize ? '' : 'on'}" id="foldShape">by shape</button>
+        <button class="chip ${foldBySize ? 'on' : ''}" id="foldSize">by exact size</button>
+        <button class="chip ${showAllCopies ? 'on' : ''}" id="allCopies">show them together</button>
+      </div></div>`;
   models.forEach((m, i) => {
     const el = document.createElement('div');
     el.className = 'm' + (m === pickedModel ? ' on' : '');
@@ -967,6 +997,9 @@ function drawModelList() {
     el.onclick = () => pickModel(i);
     list.appendChild(el);
   });
+  $('#foldShape').onclick = () => { if (foldBySize) { foldBySize = false; models = []; pickedModel = null; loadModels(); } };
+  $('#foldSize').onclick = () => { if (!foldBySize) { foldBySize = true; models = []; pickedModel = null; loadModels(); } };
+  $('#allCopies').onclick = () => { showAllCopies = !showAllCopies; drawModelList(); if (pickedModel) showPreview(pickedModel); };
   if (!pickedModel && models.length) pickModel(0);
 }
 
@@ -1178,7 +1211,16 @@ async function showPreview(m) {
       ray.setFromCamera(ndc, camera);
       const hit = ray.intersectObjects(pv.holder.children, true)
         .find((h) => h.object && (h.object.isMesh || h.object.isInstancedMesh));
-      choosePart(hit ? pickedModel.parts.find((p) => p.o === hit.object) || null : null);
+      // with the whole fleet on show the piece hit may belong to any copy, so
+      // the part is looked for across all of them and not only the first
+      let part = null;
+      if (hit) {
+        for (const one of (pickedModel.all || [pickedModel])) {
+          part = one.parts.find((p) => p.o === hit.object);
+          if (part) break;
+        }
+      }
+      choosePart(part);
     });
 
     const tick = () => {
@@ -1199,17 +1241,27 @@ async function showPreview(m) {
     };
     tick();
   }
-  // BORROWED, NOT COPIED: the object is put back where it came from as soon as
-  // another is picked, so the world stays exactly as the game built it and the
-  // numbers above keep meaning what they say.
-  if (pv.borrowed) { pv.borrowedFrom.add(pv.borrowed); pv.borrowed.position.copy(pv.borrowedAt); }
+  // BORROWED, NOT COPIED: everything is put back where it came from as soon as
+  // something else is picked, so the world stays exactly as the game built it
+  // and the numbers above keep meaning what they say.
+  for (const b of pv.borrowed || []) { b.from.add(b.o); b.o.position.copy(b.at); }
   pv.holder.clear();
   const T2 = await three();
-  const bb = new T2.Box3().setFromObject(m.root);
+
+  // ONE, OR ALL OF THEM WHERE THEY STAND.
+  //
+  // "they must go together but I am only seeing a big list and can only view
+  // them individually" -- quite so, and looking at one paling tells you nothing
+  // about the fence. With the whole fleet borrowed at once you see the shape
+  // they make, which is what decides whether instancing them is worth it and
+  // what the instance ought to be.
+  const roots = showAllCopies && m.all && m.all.length > 1
+    ? m.all.map((x) => x.root) : [m.root];
+  const bb = new T2.Box3();
+  for (const r of roots) bb.expandByObject(r);
   const c = bb.getCenter(new T2.Vector3()), sz = bb.getSize(new T2.Vector3());
-  pv.borrowed = m.root; pv.borrowedFrom = m.root.parent; pv.borrowedAt = m.root.position.clone();
-  pv.holder.add(m.root);
-  m.root.position.sub(c);
+  pv.borrowed = roots.map((o) => ({ o, from: o.parent, at: o.position.clone() }));
+  for (const r of roots) { pv.holder.add(r); r.position.sub(c); }
   pv.r = Math.max(1, sz.length() / 2);
   pv.spin && (pv.spin.auto = true);
   if (!pv.marker) {
@@ -1221,8 +1273,10 @@ async function showPreview(m) {
     pv.scene.add(pv.marker);
   }
   pv.marker.visible = false;
-  box.querySelector('.lbl').textContent =
-    `${m.name} — ${sz.x.toFixed(1)} x ${sz.y.toFixed(1)} x ${sz.z.toFixed(1)} m`;
+  box.querySelector('.lbl').textContent = roots.length > 1
+    ? `${m.name} — all ${roots.length} of them, spread over `
+      + `${sz.x.toFixed(0)} x ${sz.z.toFixed(0)} m`
+    : `${m.name} — ${sz.x.toFixed(1)} x ${sz.y.toFixed(1)} x ${sz.z.toFixed(1)} m`;
 }
 
 // ================================================================ the level
