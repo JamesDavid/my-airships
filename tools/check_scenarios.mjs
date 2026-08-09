@@ -1673,6 +1673,43 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
   }
 
   console.log('');
+  console.log('SCENARIO II IS FLYABLE, WHICH IS A NUMBER AND NOT AN OPINION');
+  {
+    // Asked for three times, and twice I answered with arithmetic proving the
+    // wind was what the scenario intended (#97, #100, #113). It was. That was
+    // never the point: it was too strong to fly, and the pilot is the one
+    // flying it. "10km/h at this height and lower down lower."
+    //
+    // So the number is written down and checked, because a wind that drifts
+    // back up over time is exactly how this got asked three times.
+    const sc2 = SCENARIOS.find((s2) => s2.id === 'no5-trocadero');
+    let base = null;
+    const probe = {
+      ship: { spec: SHIPS.no5, pos: { x: 0, y: 0, z: 0 }, gas: 100 },
+      world, place() {}, setWind: (x, z) => { base = Math.hypot(x, z); },
+      setZone() {}, clearZone() {}, setCenter() {}, addMsg() {}, setRoute() {},
+      complete() {}, fail() {}, zoneDist: () => 1e9, zoneR: () => 0, raceResult: () => null,
+    };
+    sc2.setup(probe);
+    const { windAt: wa } = await import('../src/world.js');
+    const at = (agl) => {
+      const v = wa({ x: base, y: 0, z: 0 }, agl, 0);
+      return Math.hypot(v.x, v.z) * 3.6;
+    };
+    const high = at(150), low = at(10);
+    console.log('   she starts in %s km/h and finds %s km/h over the housetops',
+      high.toFixed(1), low.toFixed(1));
+    if (high > 13) {
+      console.log('   FAIL the wind is back above the 10 km/h a pilot asked for three times');
+      fails++;
+    } else if (low > high * 0.75) {
+      console.log('   FAIL going lower does not buy enough to be worth doing'); fails++;
+    } else {
+      console.log('   ok   10 km/h at height, under 5 near the ground, and the gradient pays');
+    }
+  }
+
+  console.log('');
   console.log('THE CALM AIR IS ON THE GROUND, NOT AT SEA LEVEL');
   {
     // "Fly WEST, and fly LOW — the wind is thinner near the ground" is the whole

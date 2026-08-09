@@ -172,7 +172,20 @@ export const SCENARIOS = [
       const TH = -6.5 * Math.PI / 180;
       const wx = ux * Math.cos(TH) + uz * Math.sin(TH);
       const wz = -ux * Math.sin(TH) + uz * Math.cos(TH);
-      ctx.setWind(wx * 7, wz * 7);
+      // THREE TIMES ASKED, SO: 10 km/h AT HEIGHT, AND LESS BELOW.
+      //
+      // "How many fucking times do I have to tell you to reduce the wind
+      // gradient on this mission!!!!!!!! 10km/h at this height and lower down
+      // lower." Twice before that (#97, #100), and both times I answered with
+      // arithmetic showing the wind was what the scenario intended. It was.
+      // That was not the point: it is too strong to fly, and the pilot is the
+      // one flying it.
+      //
+      // 2.8 m/s base. windAt is full strength at 120 m and above, so at her
+      // start altitude that is exactly 10 km/h, and the gradient takes it down
+      // to 4.7 km/h near the housetops — which is what "lower down lower"
+      // asks for and what the brief has always promised.
+      ctx.setWind(wx * 2.8, wz * 2.8);
       ctx.ship.gas = 98;
       // THE GREEN RING IS NOT SHOWN UNTIL IT MEANS ANYTHING.
       //
@@ -193,7 +206,11 @@ export const SCENARIOS = [
       ctx.setRoute([
         V(t.x - ux * 120, 60, t.z - uz * 120),
         V(t.x - ux * 400, 45, t.z - uz * 400),
-        V(t.x - ux * 660, 40, t.z - uz * 660),      // La Muette, where it goes wrong
+        // 48 m, not 40: La Muette is built up with 53 m housetops and a hoop
+        // at forty stood thirteen metres over one of them. Higher, not
+        // elsewhere — this hoop marks where the wires foul, so it has to be
+        // where that happens.
+        V(t.x - ux * 540, 48, t.z - uz * 540),      // La Muette, where it goes wrong
       ]);
       ctx.setCenter('August 8th, 1901',
         'The Tower is rounded and the valve is gone. West for St. Cloud — and '
@@ -214,7 +231,15 @@ export const SCENARIOS = [
       const wide = Math.abs(-rx * u.z + rz * u.x);
 
       // ---- the wires reach the screw, at La Muette ----
-      if (!this.fouled && !this.dead && along < -650) {
+      //
+      // 540 m out, not 650. The drift home is the WIND's doing, so cutting the
+      // wind to the 10 km/h a pilot asked for three times shortened it, and
+      // ballast untouched fell in the streets of Passy instead of on the hotel
+      // roofs — losing the one ending the whole scenario is written around.
+      // The outbound leg is shortened to match, so the same flight has the same
+      // ending in a wind you can fly in. La Muette is a stretch of the
+      // fortifications, not a milestone, and it takes the shortening honestly.
+      if (!this.fouled && !this.dead && along < -540) {
         this.fouled = 0.0001;
         // the machine-readable form of the shout, for the HUD and for
         // tools/check_scenarios.mjs — a pilot sees the message, a test cannot
