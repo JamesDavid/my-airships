@@ -1317,7 +1317,25 @@ export function buildWorld(scene) {
   // ...and a far version of every heavy monument, for the headset. Built last,
   // after liftToTerrain, so the proxy is baked from the geometry where it
   // finally stands rather than where it was drawn flat.
-  addFarProxies(scene);
+  // ...and tell it what still moves, so it cannot bake the life out of it: the
+  // three flags the frame loop streams with the wind, and the wheel's rim.
+  {
+    const live = new Set();
+    // BOUNDED. `while (o) { o = o.parent; }` never ends against the headless
+    // three, whose permissive proxy hands back a fresh object for every
+    // property — it ate four gigabytes and died. A scene graph is a dozen deep
+    // at most, so say so, and stop if a node is seen twice.
+    const mark = (o) => {
+      for (let i = 0; i < 24 && o && typeof o === 'object'; i++) {
+        if (live.has(o)) break;
+        live.add(o);
+        o = o.parent;
+      }
+    };
+    for (const f of [hangar.userData.flag, towerFlag.userData.flag, arcFlag.userData.flag]) mark(f);
+    if (lm.roueWheel) mark(lm.roueWheel);
+    addFarProxies(scene, 6, live);
+  }
 
   const LM = (id) => { const q = placeLegacy(id); return { x: q.x, z: q.z }; };
   return {
@@ -1512,7 +1530,7 @@ function farSeen(o) { if (o) { o.userData = o.userData || {}; o.userData.vrFar =
  * an import the headless stub cannot answer would blind every check that walks
  * these meshes.
  */
-function makeFarProxy(group, sawInstanced = { hit: false }, merged = []) {
+function makeFarProxy(group, sawInstanced = { hit: false }, merged = [], live = null) {
   const byMat = new Map();
   const m4 = new THREE.Matrix4();
   const walk = (o, parent) => {
@@ -1537,6 +1555,15 @@ function makeFarProxy(group, sawInstanced = { hit: false }, merged = []) {
       sawInstanced.hit = true;
       return;                        // left where it is; it is already one draw
     }
+    // ANYTHING THE WORLD STILL DRIVES IS LEFT ALONE, and its children with it.
+    //
+    // Merging bakes a transform into vertices, so anything the frame loop turns
+    // is frozen by it. The Grande Roue was caught by hand; the three FLAGS —
+    // which stream with the wind every frame — survived only because they
+    // happen to sit outside the groups that were merged. That is luck, and the
+    // third time this trap has come up. The world now says outright what it
+    // still moves, and the merger will not touch it.
+    if (live && live.has(o)) return;
     if (g && typeof g.type === 'string' && o.material) {
       let e = byMat.get(o.material);
       if (!e) { e = { mat: o.material, parts: [] }; byMat.set(o.material, e); }
@@ -1605,7 +1632,7 @@ function makeFarProxy(group, sawInstanced = { hit: false }, merged = []) {
  * Only the heavy ones: nineteen of the twenty-three cost four draws each and
  * merging them would save nothing worth the risk of them looking different.
  */
-export function addFarProxies(scene, minLeaves = 6) {
+export function addFarProxies(scene, minLeaves = 6, live = null) {
   const made = [];
   const isMesh = (n) => n.geometry && typeof n.geometry.type === 'string';
   const count = (o) => {
@@ -1626,7 +1653,7 @@ export function addFarProxies(scene, minLeaves = 6) {
     if (o.userData.animates) continue;
     const saw = { hit: false };
     const mergedLeaves = [];
-    const proxy = makeFarProxy(o, saw, mergedLeaves);
+    const proxy = makeFarProxy(o, saw, mergedLeaves, live);
     if (!proxy) continue;
     // NO "ONLY KEEP IT IF IT WINS" TEST HERE, though that is the obvious guard.
     // The headless three gives every mesh its own material object, so nothing
