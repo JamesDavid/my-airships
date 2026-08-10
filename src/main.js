@@ -969,9 +969,41 @@ function cycleCamera() { cycleCameraTo((camMode + 1) % CAM_NAMES.length); }
  * buggy is out -- W/S and A/D cannot mean two things at once, and the ship is
  * perfectly happy holding whatever she was last set to.
  */
+/**
+ * THE CONTROLS ARE HERS WHILE SHE IS OUT.
+ *
+ * "the car doesn't have controls?" -- on a touch screen the flying controls are
+ * the ONLY controls, and they were still the ship's: a valve, a ballast bag and
+ * a trim lever, none of which drive anything. So while the buggy is out the
+ * panel becomes hers: the helm is her steering wheel, the carburettor lever is
+ * her accelerator, TRIM becomes a BRAKE, and the valve and ballast go away
+ * because a carriage has no gas to let out and no sand to throw.
+ *
+ * The keys stay as they are -- W/S drive, A/D steer -- so nothing is lost for
+ * anyone on a keyboard.
+ */
+function buggyPanel(on) {
+  if (buggyPanel._was === on) return;
+  buggyPanel._was = on;
+  const set = (id, show, label) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = show ? '' : 'none';
+    if (label && show) el.textContent = label;
+  };
+  set('btnVent', !on);                 // no gas to valve
+  set('btnSand', !on);                 // no ballast to throw
+  set('helmThumb', true, on ? 'WHEEL' : 'HELM');
+  set('thrThumb', true, on ? 'DRIVE' : 'CARB');
+  set('pitchThumb', true, on ? 'BRAKE' : 'TRIM');
+  const pt = document.getElementById('pitchTrack');
+  if (pt) pt.classList.toggle('asBrake', on);
+}
+
 function driveBuggy(dt) {
   const was = buggy.on;
   buggy.on = camMode === CAM_BUGGY && !vr.inVR();
+  buggyPanel(buggy.on);
   if (!buggy.on) {
     if (buggyMesh) buggyMesh.visible = false;
     return was;
@@ -984,10 +1016,16 @@ function driveBuggy(dt) {
     buggyMesh.visible = true;
   }
   const fast = keys['ShiftLeft'] || keys['ShiftRight'] ? 3.2 : 1;
-  const fwd = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
-  const turn = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
+  // keys OR the panel: the carburettor lever is her accelerator and the helm her
+  // wheel, so a hand on the glass drives her exactly as the keys do
+  const kf = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
+  const fwd = kf || touchThrottle || 0;
+  const kt = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
+  const turn = kt || -(touchHelm || 0);
+  const braking = !!(keys['KeyV'] || touchPitch < -0.3);   // TRIM pulled down = BRAKE
   buggy.speed += (fwd * BUGGY_TOP * fast - buggy.speed) * Math.min(1, dt * 3);
-  if (!fwd) buggy.speed *= Math.pow(0.02, dt);   // she coasts to a stop
+  if (braking) buggy.speed *= Math.pow(0.0005, dt);        // she stops smartly
+  else if (!fwd) buggy.speed *= Math.pow(0.02, dt);        // or coasts to a stop
   buggy.yaw += turn * dt * 1.5 * (0.3 + Math.min(1, Math.abs(buggy.speed) / 6));
   buggy.pos.x += Math.cos(buggy.yaw) * buggy.speed * dt;
   buggy.pos.z -= Math.sin(buggy.yaw) * buggy.speed * dt;

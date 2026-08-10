@@ -1524,6 +1524,23 @@ let plan = null, courses = [], course = null, dragging = null, bp = null;
 // and the tab you just asked for is quietly overruled -- which is what happened:
 // ask for Monaco, get the Paris courses back.
 let levelSeq = 0;
+// THE REAL OUTLINES, over what was built from them.
+//
+// "the building footprints in paris may not be being recreated correctly" -- and
+// the way to know is to draw both and look. These are the smallest-area
+// rectangles round the OpenStreetMap outlines, the same ones fitToBox lays the
+// monuments on; if a model has drifted off its own footprint it shows at once.
+let osmShown = false, osmData = null;
+
+async function loadOsm(place) {
+  if (osmData && osmData.place === place) return osmData;
+  try {
+    const mod = place === 'monaco' ? await import('/src/monaco_footprints.js')
+      : await import('/src/paris_footprints.js');
+    osmData = { place, list: Object.entries(mod.FOOTPRINTS || {}) };
+  } catch (e) { osmData = { place, list: [] }; }
+  return osmData;
+}
 
 async function loadLevel() {
   const seq = ++levelSeq;
@@ -1569,6 +1586,16 @@ async function loadLevel() {
   reset.textContent = 'Put it back';
   reset.onclick = () => pickCourse(course && course.id, true);
   bar.appendChild(reset); bar.appendChild(save);
+  const osm = document.createElement('button');
+  osm.className = 'chip' + (osmShown ? ' on' : '');
+  osm.textContent = 'OSM outlines';
+  osm.onclick = async () => {
+    osmShown = !osmShown;
+    await loadOsm($('#whichWorld').value);
+    plan.stamp = null;                 // the map is redrawn with them on it
+    loadLevel();
+  };
+  bar.appendChild(osm);
   const help = document.createElement('span');
   help.className = 'sub';
   help.style.color = 'var(--dim)';
@@ -1807,6 +1834,27 @@ function makeMap(v, W, H) {
       c.strokeRect(-bw / 2, -bd / 2, bw, bd);
     }
     c.restore();
+  }
+
+  // THE OSM OUTLINE OVER THE MODEL. Drawn as an open rectangle in a colour
+  // nothing else uses, so where the two agree you see the outline sitting neatly
+  // round its building, and where they do not you see it beside it.
+  if (osmShown && osmData && osmData.place === (builtWorld && builtWorld.place)) {
+    c.lineWidth = 2;
+    c.font = '11px Georgia, serif';
+    for (const [id, f] of osmData.list) {
+      const px = (f.x - v.cx) * v.k + W / 2, py = (f.z - v.cz) * v.k + H / 2;
+      const L = f.len * v.k, D = f.wid * v.k;
+      if (px < -L || py < -D || px > W + L || py > H + D) continue;
+      c.save();
+      c.translate(px, py);
+      c.rotate(-(f.ry || 0));
+      c.strokeStyle = '#4fc3f7';
+      c.strokeRect(-L / 2, -D / 2, L, D);
+      c.restore();
+      c.fillStyle = '#4fc3f7';
+      c.fillText(id, px + 4, py - 4);
+    }
   }
 
   // and the places, because a course is described by them
