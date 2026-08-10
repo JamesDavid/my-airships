@@ -2128,6 +2128,66 @@ if (process.argv[1] && process.argv[1].includes('check_scenarios')) {
     }
   }
 
+  // ------------------------------------------- the buggy is the size of a buggy
+  //
+  // She is mainly a MEASURING STICK -- you drive her about to judge whether a
+  // kerb floats or a wall stands in a house, and you judge it against her own
+  // known dash and wheels. A measuring stick has to be the right length.
+  //
+  // She was not: her spokes carried a rotation that tipped them out of their own
+  // wheels and left them sticking sideways like paddles, so she came out 2.26 m
+  // across the beam where an electric runabout of 1900 is 1.4 to 1.6. Nothing in
+  // the picture said so -- from the driver's seat you cannot see your own wheels.
+  {
+    console.log('');
+    console.log('THE BUGGY IS THE SIZE OF A BUGGY');
+    const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+    // lifted by matching braces rather than by a regex — a pattern with a
+    // newline in it is one stray escape away from being no pattern at all
+    const from = src.indexOf('function makeBuggy()');
+    let depth = 0, end = -1;
+    for (let i = src.indexOf('{', from); i > 0 && i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
+    }
+    const m = from >= 0 && end > from ? [src.slice(from, end)] : null;
+    if (!m) {
+      console.log('   FAIL makeBuggy has gone');
+      fails++;
+    } else {
+      const g = new Function('THREE', m[0] + '; return makeBuggy();')(THREE);
+      // the stub has no Box3, so walk her by hand, honouring each part's own turn
+      let lo = { x: 1e9, y: 1e9, z: 1e9 }, hi = { x: -1e9, y: -1e9, z: -1e9 };
+      for (const o of g.children) {
+        const p = (o.geometry && o.geometry.parameters) || {};
+        const r = p.radiusTop !== undefined ? p.radiusTop : 0;
+        // extents in the part's own frame, then swapped by a quarter turn
+        let ex = p.width !== undefined ? p.width / 2 : r;
+        let ey = p.height !== undefined ? p.height / 2 : r;
+        let ez = p.depth !== undefined ? p.depth / 2 : r;
+        const quarter = (a) => Math.abs(Math.abs(a) - Math.PI / 2) < 0.01;
+        if (quarter(o.rotation.x)) { const t = ey; ey = ez; ez = t; }
+        if (quarter(o.rotation.z)) { const t = ex; ex = ey; ey = t; }
+        lo.x = Math.min(lo.x, o.position.x - ex); hi.x = Math.max(hi.x, o.position.x + ex);
+        lo.y = Math.min(lo.y, o.position.y - ey); hi.y = Math.max(hi.y, o.position.y + ey);
+        lo.z = Math.min(lo.z, o.position.z - ez); hi.z = Math.max(hi.z, o.position.z + ez);
+      }
+      const L = hi.x - lo.x, W = hi.z - lo.z, H = hi.y - lo.y;
+      const bad = [];
+      if (L < 2.0 || L > 2.9) bad.push('length ' + L.toFixed(2) + ' m (want 2.3-2.6)');
+      if (W < 1.3 || W > 1.8) bad.push('width ' + W.toFixed(2) + ' m (want 1.4-1.6)');
+      if (H < 1.3 || H > 2.0) bad.push('height ' + H.toFixed(2) + ' m');
+      if (Math.abs(lo.y) > 0.02) bad.push('lowest point ' + lo.y.toFixed(2) + ' m — her wheels do not touch');
+      if (bad.length) {
+        console.log('   FAIL the buggy is not the size of a buggy: %s', bad.join('; '));
+        fails++;
+      } else {
+        console.log('   ok   %s m long, %s wide, %s tall, wheels on the ground',
+          L.toFixed(2), W.toFixed(2), H.toFixed(2));
+      }
+    }
+  }
+
   console.log('');
   console.log('%s', fails === 0 ? 'ALL CHECKS PASS' : fails + ' FAILURES');
   process.exit(fails ? 1 : 0);

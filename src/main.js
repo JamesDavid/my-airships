@@ -3669,9 +3669,14 @@ function makeBuggy() {
     w.position.set(x, 0.45, z);
     g.add(w);
     for (let i = 0; i < 8; i++) {                 // wire spokes, seen through
+      // IN THE PLANE OF THE WHEEL, not across it. These carried rotation.x = 90
+      // as well as rotation.z, which tipped every spoke out of its own wheel and
+      // left it sticking sideways like a paddle -- measured, she came out 2.26 m
+      // across the beam where a runabout of 1900 is 1.4 to 1.6. The disc is
+      // turned into the x-y plane by its own rotation.x; a spoke lying in that
+      // plane needs only to be spun about z round the hub.
       const sp = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.82, 0.02), brass);
       sp.position.set(x, 0.45, z);
-      sp.rotation.x = Math.PI / 2;
       sp.rotation.z = (i / 8) * Math.PI;
       g.add(sp);
     }
