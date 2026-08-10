@@ -675,7 +675,32 @@ addEventListener('keydown', (e) => {
     buildRings(editing.gates);
     addMsg('edu', `Gate removed — ${editing.gates.length} left.`, 0);
   }
-  if (e.code === 'KeyC') cycleCamera();
+  if (e.code === 'KeyC') {
+    // while the buggy is out, C is HER views and not the ship's cameras: at the
+    // tiller, from behind her, and on foot beside her. Getting down to look at a
+    // thing closely is most of what she is for.
+    if (camMode === CAM_BUGGY) {
+      buggy.view = (buggy.view + 1) % 3;
+      if (buggy.view === 2) {                 // step down where she stands
+        buggy.foot.set(buggy.pos.x - Math.cos(buggy.yaw) * 1.6, 0,
+          buggy.pos.z + Math.sin(buggy.yaw) * 1.6);
+        buggy.footYaw = buggy.yaw;
+      }
+      if (buggy.view === 0) {                 // and climb back in, wherever she is
+        buggy.pos.x = buggy.foot.x + Math.cos(buggy.yaw) * 1.6;
+        buggy.pos.z = buggy.foot.z - Math.sin(buggy.yaw) * 1.6;
+      }
+      addMsg('cam', 'The buggy: ' + BUGGY_VIEWS[buggy.view], 0);
+    } else cycleCamera();
+  }
+  // O for OUT: climb down and drive, or climb back into whatever you were in.
+  // The buggy is the sixth camera, so reaching her by cycling is five presses of
+  // C and five presses back — which is no way to reach a thing you use to check
+  // something and then carry on flying.
+  if (e.code === 'KeyO') {
+    if (camMode === CAM_BUGGY) cycleCameraTo(buggy.cameWith ?? 1);
+    else { buggy.cameWith = camMode; cycleCameraTo(CAM_BUGGY); }
+  }
   if (e.code === 'KeyX' && spectate.on) watchNext();
   if (e.code === 'KeyP') document.body.classList.toggle('photo');
   if (e.code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
@@ -991,13 +1016,16 @@ function buggyPanel(on) {
     el.style.display = show ? '' : 'none';
     if (label && show) el.textContent = label;
   };
-  set('btnVent', !on);                 // no gas to valve
+  // A BRAKE IS A PEDAL, NOT A LEVER. It was the trim slider, which holds its
+  // setting like a real weight -- so the brake stayed on until you pushed it
+  // back. The valve button is the right shape for it: press and it bites, let go
+  // and it does not.
+  set('btnVent', true, on ? 'BRAKE' : 'VENT');
   set('btnSand', !on);                 // no ballast to throw
   set('helmThumb', true, on ? 'WHEEL' : 'HELM');
   set('thrThumb', true, on ? 'DRIVE' : 'CARB');
-  set('pitchThumb', true, on ? 'BRAKE' : 'TRIM');
-  const pt = document.getElementById('pitchTrack');
-  if (pt) pt.classList.toggle('asBrake', on);
+  const pitch = document.getElementById('pitchTrack');
+  if (pitch) pitch.style.display = on ? 'none' : '';   // she has no trim to set
 }
 
 function driveBuggy(dt) {
@@ -1013,7 +1041,11 @@ function driveBuggy(dt) {
     buggy.yaw = ship.yaw;
     buggy.speed = 0;
     if (!buggyMesh) { buggyMesh = makeBuggy(); scene.add(buggyMesh); }
-    buggyMesh.visible = true;
+    // NOT DRAWN, for now. From the driver's seat her own coachwork fills the
+    // bottom third of the screen, and the whole reason to be down here is to see
+    // the GROUND. She is built and kept -- her dash at 1.1 m and her wheels at
+    // 0.9 are still the measuring stick the check guards -- but out of the way.
+    buggyMesh.visible = buggy.view !== 0;
   }
   const fast = keys['ShiftLeft'] || keys['ShiftRight'] ? 3.2 : 1;
   // keys OR the panel: the carburettor lever is her accelerator and the helm her
@@ -1021,14 +1053,27 @@ function driveBuggy(dt) {
   const kf = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
   const fwd = kf || touchThrottle || 0;
   const kt = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
-  const turn = kt || -(touchHelm || 0);
-  const braking = !!(keys['KeyV'] || touchPitch < -0.3);   // TRIM pulled down = BRAKE
+  // BACKWARDS, both ways round: pushing the wheel left steered her right. The
+  // ship's helm and a road wheel do not agree about which way is which, and this
+  // took the ship's convention without asking whether it suited a carriage.
+  const turn = kt !== 0 ? -kt : (touchHelm || 0);
+  const braking = !!(keys['KeyV'] || input.vent);          // the BRAKE button
   buggy.speed += (fwd * BUGGY_TOP * fast - buggy.speed) * Math.min(1, dt * 3);
   if (braking) buggy.speed *= Math.pow(0.0005, dt);        // she stops smartly
   else if (!fwd) buggy.speed *= Math.pow(0.02, dt);        // or coasts to a stop
-  buggy.yaw += turn * dt * 1.5 * (0.3 + Math.min(1, Math.abs(buggy.speed) / 6));
-  buggy.pos.x += Math.cos(buggy.yaw) * buggy.speed * dt;
-  buggy.pos.z -= Math.sin(buggy.yaw) * buggy.speed * dt;
+  if (buggy.view === 2) {
+    // ON FOOT. A man turns on the spot and walks at a walk -- no coasting and no
+    // turning circle -- and the buggy stands where she was left.
+    buggy.speed = 0;
+    buggy.footYaw += turn * dt * 2.2;
+    const w = WALK_TOP * fast * (fwd || 0);
+    buggy.foot.x += Math.cos(buggy.footYaw) * w * dt;
+    buggy.foot.z -= Math.sin(buggy.footYaw) * w * dt;
+  } else {
+    buggy.yaw += turn * dt * 1.5 * (0.3 + Math.min(1, Math.abs(buggy.speed) / 6));
+    buggy.pos.x += Math.cos(buggy.yaw) * buggy.speed * dt;
+    buggy.pos.z -= Math.sin(buggy.yaw) * buggy.speed * dt;
+  }
   // SHE FLOATS RATHER THAN SINKS. groundAt over water is the BED -- the bay of
   // Monaco is surveyed down to its floor -- so following it drove her under the
   // sea and left her looking up at it: "thinks it went in the bay". Sitting her
@@ -1038,6 +1083,10 @@ function driveBuggy(dt) {
   const gy = world.groundAt ? world.groundAt(buggy.pos.x, buggy.pos.z) : 0;
   const wy = world.waterY ? world.waterY(buggy.pos.x, buggy.pos.z) : null;
   buggy.afloat = wy !== null && wy !== undefined && wy > gy;
+  // the ground under your BOOTS as well as under her wheels
+  const fgy = world.groundAt ? world.groundAt(buggy.foot.x, buggy.foot.z) : 0;
+  const fwy = world.waterY ? world.waterY(buggy.foot.x, buggy.foot.z) : null;
+  buggy.foot.y = (fwy !== null && fwy !== undefined && fwy > fgy) ? fwy : fgy;
   // ...AND SHE RIDES A LITTLE PROUD OF IT. groundAt is the SURVEY, and the turf
   // you can see is laid on top of it as a decal a hand's breadth up -- the
   // flying ground at St. Cloud is at +0.10, the streets and the quays likewise.
@@ -1047,6 +1096,7 @@ function driveBuggy(dt) {
   buggy.pos.y = (buggy.afloat ? wy : gy) + BUGGY_RIDE;
   input.throttle = 0; input.rudder = 0;          // the ship is not being flown
   if (buggyMesh) {
+    buggyMesh.visible = buggy.view !== 0;      // at her tiller she is in the way
     buggyMesh.position.copy(buggy.pos);
     buggyMesh.rotation.y = buggy.yaw;
     // she sits ON the ground rather than through it, and leans into her springs
@@ -3578,6 +3628,18 @@ function num(v, fallback = 0) {
 function updateAudio() {
   drawSoundBtn();                  // the context can suspend itself at any time
   if (!audio) return;
+  // AN ELECTRIC CARRIAGE HAS NO MOTOR TO HEAR. While the buggy is out you are
+  // not aboard the ship at all, so her petrol engine has no business in your
+  // ears -- and the buggy's own motor is a battery and a silent one. The wind
+  // stays, because you are moving through it.
+  if (buggy && buggy.on) {
+    audio.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.15);
+    audio.osc.frequency.setTargetAtTime(42, audio.ctx.currentTime, 0.2);
+    const wsp = num(Math.abs(buggy.speed), 0);
+    audio.windGain.gain.setTargetAtTime(muted ? 0 : Math.min(0.08, (wsp / 22) ** 2 * 0.08),
+      audio.ctx.currentTime, 0.12);
+    return;
+  }
   const h = num(ship.motorHealth, 1);
   const thr = num(ship.throttle, 0);
   const flicker = ship.sputtering && Math.random() < 0.35 ? 0.15 : 1;
@@ -3625,7 +3687,11 @@ const CAM_BUGGY = 5;
  * moving is exactly the kind worth catching.
  */
 const buggy = { pos: new THREE.Vector3(), yaw: 0, speed: 0, look: 0, tilt: 0,
-  pitch: 0.06, on: false, afloat: false };
+  pitch: 0.06, on: false, afloat: false, cameWith: 1,
+  // 0 driving, 1 from behind her, 2 on foot beside her
+  view: 0, foot: new THREE.Vector3(), footYaw: 0 };
+const BUGGY_VIEWS = ['at the tiller', 'from behind her', 'on foot'];
+const WALK_TOP = 1.6;           // metres a second: a man walking, not running
 const BUGGY_EYE = 1.78;         // a person's eye, seated in an open carriage
 const BUGGY_TOP = 13;           // metres a second, about thirty miles an hour
 const BUGGY_RIDE = 0.12;        // clear of the decals laid on the survey
@@ -3790,14 +3856,21 @@ function updateCamera(dt) {
     // tiller and bonnet -- which is the point of drawing her at all: a dash at a
     // known 1.1 m and wheels of a known 0.9 m are a measuring stick for
     // everything else, and you cannot judge a floating kerb against nothing.
-    const bs = Math.sin(buggy.yaw), bc = Math.cos(buggy.yaw);
-    desired = new THREE.Vector3(
-      buggy.pos.x + bc * -0.35, buggy.pos.y + BUGGY_EYE, buggy.pos.z - bs * -0.35);
+    // three places to see her world from: her tiller, over her shoulder, and on
+    // your own feet beside her
+    const at = buggy.view === 2 ? buggy.foot : buggy.pos;
+    const ang = buggy.view === 2 ? buggy.footYaw : buggy.yaw;
+    const bs = Math.sin(ang), bc = Math.cos(ang);
+    desired = buggy.view === 1
+      ? new THREE.Vector3(at.x - bc * 6.5, at.y + 3.4, at.z + bs * 6.5)
+      : buggy.view === 2
+        ? new THREE.Vector3(at.x, at.y + 1.65, at.z)     // a man's eye
+        : new THREE.Vector3(at.x + bc * -0.35, at.y + BUGGY_EYE, at.z - bs * -0.35);
     // HER OWN LOOK, and not the ship's. Sharing orbitYaw meant looking about
     // from the buggy quietly turned the pilot in the basket you had left behind,
     // and it put an unguarded spring-back among the ship's -- which the balloon
     // check caught, correctly.
-    const a = buggy.yaw + buggy.look;
+    const a = ang + buggy.look;
     look = desired.clone().add(new THREE.Vector3(
       Math.cos(a) * 20, (buggy.pitch + buggy.tilt) * -20, -Math.sin(a) * 20));
     if (!dragging) { buggy.look *= Math.pow(0.05, dt); buggy.tilt *= Math.pow(0.05, dt); }
