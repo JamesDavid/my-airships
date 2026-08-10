@@ -1070,7 +1070,13 @@ function driveBuggy(dt) {
     buggy.foot.x += Math.cos(buggy.footYaw) * w * dt;
     buggy.foot.z -= Math.sin(buggy.footYaw) * w * dt;
   } else {
-    buggy.yaw += turn * dt * 1.5 * (0.3 + Math.min(1, Math.abs(buggy.speed) / 6));
+    // A CARRIAGE STEERS BY ROLLING. "It needs to move forward to turn not just
+    // pivot" -- quite right, and the 0.3 in the old term was what let her spin
+    // on the spot like a turntable. Her rate of turn is now proportional to how
+    // fast she is going, and it reverses when she does, as a real one does when
+    // you back her.
+    const roll = buggy.speed / BUGGY_TOP;
+    buggy.yaw += turn * dt * 2.1 * Math.max(-1, Math.min(1, roll));
     buggy.pos.x += Math.cos(buggy.yaw) * buggy.speed * dt;
     buggy.pos.z -= Math.sin(buggy.yaw) * buggy.speed * dt;
   }
@@ -1080,11 +1086,13 @@ function driveBuggy(dt) {
   // on whichever is higher, the ground or the water, keeps her on the surface,
   // and afloat is worth saying out loud because a buggy on the water is a fact
   // about the WORLD, not about her.
-  const gy = world.groundAt ? world.groundAt(buggy.pos.x, buggy.pos.z) : 0;
+  const surveyY = world.groundAt ? world.groundAt(buggy.pos.x, buggy.pos.z) : 0;
+  const gy = surfaceAt(buggy.pos.x, buggy.pos.z, surveyY);
   const wy = world.waterY ? world.waterY(buggy.pos.x, buggy.pos.z) : null;
   buggy.afloat = wy !== null && wy !== undefined && wy > gy;
   // the ground under your BOOTS as well as under her wheels
-  const fgy = world.groundAt ? world.groundAt(buggy.foot.x, buggy.foot.z) : 0;
+  const fgy = surfaceAt(buggy.foot.x, buggy.foot.z,
+    world.groundAt ? world.groundAt(buggy.foot.x, buggy.foot.z) : 0);
   const fwy = world.waterY ? world.waterY(buggy.foot.x, buggy.foot.z) : null;
   buggy.foot.y = (fwy !== null && fwy !== undefined && fwy > fgy) ? fwy : fgy;
   // ...AND SHE RIDES A LITTLE PROUD OF IT. groundAt is the SURVEY, and the turf
@@ -3713,6 +3721,46 @@ const buggy = { pos: new THREE.Vector3(), yaw: 0, speed: 0, look: 0, tilt: 0,
   view: 0, foot: new THREE.Vector3(), footYaw: 0 };
 const BUGGY_VIEWS = ['at the tiller', 'from behind her', 'on foot'];
 const WALK_TOP = 1.6;           // metres a second: a man walking, not running
+
+/**
+ * THE SURFACE UNDER HER, found by looking rather than by asking.
+ *
+ * groundAt is the SURVEY. What you drive on is what was drawn on top of it: the
+ * turf is a decal a hand's breadth up, a quay is a slab, a bridge is a deck ten
+ * metres in the air. Following the survey therefore cut her through the field
+ * ("the field is above the ground and cuts the buggy") and dropped her through
+ * the bridge ("car fell through the bridge ramp") -- the deck is a mesh and the
+ * survey underneath it is the river bed.
+ *
+ * So a ray is dropped from overhead and the first thing it meets is the road.
+ * One ray a frame, against the same scene you can see, which means she cannot
+ * disagree with the picture. The survey is kept as the floor for when the ray
+ * finds nothing at all.
+ */
+// made on first use, not at load: the headless three the checkers run against
+// has no Raycaster, and a module that throws while being imported takes the
+// whole game with it
+let groundRay = null;
+const RAY_DOWN = new THREE.Vector3(0, -1, 0);
+function surfaceAt(x, z, fallback) {
+  if (!groundRay) {
+    if (!THREE.Raycaster) return fallback;    // no rays here; the survey will do
+    groundRay = new THREE.Raycaster();
+  }
+  groundRay.set(new THREE.Vector3(x, fallback + 60, z), RAY_DOWN);
+  groundRay.far = 140;
+  const hits = groundRay.intersectObjects(scene.children, true) || [];
+  for (const h of hits) {
+    if (!h.object.visible) continue;
+    if (h.object === buggyMesh || (buggyMesh && buggyMesh.children.includes(h.object))) continue;
+    if (h.object.userData && h.object.userData.notGround) continue;
+    // anything more than a storey above the survey is a roof, not a road --
+    // except a bridge deck, which is why the limit is generous
+    if (h.point.y - fallback > 40) continue;
+    return h.point.y;
+  }
+  return fallback;
+}
 const BUGGY_EYE = 1.78;         // a person's eye, seated in an open carriage
 const BUGGY_TOP = 13;           // metres a second, about thirty miles an hour
 const BUGGY_RIDE = 0.12;        // clear of the decals laid on the survey
