@@ -959,6 +959,44 @@ function pollInput() {
 
 function cycleCamera() { cycleCameraTo((camMode + 1) % CAM_NAMES.length); }
 
+/**
+ * Drive her. Called every frame, and it takes the helm keys for itself while the
+ * buggy is out -- W/S and A/D cannot mean two things at once, and the ship is
+ * perfectly happy holding whatever she was last set to.
+ */
+function driveBuggy(dt) {
+  const was = buggy.on;
+  buggy.on = camMode === CAM_BUGGY && !vr.inVR();
+  if (!buggy.on) {
+    if (buggyMesh) buggyMesh.visible = false;
+    return was;
+  }
+  if (!was) {                                    // just got out: start at the ship
+    buggy.pos.set(ship.pos.x, 0, ship.pos.z);
+    buggy.yaw = ship.yaw;
+    buggy.speed = 0;
+    if (!buggyMesh) { buggyMesh = makeBuggy(); scene.add(buggyMesh); }
+    buggyMesh.visible = true;
+  }
+  const fast = keys['ShiftLeft'] || keys['ShiftRight'] ? 3.2 : 1;
+  const fwd = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
+  const turn = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
+  buggy.speed += (fwd * BUGGY_TOP * fast - buggy.speed) * Math.min(1, dt * 3);
+  if (!fwd) buggy.speed *= Math.pow(0.02, dt);   // she coasts to a stop
+  buggy.yaw += turn * dt * 1.5 * (0.3 + Math.min(1, Math.abs(buggy.speed) / 6));
+  buggy.pos.x += Math.cos(buggy.yaw) * buggy.speed * dt;
+  buggy.pos.z -= Math.sin(buggy.yaw) * buggy.speed * dt;
+  buggy.pos.y = (world.groundAt ? world.groundAt(buggy.pos.x, buggy.pos.z) : 0);
+  input.throttle = 0; input.rudder = 0;          // the ship is not being flown
+  if (buggyMesh) {
+    buggyMesh.position.copy(buggy.pos);
+    buggyMesh.rotation.y = buggy.yaw;
+    // she sits ON the ground rather than through it, and leans into her springs
+    buggyMesh.rotation.z = -buggy.speed * 0.004;
+  }
+  return was;
+}
+
 function cycleCameraTo(m) {
   camMode = m;
   // in a headset the near plane belongs to vr.js, which sets it to let the
@@ -3506,7 +3544,90 @@ function blip(freq) {
 }
 
 // ---------------------------------------------------------------- camera
-const CAM_NAMES = ['Chase', 'Aboard — the basket', 'Over the side', 'Postcard', 'From the Tower'];
+const CAM_NAMES = ['Chase', 'Aboard — the basket', 'Over the side', 'Postcard', 'From the Tower',
+  'The buggy — on the ground'];
+const CAM_BUGGY = 5;
+
+/**
+ * THE BUGGY: a way to look at the world from the height of a person.
+ *
+ * Everything in this game is seen from an air-ship, which is a bad place from
+ * which to notice that a kerb is floating, a wall is inside a house, or the turf
+ * ends in mid air. The faults at ground level have been found by accident, one
+ * at a time, by pilots who happened to come down in the wrong place.
+ *
+ * So: an electric buggy of the period, which really did run about the grounds of
+ * the fair, and here runs about anywhere. It follows world.groundAt, which is
+ * the same ground the ship's rope drags on and the same one the colliders stand
+ * on, so what it drives over is what is really there.
+ *
+ * W/S drive, A/D steer, SHIFT for the whole thirty miles an hour of her, drag to
+ * look about. The ship keeps flying herself while you are out of her -- the
+ * simulation is not paused, because a fault that only shows while something is
+ * moving is exactly the kind worth catching.
+ */
+const buggy = { pos: new THREE.Vector3(), yaw: 0, speed: 0, look: 0, pitch: 0.06, on: false };
+const BUGGY_EYE = 1.78;         // a person's eye, seated in an open carriage
+const BUGGY_TOP = 13;           // metres a second, about thirty miles an hour
+
+/**
+ * What she looks like: an electric buggy of about 1900.
+ *
+ * A tool that shows you nothing of itself is hard to judge distances with, and
+ * she is mostly a MEASURING STICK -- the dash is 1.1 m off the ground, the wheels
+ * are 0.9 m, and the axles are exactly on the turf. If the road surface is
+ * floating you can see daylight under her tyres, which is the whole point.
+ *
+ * The shape is the American electric runabout of the period: a tiller, not a
+ * wheel; a boxy body on big wire wheels; a folded leather hood behind; no bonnet
+ * at all, because the motor is under the floor and there is nothing to put in
+ * front. They ran about the grounds of the fair by the dozen.
+ */
+function makeBuggy() {
+  const g = new THREE.Group();
+  const lacquer = new THREE.MeshLambertMaterial({ color: 0x2f2a24 });
+  const leather = new THREE.MeshLambertMaterial({ color: 0x3a2c1e });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xa8853b, shininess: 90, specular: 0xffe9a0 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.55, 1.35), lacquer);
+  body.position.y = 0.86;
+  g.add(body);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 1.2), leather);
+  seat.position.set(-0.45, 1.32, 0);
+  g.add(seat);
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.34, 1.3), lacquer);
+  dash.position.set(0.72, 1.28, 0);
+  g.add(dash);
+  // the tiller: these were steered by a bent brass bar, not a wheel
+  const tiller = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.72, 6), brass);
+  tiller.rotation.z = Math.PI / 2.6;
+  tiller.position.set(0.3, 1.34, 0);
+  g.add(tiller);
+  const mud = new THREE.MeshLambertMaterial({ color: 0x241f1a });
+  for (const [x, z] of [[0.72, 0.72], [0.72, -0.72], [-0.72, 0.72], [-0.72, -0.72]]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.1, 14), mud);
+    w.rotation.x = Math.PI / 2;
+    w.position.set(x, 0.45, z);
+    g.add(w);
+    for (let i = 0; i < 8; i++) {                 // wire spokes, seen through
+      const sp = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.82, 0.02), brass);
+      sp.position.set(x, 0.45, z);
+      sp.rotation.x = Math.PI / 2;
+      sp.rotation.z = (i / 8) * Math.PI;
+      g.add(sp);
+    }
+  }
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 1.25), leather);
+  hood.position.set(-0.95, 1.5, 0);
+  hood.rotation.z = 0.22;
+  g.add(hood);
+  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.16, 10), brass);
+  lamp.rotation.z = Math.PI / 2;
+  lamp.position.set(1.0, 1.05, 0);
+  g.add(lamp);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+let buggyMesh = null;
 const camPos = new THREE.Vector3(-1050, 40, 120);
 let bobT = 0;
 function updateCamera(dt) {
@@ -3597,6 +3718,21 @@ function updateCamera(dt) {
     desired = p.clone().add(off);
     look = p;
     if (!dragging && !noHelm()) { orbitYaw *= Math.pow(0.45, dt); orbitPitch *= Math.pow(0.45, dt); }
+  } else if (camMode === CAM_BUGGY) {
+    // SEATED IN HER, WHICH IS NOT THE SAME AS AT HER CENTRE. Put at the middle
+    // the camera is inside the coachwork and half the screen is the inside of a
+    // box. The driver sits abaft the dash and above the seat, so he sees his own
+    // tiller and bonnet -- which is the point of drawing her at all: a dash at a
+    // known 1.1 m and wheels of a known 0.9 m are a measuring stick for
+    // everything else, and you cannot judge a floating kerb against nothing.
+    const bs = Math.sin(buggy.yaw), bc = Math.cos(buggy.yaw);
+    desired = new THREE.Vector3(
+      buggy.pos.x + bc * -0.35, buggy.pos.y + BUGGY_EYE, buggy.pos.z - bs * -0.35);
+    const a = buggy.yaw + orbitYaw;
+    look = desired.clone().add(new THREE.Vector3(
+      Math.cos(a) * 20, (buggy.pitch + orbitPitch) * -20, -Math.sin(a) * 20));
+    if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
+    snap = true;
   } else {
     desired = world.vistaPos.clone();
     look = p;
@@ -3606,7 +3742,7 @@ function updateCamera(dt) {
   camPos.lerp(desired, snap ? 1 : k);
   // keep the lens out of the turf BEFORE aiming it, or the framing is computed
   // from a position the camera does not end up at
-  if (camMode !== 1 && camMode !== 2 && camPos.y < 2) camPos.y = 2;
+  if (camMode !== 1 && camMode !== 2 && camMode !== CAM_BUGGY && camPos.y < 2) camPos.y = 2;
   camera.position.copy(camPos);
   camera.lookAt(look);
 }
@@ -3924,6 +4060,7 @@ function frame(now) {
   // the day's PREVAILING wind and the sky's clock — not the gusting wind and a
   // frame delta, which made where a cloud sat depend on when you opened the page
   updateClouds(world.clouds, dailyWind, windGustT);
+  driveBuggy(dt);
   autoStartOnTakeoff();
   updateRace(dt);
   drainEvents();
