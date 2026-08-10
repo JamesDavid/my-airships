@@ -772,8 +772,13 @@ cvs.addEventListener('pointerup', () => dragging = false);
 cvs.addEventListener('pointercancel', () => dragging = false);
 cvs.addEventListener('pointermove', (e) => {
   if (!dragging) return;
-  orbitYaw -= (e.clientX - lastPX) * 0.005;
-  orbitPitch = Math.max(-0.5, Math.min(0.9, orbitPitch + (e.clientY - lastPY) * 0.004));
+  if (camMode === CAM_BUGGY) {              // looking about from the buggy is hers
+    buggy.look -= (e.clientX - lastPX) * 0.005;
+    buggy.tilt = Math.max(-0.5, Math.min(0.9, buggy.tilt + (e.clientY - lastPY) * 0.004));
+  } else {
+    orbitYaw -= (e.clientX - lastPX) * 0.005;
+    orbitPitch = Math.max(-0.5, Math.min(0.9, orbitPitch + (e.clientY - lastPY) * 0.004));
+  }
   lastPX = e.clientX; lastPY = e.clientY;
 });
 
@@ -986,7 +991,22 @@ function driveBuggy(dt) {
   buggy.yaw += turn * dt * 1.5 * (0.3 + Math.min(1, Math.abs(buggy.speed) / 6));
   buggy.pos.x += Math.cos(buggy.yaw) * buggy.speed * dt;
   buggy.pos.z -= Math.sin(buggy.yaw) * buggy.speed * dt;
-  buggy.pos.y = (world.groundAt ? world.groundAt(buggy.pos.x, buggy.pos.z) : 0);
+  // SHE FLOATS RATHER THAN SINKS. groundAt over water is the BED -- the bay of
+  // Monaco is surveyed down to its floor -- so following it drove her under the
+  // sea and left her looking up at it: "thinks it went in the bay". Sitting her
+  // on whichever is higher, the ground or the water, keeps her on the surface,
+  // and afloat is worth saying out loud because a buggy on the water is a fact
+  // about the WORLD, not about her.
+  const gy = world.groundAt ? world.groundAt(buggy.pos.x, buggy.pos.z) : 0;
+  const wy = world.waterY ? world.waterY(buggy.pos.x, buggy.pos.z) : null;
+  buggy.afloat = wy !== null && wy !== undefined && wy > gy;
+  // ...AND SHE RIDES A LITTLE PROUD OF IT. groundAt is the SURVEY, and the turf
+  // you can see is laid on top of it as a decal a hand's breadth up -- the
+  // flying ground at St. Cloud is at +0.10, the streets and the quays likewise.
+  // Sitting her exactly on the survey therefore buried her wheels in the grass
+  // she was driving on: "the car is in the ground". A tenth of a metre of ride
+  // clears every decal in the world, and is about right for a carriage anyway.
+  buggy.pos.y = (buggy.afloat ? wy : gy) + BUGGY_RIDE;
   input.throttle = 0; input.rudder = 0;          // the ship is not being flown
   if (buggyMesh) {
     buggyMesh.position.copy(buggy.pos);
@@ -3566,9 +3586,11 @@ const CAM_BUGGY = 5;
  * simulation is not paused, because a fault that only shows while something is
  * moving is exactly the kind worth catching.
  */
-const buggy = { pos: new THREE.Vector3(), yaw: 0, speed: 0, look: 0, pitch: 0.06, on: false };
+const buggy = { pos: new THREE.Vector3(), yaw: 0, speed: 0, look: 0, tilt: 0,
+  pitch: 0.06, on: false, afloat: false };
 const BUGGY_EYE = 1.78;         // a person's eye, seated in an open carriage
 const BUGGY_TOP = 13;           // metres a second, about thirty miles an hour
+const BUGGY_RIDE = 0.12;        // clear of the decals laid on the survey
 
 /**
  * What she looks like: an electric buggy of about 1900.
@@ -3728,10 +3750,14 @@ function updateCamera(dt) {
     const bs = Math.sin(buggy.yaw), bc = Math.cos(buggy.yaw);
     desired = new THREE.Vector3(
       buggy.pos.x + bc * -0.35, buggy.pos.y + BUGGY_EYE, buggy.pos.z - bs * -0.35);
-    const a = buggy.yaw + orbitYaw;
+    // HER OWN LOOK, and not the ship's. Sharing orbitYaw meant looking about
+    // from the buggy quietly turned the pilot in the basket you had left behind,
+    // and it put an unguarded spring-back among the ship's -- which the balloon
+    // check caught, correctly.
+    const a = buggy.yaw + buggy.look;
     look = desired.clone().add(new THREE.Vector3(
-      Math.cos(a) * 20, (buggy.pitch + orbitPitch) * -20, -Math.sin(a) * 20));
-    if (!dragging) { orbitYaw *= Math.pow(0.05, dt); orbitPitch *= Math.pow(0.05, dt); }
+      Math.cos(a) * 20, (buggy.pitch + buggy.tilt) * -20, -Math.sin(a) * 20));
+    if (!dragging) { buggy.look *= Math.pow(0.05, dt); buggy.tilt *= Math.pow(0.05, dt); }
     snap = true;
   } else {
     desired = world.vistaPos.clone();
