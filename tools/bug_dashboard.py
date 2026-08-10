@@ -80,6 +80,7 @@ def load():
                 'handled,body,state&order=created_at.desc&limit=500')
     for r in rows:
         r['note'] = read_note(r['id'])
+        r['marks'] = read_marks(r['id'])
         r['kind'] = kind_of(r)
     return rows
 
@@ -92,6 +93,24 @@ def read_note(rid):
     txt = open(p, encoding='utf-8').read()
     m = re.search(r'\n---\n\n(.*)$', txt, re.S)
     return (m.group(1) if m else txt).strip()
+
+
+def read_marks(rid):
+    """The arrows themselves, so they can be picked up again.
+
+    The flattened PNG is the record; these are the WORKING drawing. Without them
+    a report opened a second time came back blank — the marks were flattened into
+    the picture, sent, and then dropped, so nothing already drawn could be added
+    to or taken back. They are kept beside the note in their own file, in the
+    same normalised coordinates the canvas works in.
+    """
+    p = os.path.join(NOTES, 'bug-%d.marks.json' % rid)
+    if not os.path.exists(p):
+        return None
+    try:
+        return json.load(open(p, encoding='utf-8'))
+    except Exception:
+        return None
 
 
 def write_note(rid, note, png, marks, meta):
@@ -121,6 +140,12 @@ def write_note(rid, note, png, marks, meta):
     body.append(note.strip() or '(no words — see the marked picture)')
     body.append('')
     open(md, 'w', encoding='utf-8').write('\n'.join(body))
+    # the working drawing, beside the flattened one — see read_marks()
+    mp = os.path.join(NOTES, 'bug-%d.marks.json' % rid)
+    if marks:
+        json.dump(marks, open(mp, 'w', encoding='utf-8'))
+    elif os.path.exists(mp):
+        os.remove(mp)
     reindex()
     return os.path.basename(md)
 

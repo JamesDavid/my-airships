@@ -338,7 +338,14 @@ async function show(i) {
   cur = shown[i];
   [...list.children].forEach((c, n) => c.classList.toggle('on', n === i));
   list.children[i] && list.children[i].scrollIntoView({ block: 'nearest' });
-  marks = [];
+  // THE MARKS COME BACK. They were flattened into the PNG and then dropped, so
+  // opening a report a second time showed a clean picture and nothing could be
+  // added to or taken off what was already drawn.
+  marks = Array.isArray(cur.marks) ? cur.marks.map((m) => ({ ...m })) : [];
+  // ...and the little text box goes away with the report it belonged to. It is
+  // hidden on Enter and on Escape, and on nothing else, so it followed you to
+  // the next picture and sat there over somebody else's fault.
+  $('#typing').style.display = 'none';
   $('#note').value = cur.note || '';
   $('#state').textContent = stateLines(cur);
   caption(cur);
@@ -543,6 +550,7 @@ async function save() {
       at: sh.x !== undefined ? `x ${sh.x} y ${sh.y} z ${sh.z} yaw ${sh.yaw}` : null } }) })).json();
   if (!res.ok) return say('could not write it: ' + (res.error || '?'));
   cur.note = note;
+  cur.marks = marks.map((m) => ({ ...m }));      // so switching away and back keeps them
   const row = [...list.children].find(c => shown[+c.dataset.i] === cur);
   if (row && !row.querySelector('.tag.note')) {
     row.querySelector('div').insertAdjacentHTML('beforeend', '<span class="tag note">written up</span>');
