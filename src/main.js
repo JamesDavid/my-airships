@@ -1261,6 +1261,27 @@ function buildMenuButtons() {
       if (tryChangeShip(id)) toggleMenu(false);
     }, id === currentShip);
   }
+  // ---- and the thing that is not a ship at all ----
+  //
+  // "should we just have it as a ship in the menu" -- yes, and on a telephone it
+  // is the only sensible way in: there is no O to press, and reaching her by the
+  // CAM button meant five taps through the ship's own cameras. She belongs in
+  // the shed with the others because choosing her is the same act as choosing a
+  // ship: it is what you are aboard.
+  //
+  // She is Santos-Dumont's own kind of vehicle, too. He kept an electric
+  // runabout in Paris and drove it about the Bois; the fair at St. Louis had
+  // them by the dozen. So she is period, and she is also how you get down to the
+  // ground to see what is wrong with it.
+  menuButton(shipsDiv, 'The electric buggy',
+    camMode === CAM_BUGGY
+      ? 'you are aboard her — choose a ship to fly again'
+      : 'climb down and drive about the ground · C for her three views, and to walk',
+    () => {
+      if (camMode === CAM_BUGGY) cycleCameraTo(buggy.cameWith ?? 1);
+      else { buggy.cameWith = camMode; cycleCameraTo(CAM_BUGGY); }
+      toggleMenu(false);
+    }, camMode === CAM_BUGGY);
   // ---- the two things a VR developer asked for, where a headset can reach ----
   menuButton(optsDiv, 'Frame meter: ' + (meter.on ? 'on' : 'off'),
     meter.on ? (meterLine() || 'reading…') : 'fps, draw calls and triangles, live',
